@@ -66,6 +66,15 @@ BONES = D['bones']; PARENT = {b: (None if p == 'None' else p) for b, p in D['par
 IDLE = {b: (D['idle_local'][b]['q'], D['idle_local'][b]['t']) for b in BONES}
 PROBE = json.load(open(os.path.join(HERE, 'probe.json')))
 FIST = {b: (v['q'], v['t']) for b, v in PROBE['attack_samples'][0]['fingers'].items()}
+# Finger poses for hand_open_*: 0 = the fist, 1 = the idle's relaxed hand, 2 = the flat reference hand (fully open).
+REF = {b: (D['ref_local'][b]['q'], D['ref_local'][b]['t']) for b in BONES}
+def _nlerp(a, b, t):
+    if sum(x * y for x, y in zip(a, b)) < 0: b = [-x for x in b]
+    return qnorm([x + (y - x) * t for x, y in zip(a, b)])
+def finger_q(bone, open_amount):
+    if open_amount <= 0: return FIST[bone][0]
+    if open_amount <= 1: return _nlerp(FIST[bone][0], IDLE[bone][0], open_amount)
+    return _nlerp(IDLE[bone][0], REF[bone][0], min(open_amount, 2.0) - 1.0)
 
 def to_cs(local):
     cs = {}
@@ -263,7 +272,7 @@ def balanced(P):
 
 def _build_pose(P, return_cs=False):
     local = {b: (list(q), list(t)) for b, (q, t) in IDLE.items()}
-    for b, v in FIST.items(): local[b] = (list(v[0]), list(v[1]))
+    for b, v in FIST.items(): local[b] = (list(finger_q(b, P.get('hand_open_' + b[-1], [0])[0])), list(v[1]))
     # pelvis: world-space offset + rotation about its own pivot
     pq, pt = local['pelvis']
     local['pelvis'] = (qnorm(qmul(qeuler(*P['pelvis_rot']), pq)), add(pt, P['pelvis_off']))
@@ -313,6 +322,9 @@ def _build_pose(P, return_cs=False):
         axis = norm(qrot(fq, local[hand][1]))
         roll = P['fist_roll_' + side][0]
         cs[hand] = (qnorm(qmul(qmul(qaxis(axis, roll), qmul(fq, local[hand][0])), WRIST_FIX[side])), cs[hand][1])
+        # wrist bent out to the side (degrees, about the forward axis): turns a hanging hand's palm toward the ground
+        bend = P.get('wrist_out_' + side, [0])[0]
+        if bend: cs[hand] = (qnorm(qmul(qaxis([0, 1, 0], -bend if side == 'l' else bend), cs[hand][0])), cs[hand][1])
         for tb, w in FOREARM_TWIST:   # spread the roll along the forearm instead of snapping at the wrist
             b = tb + '_' + side
             local[b] = (qnorm(qmul(qaxis(qrot(qconj(fq), axis), roll * w), IDLE[b][0])), IDLE[b][1])  # roll in forearm space
