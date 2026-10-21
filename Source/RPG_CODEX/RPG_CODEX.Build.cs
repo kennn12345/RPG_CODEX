@@ -18,7 +18,8 @@ public class RPG_CODEX : ModuleRules
 			"AnimationCore",
 			"GameplayAbilities",
 			"GameplayTags",
-			"GameplayTasks"
+			"GameplayTasks",
+			"DeveloperSettings"
 		});
 		if (Target.bBuildEditor)
 		{
