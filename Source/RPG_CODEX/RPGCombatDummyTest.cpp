@@ -204,12 +204,11 @@ namespace
 					HeightNote += FString::Printf(TEXT(" | camera moved %.1f cm, dropped %.1f cm"), CameraTravel, CameraDrop);
 				}
 				const bool bNoSnap = MaxTurnRate <= 420.f;
-				// Without a switch, every clip seen must be the current perspective's version. The mocap clips
-				// (RPG_Mocap_*) have no first-person version yet, so they play in both views.
+				// Without a switch, every clip seen must be the current perspective's version.
 				bool bRightClips = true;
 				if (!Case.bSwitchPerspectiveMidHold && Case.SwitchAfterRelease < 0.f)
 					for (const FString& Clip : ClipsSeen)
-						bRightClips &= Clip.StartsWith(bViewNow ? TEXT("RPG_FP_") : TEXT("RPG_Proto_")) || Clip.StartsWith(TEXT("RPG_Mocap_"));
+						bRightClips &= Clip.StartsWith(bViewNow ? TEXT("RPG_FP_") : TEXT("RPG_Proto_"));
 				const bool bPass = bHeightOk && bNoSnap && bRightClips && bCameraClear && Hits == Case.ExpectedHits && (Case.ExpectedHits == 0 || Last.AttackName == Case.ExpectedAttack);
 				const FString Line = FString::Printf(TEXT("RPGTEST %s  [%s] %s: hits %d (expected %d)%s%s | body turned %.0f deg, fastest %.0f deg/s | clips: %s%s"), bPass ? TEXT("PASS") : TEXT("FAIL"),
 					bViewNow ? TEXT("first person") : TEXT("third person"), *Case.Name, Hits, Case.ExpectedHits,

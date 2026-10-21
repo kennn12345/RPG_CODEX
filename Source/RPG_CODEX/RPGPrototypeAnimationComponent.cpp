@@ -43,24 +43,11 @@ namespace
      *  UpperBody share a group on SK_Mannequin): whatever else is playing carries on, and the caller stops what it
      *  replaces. Lets the guard ride on top of a full-body combat stance; with the rule, starting either one blends the
      *  other out at the same time, and the idle arms-down pose shows through the crossfade (the hands dip ~20 cm). */
-    /** The mocap attacks step into the strike with root motion (it moves the capsule) when they own the whole body.
-     *  On the upper body (thrown while moving) the legs and movement input keep moving the character instead, so the
-     *  montage's root motion is ignored. Returns the montage. */
-    UAnimMontage* StepOnlyWhenFullBody(UAnimMontage* Montage, FName Slot)
-    {
-        if (Montage)
-        {
-            Montage->bEnableRootMotionTranslation = Slot != UpperBodySlot;
-            Montage->bEnableRootMotionRotation = false;
-        }
-        return Montage;
-    }
-
     UAnimMontage* PlayAlongside(UAnimInstance* Instance, UAnimSequenceBase* Clip, FName Slot, float BlendIn, float BlendOut,
         float PlayRate = 1.f, int32 LoopCount = 1, float StartAt = 0.f)
     {
         if (!Instance || !Clip) return nullptr;
-        UAnimMontage* Montage = StepOnlyWhenFullBody(UAnimMontage::CreateSlotAnimationAsDynamicMontage(Clip, Slot, BlendIn, BlendOut, PlayRate, LoopCount), Slot);
+        UAnimMontage* Montage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(Clip, Slot, BlendIn, BlendOut, PlayRate, LoopCount);
         return Montage && Instance->Montage_Play(Montage, PlayRate, EMontagePlayReturnType::MontageLength, StartAt, false) > 0.f ? Montage : nullptr;
     }
 }
@@ -71,21 +58,26 @@ URPGPrototypeAnimationComponent::URPGPrototypeAnimationComponent()
     // lock, a charge, or the combat stance.
     PrimaryComponentTick.bCanEverTick = true;
     PrimaryComponentTick.bStartWithTickEnabled = false;
-    // Motion-capture attacks and stance (RamsterZ Free Anims Volume 1, retargeted and cut by Tools/AnimImport). The
-    // older procedural clips are still in /Game/RPG/Animations/Prototype (RPG_Proto_* / RPG_FP_*), with their
-    // timings in git history, if they are ever needed again.
-    RightPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Punch_R.RPG_Mocap_Punch_R"));
-    LeftPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Punch_L.RPG_Mocap_Punch_L"));
-    RightPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Punch_R_Charged.RPG_Mocap_Punch_R_Charged"));
-    LeftPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Punch_L_Charged.RPG_Mocap_Punch_L_Charged"));
-    RightFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Kick_R_Charged.RPG_Mocap_Kick_R_Charged"));
-    LeftFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Kick_L_Charged.RPG_Mocap_Kick_L_Charged"));
-    CombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Stance.RPG_Mocap_Stance"));
+    RightPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_Punch_R.RPG_Proto_Punch_R"));
+    LeftPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_Punch_L.RPG_Proto_Punch_L"));
+    RightPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_Punch_R_Charged.RPG_Proto_Punch_R_Charged"));
+    LeftPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_Punch_L_Charged.RPG_Proto_Punch_L_Charged"));
+    RightFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FrontKick_R_Charged.RPG_Proto_FrontKick_R_Charged"));
+    LeftFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FrontKick_L_Charged.RPG_Proto_FrontKick_L_Charged"));
+    CombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_CombatStance.RPG_Proto_CombatStance"));
     UnarmedGuard = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_UnarmedGuard.RPG_Proto_UnarmedGuard"));
-    RightFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Kick_R.RPG_Mocap_Kick_R"));
-    LeftFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Mocap/RPG_Mocap_Kick_L.RPG_Mocap_Kick_L"));
-    // No first-person versions of the mocap clips yet: first person plays the same clips (an empty entry falls back).
+    RightFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FrontKick_R.RPG_Proto_FrontKick_R"));
+    LeftFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FrontKick_L.RPG_Proto_FrontKick_L"));
+    FirstPersonRightPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_Punch_R.RPG_FP_Punch_R"));
+    FirstPersonLeftPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_Punch_L.RPG_FP_Punch_L"));
+    FirstPersonRightPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_Punch_R_Charged.RPG_FP_Punch_R_Charged"));
+    FirstPersonLeftPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_Punch_L_Charged.RPG_FP_Punch_L_Charged"));
+    FirstPersonRightFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_FrontKick_R.RPG_FP_FrontKick_R"));
+    FirstPersonLeftFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_FrontKick_L.RPG_FP_FrontKick_L"));
+    FirstPersonRightFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_FrontKick_R_Charged.RPG_FP_FrontKick_R_Charged"));
+    FirstPersonLeftFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_FrontKick_L_Charged.RPG_FP_FrontKick_L_Charged"));
     FirstPersonUnarmedGuard = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_UnarmedGuard.RPG_FP_UnarmedGuard"));
+    FirstPersonCombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_CombatStance.RPG_FP_CombatStance"));
     FlyingAttack = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FlyingAttack.RPG_FlyingAttack"));
     FlightStart = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FlightStart.RPG_FlightStart"));
 }
@@ -550,8 +542,7 @@ void URPGPrototypeAnimationComponent::SwitchToChargedClip(UAnimInstance* Instanc
     UAnimMontage* Regular = ChargeMontage;
     UAnimSequence* Charged = ChargedSequence;
     ChargedSequence = nullptr;
-    UAnimMontage* Held = StepOnlyWhenFullBody(Instance->PlaySlotAnimationAsDynamicMontage(Present(Charged), bChargeUpperBody ? UpperBodySlot : PrototypeSlot, 0.06f, 0.18f, 1.f, 1, -1.f, Position),
-        bChargeUpperBody ? UpperBodySlot : PrototypeSlot);
+    UAnimMontage* Held = Instance->PlaySlotAnimationAsDynamicMontage(Present(Charged), bChargeUpperBody ? UpperBodySlot : PrototypeSlot, 0.06f, 0.18f, 1.f, 1, -1.f, Position);
     if (!Held)
     {
         ChargeHoldTime = ChargeSwitchTime;   // fall back to stopping the tuned punch at its load key
@@ -589,8 +580,8 @@ bool URPGPrototypeAnimationComponent::ReleaseCharge(UAnimInstance* Instance, con
     {
         UAnimMontage* Rearing = ChargeMontage;
         Instance->Montage_Pause(Rearing);
-        if (UAnimMontage* Strike = StepOnlyWhenFullBody(Instance->PlaySlotAnimationAsDynamicMontage(Present(ChargedPlaying), bChargeUpperBody ? UpperBodySlot : PrototypeSlot,
-                0.1f, 0.18f, 1.f, 1, -1.f, ChargedHoldEnd), bChargeUpperBody ? UpperBodySlot : PrototypeSlot))
+        if (UAnimMontage* Strike = Instance->PlaySlotAnimationAsDynamicMontage(Present(ChargedPlaying), bChargeUpperBody ? UpperBodySlot : PrototypeSlot,
+                0.1f, 0.18f, 1.f, 1, -1.f, ChargedHoldEnd))
         {
             if (const FAnimMontageInstance* Old = Instance->GetActiveInstanceForMontage(Rearing); Old && !Old->IsStopped())
                 Instance->Montage_Stop(0.1f, Rearing);
@@ -632,7 +623,7 @@ void URPGPrototypeAnimationComponent::HandOffStandingPunch(UAnimInstance* Instan
     const bool bSameGroup = Skeleton && Skeleton->GetSlotGroupName(UpperBodySlot) == Skeleton->GetSlotGroupName(PrototypeSlot);
     UAnimMontage* FullBody = ActiveMontage;
     Instance->Montage_Stop(0.15f, FullBody);
-    ActiveMontage = StepOnlyWhenFullBody(Instance->PlaySlotAnimationAsDynamicMontage(Present(FullBodyPunch), UpperBodySlot, bSameGroup ? 0.15f : 0.f, 0.18f, 1.f, 1, -1.f, Position), UpperBodySlot);
+    ActiveMontage = Instance->PlaySlotAnimationAsDynamicMontage(Present(FullBodyPunch), UpperBodySlot, bSameGroup ? 0.15f : 0.f, 0.18f, 1.f, 1, -1.f, Position);
     FullBodyPunch = nullptr;
     // A charge in progress carries over to the upper-body montage, still held at its loaded pose if it was.
     if (ChargeMontage == FullBody)
@@ -753,8 +744,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
     }
     else
     {
-        ActiveMontage = StepOnlyWhenFullBody(Instance->PlaySlotAnimationAsDynamicMontage(Shown, bUpperBodyPunch ? UpperBodySlot : PrototypeSlot, 0.12f, 0.18f, 1.f, 1),
-            bUpperBodyPunch ? UpperBodySlot : PrototypeSlot);
+        ActiveMontage = Instance->PlaySlotAnimationAsDynamicMontage(Shown, bUpperBodyPunch ? UpperBodySlot : PrototypeSlot, 0.12f, 0.18f, 1.f, 1);
     }
     // Standing punches keep the full-body footwork, but hand over to the upper body if the player starts moving.
     FullBodyPunch = bPunch && !bUpperBodyPunch && ActiveMontage ? Sequence : nullptr;
