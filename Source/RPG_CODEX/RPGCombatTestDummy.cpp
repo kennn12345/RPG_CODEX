@@ -265,11 +265,12 @@ void ARPGCombatTestDummy::Tick(float DeltaTime)
 		}
 	}
 
-	if (bShowHitText && URPGCombatStateComponent::IsDebugDisplayEnabled())
+	const bool bDebugText = URPGCombatStateComponent::IsDebugDisplayEnabled();
+	if (bShowHitText && (bDebugText || !DisplayLabel.IsEmpty()))
 	{
-		FString Text = HitCount > 0
-			? FString::Printf(TEXT("Hits: %d\n%s [%s]  %+.3fs"), HitCount, *LastHit.AttackName, *LastHit.HitBone.ToString(), LastHit.TimeFromImpact)
-			: FString(TEXT("Combat Test Dummy"));
+		FString Text = DisplayLabel.IsEmpty() ? FString(TEXT("Combat Test Dummy")) : DisplayLabel;
+		if (bDebugText && HitCount > 0)
+			Text += FString::Printf(TEXT("\nHits: %d\n%s [%s]  %+.3fs"), HitCount, *LastHit.AttackName, *LastHit.HitBone.ToString(), LastHit.TimeFromImpact);
 		if (const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr)
 			Text += FString::Printf(TEXT("\nHealth %.0f / %.0f%s"), A->GetHealth(), A->GetMaxHealth(), bKnockedOut ? TEXT("  KO") : TEXT(""));
 		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 115.f), Text, this, FColor::White, 0.f, true, 1.1f);
@@ -333,7 +334,7 @@ void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	// Readout: everything the Power System worked out for this hit.
 	const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
 	const FString Readout = URPGPowerSystem::DescribeResult(Input, Result)
-		+ FString::Printf(TEXT("\n  %s Health %.0f / %.0f%s"), *GetActorNameOrLabel(),
+		+ FString::Printf(TEXT("\n  %s Health %.0f / %.0f%s"), DisplayLabel.IsEmpty() ? *GetActorNameOrLabel() : *DisplayLabel,
 			A ? A->GetHealth() : 0.f, A ? A->GetMaxHealth() : 0.f, bKnockedOut ? TEXT("  KNOCKED OUT") : TEXT(""));
 	UE_LOG(LogRPGInput, Log, TEXT("%s"), *Readout);
 	if (GEngine && CVarPowerDebug.GetValueOnGameThread() > 0)

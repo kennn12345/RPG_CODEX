@@ -132,9 +132,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy", meta = (ClampMin = "0.05", EditCondition = "bFlinchOnHit"))
 	float FlinchTime = 0.3f;
 
-	/** Floating text above the dummy: hit count and the last hit. */
+	/** Floating text above the dummy: hit count and the last hit (with rpg.Debug), and its name and Health. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy")
 	bool bShowHitText = true;
+
+	/** Name shown above it and in the Power readout ("Heavy Brute"). Set: name and Health always show, even with
+	 *  rpg.Debug off (the calibration arena's dummies). Empty: the actor's name, shown only with rpg.Debug. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy")
+	FString DisplayLabel;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Dummy")
 	int32 HitCount = 0;

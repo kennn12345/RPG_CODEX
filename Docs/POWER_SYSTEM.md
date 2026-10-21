@@ -9,7 +9,7 @@ Last updated: 2026-10-21. The design intent lives in the Power System spec; this
 | 1 | GAS stats (`URPGAttributeSet`, `URPGCharacterStatsComponent`) on player and dummy | Done, tested in game |
 | 2 | Calculator (`URPGPowerSystem`), settings page, automated tests | Done, unit-tested |
 | 3 | Apply results to the dummy: health damage, reactions, launches, debug readout | Done, tested headless (flat-floor launch lands at 103% of calculated). Needs an in-game look |
-| 4 | Calibrate the ladder in play | Not started |
+| 4 | Calibrate the ladder in play | Physics calibrated (distances match the ladder on flat ground). Calibration arena built. **Feel tuning with the user: in progress** |
 
 ## Stats (GAS attributes)
 
@@ -56,6 +56,33 @@ lower level (a 164 kg target hit at Strength 20 moves like the bandit hit at Str
 - On-screen readout of every channel per hit (`rpg.PowerDebug 0` hides it; always in the log).
 - `bUsePowerSystem` (on by default) off = the older fixed prototype response; the older physics tests use that.
 
+## Calibration arena (stage 4)
+
+While playing, console `rpg.Arena`: builds a flat 300 m floor 100 m above the player and four dummies in a row,
+left to right: **Standard Bandit** (82 kg, Stab 50, Dur 40, HP 100), **Light Scout** (55 kg, Stab 40, Dur 35,
+HP 70), **Heavy Brute** (164 kg, Stab 70, Dur 70, HP 250), **Steady Veteran** (90 kg, Stab 85, Stagger Res 80,
+Dur 55, HP 150). Their names and Health float above them. `rpg.Arena` again returns to the start.
+Code: `Source/RPG_CODEX/RPGPowerArena.cpp`.
+
+### Measured on flat ground (`RPG.Power.Calibration`, 2026-10-21, normal punch on the standard bandit)
+
+| Strength | Reaction | Calculated | Actual | |
+|---|---|---|---|---|
+| 6 | Stagger | 0.9 ft | 0.9 ft | 103% |
+| 8 | Stagger | 2.3 ft | 2.3 ft | 102% |
+| 10 | Launch | 7.0 ft | 7.9 ft | 113% |
+| 12 | Launch | 12.1 ft | 12.8 ft | 106% |
+| 14 | Launch | 34.1 ft | 33.7 ft | 99% |
+| 16 | Launch | 49.6 ft | 50.7 ft | 102% |
+| 18 | Launch | 91.6 ft | 95.3 ft | 104% |
+| 20 | Launch | 101.2 ft | 104.1 ft | 103% |
+
+"Calculated" is the ladder maximum × the random 0.6–1.0 roll. Physics needs no correction: tuning is now purely about
+feel (ladder distances, thresholds, damage).
+
+Current damage of a normal punch on the bandit: Strength 5 ≈ 13 (about 8 punches to knock out), 10 ≈ 45, 16 ≈ 94,
+18+ one-shots it.
+
 ## Where to tune
 
 **Edit → Project Settings → Game → RPG Power System.** Every number above, plus the ladder itself. Saved to
@@ -63,7 +90,8 @@ lower level (a 164 kg target hit at Strength 20 moves like the bandit hit at Str
 
 ## Tests
 
-`RPG.Power.Ladder`, `RPG.Power.Channels`, `RPG.Power.DummyLaunch` (builds a flat 200 m floor above the level and
+`RPG.Power.Ladder`, `RPG.Power.Channels`, `RPG.Power.Calibration` (flat-ground sweep, Strength 6–20, prints an
+RPGCALIB table), `RPG.Power.DummyLaunch` (builds a flat 200 m floor above the level and
 checks a Strength 12 launch end to end) (Tools → Session Frontend → Automation, or headless:
 `UnrealEditor-Cmd RPG_CODEX.uproject -ExecCmds="Automation RunTests RPG.Power" -TestExit="Automation Test Queue Empty" -nullrhi -unattended`).
 

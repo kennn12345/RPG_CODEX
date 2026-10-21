@@ -103,7 +103,7 @@ namespace
 
 			float NewValue = 0.f;
 			Stats->GetStatByName(StatName, NewValue);
-			ShowStatsMessage(FString::Printf(TEXT("%s: %s = %.1f"), *GetNameSafe(Stats->GetOwner()), *Args[1], NewValue));
+			ShowStatsMessage(FString::Printf(TEXT("%s: %s = %.1f"), *Stats->GetOwner()->GetActorNameOrLabel(), *Args[1], NewValue));
 		}
 	}
 
@@ -250,7 +250,7 @@ FString URPGCharacterStatsComponent::DescribeStats()
 		TEXT("  Strength %.1f   AttackSpeed %.2f   Mass %.0f kg\n")
 		TEXT("  Durability %.0f   Stability %.0f   StaggerResistance %.0f   Recovery %.0f\n")
 		TEXT("  MagicPower %.0f   MagicControl %.0f"),
-		*GetNameSafe(GetOwner()),
+		GetOwner() ? *GetOwner()->GetActorNameOrLabel() : TEXT("?"),
 		A->GetHealth(), A->GetMaxHealth(), A->GetStamina(), A->GetMaxStamina(),
 		A->GetStrength(), A->GetAttackSpeed(), A->GetMass(),
 		A->GetDurability(), A->GetStability(), A->GetStaggerResistance(), A->GetRecovery(),
