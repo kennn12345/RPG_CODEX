@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "RPGPlayerTypes.h"
+#include "RPGPowerTypes.h"
 #include "RPGPhysicsReactionComponent.generated.h"
 
 class UPhysicsControlComponent;
@@ -88,9 +89,20 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** Entry point from the existing melee hit: picks POWERED or LIMP and queues the impulse at the impact point. */
+	/** Legacy entry point (no Power System): full charge = LIMP, otherwise POWERED, with the TEMPORARY impulse values. */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
 	void HandleMeleeHit(const FRPGMeleeHitInfo& Hit);
+
+	/**
+	 * Carries out a Power System result. Flinch / Stagger: POWERED, the struck limb yields (Stagger harder).
+	 * Knockdown: LIMP, collapsing with any shove velocity. Launch: LIMP with every body thrown at the result's
+	 * DisplacementVelocity, staying limp for the flight plus LimpTime.
+	 */
+	void HandlePowerHit(const FRPGMeleeHitInfo& Hit, const FRPGPowerResult& Result);
+
+	/** Fires once when a LIMP reaction starts fading back to the animation, while the pose is still the ragdoll's. The
+	 *  owner can move itself to where the body ended up first (the dummy stands up where it landed). */
+	FSimpleMulticastDelegate OnLimpEnding;
 
 	/** Partial physics: bodies simulate under motors toward the animation, the limb holding HitBone yields. */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
@@ -174,6 +186,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
 	float LimpTime = 2.f;
 
+	/** Power System ragdolls: after LimpTime the body only starts getting up once its pelvis is slower than this (cm/s),
+	 *  so it doesn't stand up while still sliding or tumbling... */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
+	float LimpSettleSpeed = 40.f;
+
+	/** ...but never waits longer than this beyond LimpTime. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
+	float LimpMaxSettleWait = 1.5f;
+
 	/** Fade from the ragdoll back to the animation (a placeholder until there are get-up animations). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
 	float LimpReturnBlendTime = 0.5f;
@@ -200,6 +221,16 @@ public:
 	 *  the charge bonus. Scales the impulse; the owner can use it for its own response (the dummy's shove). */
 	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
 	float GetStrikeStrength(const FRPGMeleeHitInfo& Hit) const;
+
+	// --- Power System reactions (HandlePowerHit) ---
+
+	/** Speed (cm/s) a Flinch gives the struck body: impulse = this * the body's mass. Only how much the limb yields. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Power", meta = (ClampMin = "0"))
+	float FlinchImpulseSpeed = 200.f;
+
+	/** Same for a Stagger (and the topple push of a Knockdown). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Power", meta = (ClampMin = "0"))
+	float StaggerImpulseSpeed = 450.f;
 
 	/** TEMPORARY. Impulse multiplier when the hit sends the body LIMP. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Impulse (TEMPORARY)", meta = (ClampMin = "0"))
@@ -232,6 +263,9 @@ private:
 	void SetPhysicsBlend(float Weight);
 	void FinishReturn();
 	void ApplyPendingImpulse();
+	void ApplyPendingVelocity();
+	/** The body to push for a hit on Bone: it, or the nearest body above it (avoiding the anchor unless LIMP). */
+	FName FindImpulseBody(FName Bone, bool bLimp) const;
 	bool ShouldDrawDebug() const;
 
 	ERPGPhysicsReactionState State = ERPGPhysicsReactionState::Animated;
@@ -260,4 +294,12 @@ private:
 	FVector PendingPoint = FVector::ZeroVector;
 	FVector PendingImpulse = FVector::ZeroVector;
 	int32 PendingFrames = 0;
+
+	/** This LIMP came from HandlePowerHit: wait for the body to settle before getting up (legacy hits keep fixed timing). */
+	bool bWaitForSettle = false;
+
+	/** A launch / shove velocity for every body, waiting for the bodies to start simulating. */
+	bool bVelocityPending = false;
+	FVector PendingVelocity = FVector::ZeroVector;
+	int32 PendingVelocityFrames = 0;
 };

@@ -9,7 +9,7 @@
 
 namespace
 {
-	constexpr float CmPerFoot = 30.48f;
+	constexpr float TestCmPerFoot = 30.48f;
 
 	/** A normal punch on the standard bandit (82 kg, Stability 50, Durability 50) at a Strength level. */
 	FRPGPowerInput MakeStandardPunch(float Strength, int32 Seed = 1234)
@@ -36,7 +36,7 @@ bool FRPGPowerLadderTest::RunTest(const FString& Parameters)
 	for (const FRPGPowerLadderStep& Step : Settings->Ladder)
 	{
 		const FRPGPowerResult Result = URPGPowerSystem::Calculate(MakeStandardPunch(Step.Level));
-		const float MaxFeet = Result.MaxDisplacement / CmPerFoot;
+		const float MaxFeet = Result.MaxDisplacement / TestCmPerFoot;
 
 		TestEqual(FString::Printf(TEXT("Level %.0f: max displacement matches the ladder"), Step.Level), MaxFeet, Step.MaxDisplacementFeet, 0.01f);
 		TestTrue(FString::Printf(TEXT("Level %.0f: rolled displacement within [roll min, max]"), Step.Level),
@@ -93,7 +93,7 @@ bool FRPGPowerChannelsTest::RunTest(const FString& Parameters)
 		Input.Target.Mass = Settings->StandardMass * 2.f;
 		const FRPGPowerResult Heavy = URPGPowerSystem::Calculate(Input);
 		TestEqual(TEXT("Double mass: resistance 2"), Heavy.TargetResistance, 2.f, 0.001f);
-		TestEqual(TEXT("Double mass: moves like half the level"), Heavy.MaxDisplacement / CmPerFoot, URPGPowerSystem::GetLadderDisplacementFeet(10.f), 0.01f);
+		TestEqual(TEXT("Double mass: moves like half the level"), Heavy.MaxDisplacement / TestCmPerFoot, URPGPowerSystem::GetLadderDisplacementFeet(10.f), 0.01f);
 
 		// Damage doesn't depend on how far the target moves.
 		const FRPGPowerResult Standard = URPGPowerSystem::Calculate(MakeStandardPunch(20.f));
@@ -127,10 +127,11 @@ bool FRPGPowerChannelsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Strength 20: launch"), Big.Reaction == ERPGPowerReaction::Launch);
 		TestTrue(TEXT("Strength 20: launch goes up"), Big.DisplacementVelocity.Z > 0.f);
 
-		// The launch speed lands at the rolled distance on flat ground: range = v^2 sin(2a) / g.
-		const float Angle = FMath::DegreesToRadians(Settings->LaunchAngle);
-		const float Range = Big.DisplacementVelocity.SizeSquared() * FMath::Sin(2.f * Angle) / Settings->Gravity;
-		TestEqual(TEXT("Strength 20: launch lands at the displacement"), Range, Big.Displacement, 1.f);
+		// The launch speed's arc plus slide covers exactly the rolled distance.
+		const float Total = URPGPowerSystem::GetLaunchTotalDistance(float(Big.DisplacementVelocity.Size()));
+		TestEqual(TEXT("Strength 20: launch arc + slide covers the displacement"), Total, Big.Displacement, 1.f);
+		TestEqual(TEXT("Strength 20: launch at the set angle"), float(FMath::RadiansToDegrees(FMath::Asin(Big.DisplacementVelocity.Z / Big.DisplacementVelocity.Size()))),
+			Settings->LaunchAngle, 0.01f);
 
 		const FRPGPowerResult Mid = URPGPowerSystem::Calculate(MakeStandardPunch(8.f));
 		TestTrue(TEXT("Strength 8: not a launch"), Mid.Reaction != ERPGPowerReaction::Launch);

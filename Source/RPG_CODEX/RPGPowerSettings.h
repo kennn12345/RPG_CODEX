@@ -148,7 +148,17 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1"))
 	float Gravity = 980.f;
 
-	/** cm/s^2 a shoved (not launched) target slides to a stop with. Must match how the target slows down. */
+	/** cm/s^2 a shoved target that stays on its feet slides to a stop with. Must match how the target slows down. */
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1"))
 	float ShoveDeceleration = 500.f;
+
+	/** cm/s^2 a ragdoll slows down sliding along the ground after it lands (or is knocked down sideways). Measured on
+	 *  flat ground with the mannequin: about 1100. Launches aim short by the slide, so the total matches the ladder. */
+	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1"))
+	float RagdollSlideDeceleration = 1100.f;
+
+	/** How far the body's centre drops between the hit and lying on the ground, cm (standing pelvis ~95, lying ~15).
+	 *  Launches account for the extra fall time. */
+	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "0"))
+	float LaunchDropHeight = 80.f;
 };

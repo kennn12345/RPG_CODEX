@@ -72,6 +72,7 @@ namespace
 				Player->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 				Dummy->Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 				Dummy->StopWanderingAtHome();   // the cases place the player relative to a dummy standing where it was placed
+				Dummy->bUsePowerSystem = false; // this test covers the physics mechanics with the fixed charge -> state rule
 				StartCase(Player, Controller, Now);
 				return false;
 			}

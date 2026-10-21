@@ -132,16 +132,24 @@ FRPGPowerResult URPGPowerSystem::Calculate(const FRPGPowerInput& Input)
 	const bool bLaunch = R.Displacement >= S->LaunchMinFeet * CmPerFoot;
 	if (bLaunch)
 	{
-		// Speed for a ballistic arc that lands Displacement away on flat ground.
+		// The launch speed whose arc plus slide covers Displacement in total (distance only grows with speed: bisect).
+		float Low = 0.f, High = 1000.f;
+		while (GetLaunchTotalDistance(High) < R.Displacement && High < 1.0e7f) High *= 2.f;
+		for (int32 Step = 0; Step < 40; ++Step)
+		{
+			const float Mid = 0.5f * (Low + High);
+			(GetLaunchTotalDistance(Mid) < R.Displacement ? Low : High) = Mid;
+		}
+		const float Speed = 0.5f * (Low + High);
 		const float Angle = FMath::DegreesToRadians(S->LaunchAngle);
-		const float Speed = FMath::Sqrt(R.Displacement * S->Gravity / FMath::Sin(2.f * Angle));
 		R.DisplacementVelocity = Direction * (Speed * FMath::Cos(Angle)) + FVector::UpVector * (Speed * FMath::Sin(Angle));
 		R.bKnockdown = true; // A launched target lands on the ground.
 	}
 	else if (R.Displacement > 0.f)
 	{
-		// Speed that slides to a stop after Displacement at ShoveDeceleration.
-		R.DisplacementVelocity = Direction * FMath::Sqrt(2.f * S->ShoveDeceleration * R.Displacement);
+		// Speed that slides to a stop after Displacement: on its feet, or as a ragdoll if knocked down.
+		const float Deceleration = R.bKnockdown ? S->RagdollSlideDeceleration : S->ShoveDeceleration;
+		R.DisplacementVelocity = Direction * FMath::Sqrt(2.f * Deceleration * R.Displacement);
 	}
 
 	// ---- Summary: the strongest channel that fired ----
@@ -151,6 +159,17 @@ FRPGPowerResult URPGPowerSystem::Calculate(const FRPGPowerInput& Input)
 	else						R.Reaction = ERPGPowerReaction::Flinch;
 
 	return R;
+}
+
+float URPGPowerSystem::GetLaunchTotalDistance(float Speed)
+{
+	const URPGPowerSettings* S = URPGPowerSettings::Get();
+	const float Angle = FMath::DegreesToRadians(S->LaunchAngle);
+	const float Horizontal = Speed * FMath::Cos(Angle);
+	const float Vertical = Speed * FMath::Sin(Angle);
+	// Time to come down LaunchDropHeight below where it started: Vertical*t - g/2*t^2 = -Drop.
+	const float AirTime = (Vertical + FMath::Sqrt(Vertical * Vertical + 2.f * S->Gravity * S->LaunchDropHeight)) / S->Gravity;
+	return Horizontal * AirTime + Horizontal * Horizontal / (2.f * S->RagdollSlideDeceleration);
 }
 
 FRPGPowerStats URPGPowerSystem::ReadStats(AActor* Actor)
@@ -202,12 +221,13 @@ FRPGPowerInput URPGPowerSystem::MakeMeleeInput(const FRPGMeleeHitInfo& Hit)
 FString URPGPowerSystem::DescribeResult(const FRPGPowerInput& Input, const FRPGPowerResult& Result)
 {
 	return FString::Printf(
-		TEXT("POWER  %s %s  ->  %s\n")
+		TEXT("POWER  %s %s  (Strength %.1f vs %.0f kg)  ->  %s\n")
 		TEXT("  Effective Power %.1f   Target Resistance %.2f   Relative Power %.1f\n")
 		TEXT("  Damage %.1f%s   Structural %.0f%%\n")
 		TEXT("  Stagger %s (%.0f%%)   Knockdown %s (%.0f%%)\n")
 		TEXT("  Displacement %.1f ft (max %.1f ft)   Velocity %.0f cm/s"),
-		TierName(Input.Tier), Input.Source == ERPGPowerSource::Kick ? TEXT("Kick") : TEXT("Punch"), ReactionName(Result.Reaction),
+		TierName(Input.Tier), Input.Source == ERPGPowerSource::Kick ? TEXT("Kick") : TEXT("Punch"),
+		Input.Attacker.Strength, Input.Target.Mass, ReactionName(Result.Reaction),
 		Result.EffectivePower, Result.TargetResistance, Result.RelativePower,
 		Result.Damage, Result.bWouldKill ? TEXT(" (LETHAL)") : TEXT(""), Result.StructuralDamage * 100.f,
 		Result.bStagger ? TEXT("YES") : TEXT("no"), Result.StaggerChance * 100.f,

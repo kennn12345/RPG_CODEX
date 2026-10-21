@@ -40,6 +40,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RPG|Power")
 	static float GetLadderDisplacementFeet(float Level);
 
+	/** Total ground distance (cm) a body launched at this speed (cm/s) and LaunchAngle covers: the arc down to the
+	 *  ground LaunchDropHeight below, plus the ragdoll's slide after landing. */
+	static float GetLaunchTotalDistance(float Speed);
+
 	/** Multi-line readout of every channel, for the debug display. */
 	static FString DescribeResult(const FRPGPowerInput& Input, const FRPGPowerResult& Result);
 };

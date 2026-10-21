@@ -2,6 +2,7 @@
 
 #include "RPG_CODEX.h"
 #include "RPGCombatStateComponent.h"
+#include "RPGPowerSettings.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -196,23 +197,12 @@ void URPGPhysicsReactionComponent::HandleMeleeHit(const FRPGMeleeHitInfo& Hit)
 	if (!Mesh) return;
 
 	const bool bLimp = State == ERPGPhysicsReactionState::Limp || (Hit.bCharged && Hit.ChargePercent >= LimpChargeThreshold);
+	bWaitForSettle = false;
 	if (bLimp) EnterFullRagdoll(LimpTime);
 	else EnterPoweredReaction(Hit.HitBone);
 
-	// The body to push: the hit one, or the nearest body above it.
-	FName Bone = Hit.HitBone;
-	while (Bone != NAME_None && !BoneModifiers.Contains(Bone)) Bone = Mesh->GetParentBone(Bone);
+	const FName Bone = FindImpulseBody(Hit.HitBone, bLimp);
 	if (Bone == NAME_None) return;
-	// The anchor stays on the animation in POWERED: push the first body above it in its limb instead (spine_02 on the
-	// mannequin; spine_01 has no body).
-	if (!bLimp && Bone == AnchorBone)
-		for (const TPair<FName, FName>& Pair : BoneModifiers)
-		{
-			if (Pair.Key == AnchorBone || BoneLimbs.FindRef(Pair.Key) != BoneLimbs.FindRef(AnchorBone)) continue;
-			FName Parent = Mesh->GetParentBone(Pair.Key);
-			while (Parent != NAME_None && !BoneModifiers.Contains(Parent)) Parent = Mesh->GetParentBone(Parent);
-			if (Parent == AnchorBone) { Bone = Pair.Key; break; }
-		}
 	const FBodyInstance* Body = Mesh->GetBodyInstance(Bone);
 	const float Mass = Body ? Body->GetBodyMass() : 10.f;
 
@@ -228,6 +218,90 @@ void URPGPhysicsReactionComponent::HandleMeleeHit(const FRPGMeleeHitInfo& Hit)
 	LastReaction.AttackName = Hit.AttackName;
 	LastReaction.Strength = Strength;
 	ApplyReactionImpulse(Bone, Hit.ImpactLocation, Direction, Magnitude);
+}
+
+FName URPGPhysicsReactionComponent::FindImpulseBody(FName Bone, bool bLimp) const
+{
+	const USkeletalMeshComponent* Mesh = GetMesh();
+	if (!Mesh) return NAME_None;
+
+	// The hit body, or the nearest body above it.
+	while (Bone != NAME_None && !BoneModifiers.Contains(Bone)) Bone = Mesh->GetParentBone(Bone);
+	if (Bone == NAME_None) return NAME_None;
+	// The anchor stays on the animation in POWERED: push the first body above it in its limb instead (spine_02 on the
+	// mannequin; spine_01 has no body).
+	if (!bLimp && Bone == AnchorBone)
+		for (const TPair<FName, FName>& Pair : BoneModifiers)
+		{
+			if (Pair.Key == AnchorBone || BoneLimbs.FindRef(Pair.Key) != BoneLimbs.FindRef(AnchorBone)) continue;
+			FName Parent = Mesh->GetParentBone(Pair.Key);
+			while (Parent != NAME_None && !BoneModifiers.Contains(Parent)) Parent = Mesh->GetParentBone(Parent);
+			if (Parent == AnchorBone) { Bone = Pair.Key; break; }
+		}
+	return Bone;
+}
+
+void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, const FRPGPowerResult& Result)
+{
+	if (!bReactionsEnabled || !bSetUp) return;
+	USkeletalMeshComponent* Mesh = GetMesh();
+	if (!Mesh) return;
+
+	const bool bLimp = Result.Reaction == ERPGPowerReaction::Knockdown || Result.Reaction == ERPGPowerReaction::Launch
+		|| State == ERPGPhysicsReactionState::Limp;
+
+	if (bLimp)
+	{
+		// A launch stays limp for its whole flight (up and back down) before the usual LimpTime on the ground.
+		const float Gravity = URPGPowerSettings::Get()->Gravity;
+		const float FlightTime = Result.DisplacementVelocity.Z > 0.f ? 2.f * float(Result.DisplacementVelocity.Z) / Gravity : 0.f;
+		EnterFullRagdoll(LimpTime + FlightTime);
+		bWaitForSettle = true;
+
+		// The whole body moves (a launch or a sliding fall), not only the struck part.
+		if (!Result.DisplacementVelocity.IsNearlyZero())
+		{
+			bVelocityPending = true;
+			PendingVelocity = Result.DisplacementVelocity;
+			PendingVelocityFrames = 0;
+			ApplyPendingVelocity();
+		}
+	}
+	else
+	{
+		EnterPoweredReaction(Hit.HitBone);
+	}
+
+	// The struck part still takes a local push, so the hit reads on the body (and a knockdown topples away from it).
+	const FName Bone = FindImpulseBody(Hit.HitBone, bLimp);
+	if (Bone == NAME_None) return;
+	const FBodyInstance* Body = Mesh->GetBodyInstance(Bone);
+	const float Mass = Body ? Body->GetBodyMass() : 10.f;
+	const float Speed = Result.Reaction == ERPGPowerReaction::Flinch ? FlinchImpulseSpeed : StaggerImpulseSpeed;
+
+	FVector Direction = Hit.StrikeDirection.GetSafeNormal();
+	if (Direction.IsNearlyZero() && Hit.Attacker) Direction = (Hit.ImpactLocation - Hit.Attacker->GetActorLocation()).GetSafeNormal();
+
+	LastReaction.HitBone = Hit.HitBone;
+	LastReaction.AttackName = Hit.AttackName;
+	LastReaction.Strength = Result.RelativePower;
+	ApplyReactionImpulse(Bone, Hit.ImpactLocation, Direction, Speed * Mass);
+}
+
+void URPGPhysicsReactionComponent::ApplyPendingVelocity()
+{
+	USkeletalMeshComponent* Mesh = GetMesh();
+	if (!bVelocityPending || !Mesh) return;
+	const FBodyInstance* Root = Mesh->GetBodyInstance(AnchorBone);
+	if (Root && Root->IsInstanceSimulatingPhysics())
+	{
+		Mesh->SetAllPhysicsLinearVelocity(PendingVelocity, false);
+		bVelocityPending = false;
+	}
+	else if (++PendingVelocityFrames > MaxPendingFrames)
+	{
+		bVelocityPending = false;
+	}
 }
 
 void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone)
@@ -346,6 +420,12 @@ void URPGPhysicsReactionComponent::ApplyPendingImpulse()
 void URPGPhysicsReactionComponent::ReturnToAnimated(float BlendTime)
 {
 	if (State == ERPGPhysicsReactionState::Animated || bReturning) return;
+	bVelocityPending = false;
+	if (State == ERPGPhysicsReactionState::Limp)
+	{
+		OnLimpEnding.Broadcast();
+		if (State == ERPGPhysicsReactionState::Animated) return;   // a listener already finished it (e.g. an instant reset)
+	}
 	bReturning = true;
 	ReturnTime = 0.f;
 	ReturnDuration = BlendTime >= 0.f ? BlendTime : ReturnBlendTime;
@@ -373,6 +453,7 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	if (!bSetUp) return;
 	ApplyPendingImpulse();
+	ApplyPendingVelocity();
 
 	USkeletalMeshComponent* Mesh = GetMesh();
 	if (State != ERPGPhysicsReactionState::Animated)
@@ -397,7 +478,9 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 			}
 			else if (LimpDuration > 0.f && StateTime >= LimpDuration)
 			{
-				ReturnToAnimated(LimpReturnBlendTime);
+				const FBodyInstance* Pelvis = Mesh ? Mesh->GetBodyInstance(AnchorBone) : nullptr;
+				const bool bSettled = !bWaitForSettle || !Pelvis || Pelvis->GetUnrealWorldVelocity().Size() <= LimpSettleSpeed;
+				if (bSettled || StateTime >= LimpDuration + LimpMaxSettleWait) ReturnToAnimated(LimpReturnBlendTime);
 			}
 		}
 		LastReaction.PeakDeviation = FMath::Max(LastReaction.PeakDeviation, GetStruckChainDeviation());

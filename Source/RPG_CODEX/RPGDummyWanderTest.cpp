@@ -41,6 +41,7 @@ namespace
 				// Park the player far off so it never blocks the walk.
 				Player->SetActorLocation(D->GetActorLocation() + FVector(0.f, 1500.f, 50.f), false, nullptr, ETeleportType::ResetPhysics);
 				D->Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+				D->bUsePowerSystem = false;   // a fixed reaction to the one hit, not a Power System roll
 				Start = Now; Origin = D->GetActorLocation(); FloorZ = Origin.Z; Last = Origin;
 				return false;
 			}

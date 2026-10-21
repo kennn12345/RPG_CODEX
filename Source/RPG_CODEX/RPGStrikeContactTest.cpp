@@ -130,6 +130,7 @@ namespace
 				Player->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 				Dummy->Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 				Dummy->StopWanderingAtHome();
+				Dummy->bUsePowerSystem = false;   // contact cases expect the fixed charge -> state rule, not Power System rolls
 				Home = Dummy->GetActorLocation();
 				if (URPGCameraModeComponent* CameraMode = Player->FindComponentByClass<URPGCameraModeComponent>(); CameraMode && CameraMode->bIsFirstPerson != bFirstPerson)
 					CameraMode->TogglePerspective();

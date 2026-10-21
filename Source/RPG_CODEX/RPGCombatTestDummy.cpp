@@ -1,9 +1,15 @@
 #include "RPGCombatTestDummy.h"
 
+#include "RPGAttributeSet.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGPhysicsReactionComponent.h"
+#include "RPGPowerSettings.h"
+#include "RPGPowerSystem.h"
 #include "RPG_CODEX.h"
+#include "AbilitySystemComponent.h"
+#include "Engine/Engine.h"
+#include "HAL/IConsoleManager.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Animation/BlendSpace.h"
@@ -14,6 +20,10 @@
 #include "Engine/SkeletalMesh.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "UObject/ConstructorHelpers.h"
+
+static TAutoConsoleVariable<int32> CVarPowerDebug(
+	TEXT("rpg.PowerDebug"), 1,
+	TEXT("Power System readout on screen for every hit on a combat test dummy (1 = on, 0 = off). Always logged."));
 
 ARPGCombatTestDummy::ARPGCombatTestDummy()
 {
@@ -80,6 +90,7 @@ void ARPGCombatTestDummy::BeginPlay()
 	HomeRotation = GetActorRotation();
 	PauseLeft = FMath::FRandRange(0.5f, PauseMax);
 	PlayIdle();
+	if (PhysicsReaction) PhysicsReaction->OnLimpEnding.AddUObject(this, &ARPGCombatTestDummy::HandleLimpEnding);
 	if (LocomotionBlendSpace)
 	{
 		// the axis that takes the speed (the mannequin's blend space is Direction x Speed)
@@ -235,7 +246,7 @@ void ARPGCombatTestDummy::Tick(float DeltaTime)
 		FHitResult Block;
 		SetActorLocation(Before + ShoveVelocity * DeltaTime, true, &Block);
 		ShoveOffset += GetActorLocation() - Before;
-		const float Slower = FMath::Max(0.f, float(ShoveVelocity.Size()) - ShoveDeceleration * DeltaTime);
+		const float Slower = FMath::Max(0.f, float(ShoveVelocity.Size()) - URPGPowerSettings::Get()->ShoveDeceleration * DeltaTime);
 		ShoveVelocity = Block.bBlockingHit ? FVector::ZeroVector : ShoveVelocity.GetSafeNormal() * Slower;
 	}
 
@@ -256,9 +267,11 @@ void ARPGCombatTestDummy::Tick(float DeltaTime)
 
 	if (bShowHitText && URPGCombatStateComponent::IsDebugDisplayEnabled())
 	{
-		const FString Text = HitCount > 0
+		FString Text = HitCount > 0
 			? FString::Printf(TEXT("Hits: %d\n%s [%s]  %+.3fs"), HitCount, *LastHit.AttackName, *LastHit.HitBone.ToString(), LastHit.TimeFromImpact)
 			: FString(TEXT("Combat Test Dummy"));
+		if (const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr)
+			Text += FString::Printf(TEXT("\nHealth %.0f / %.0f%s"), A->GetHealth(), A->GetMaxHealth(), bKnockedOut ? TEXT("  KO") : TEXT(""));
 		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 115.f), Text, this, FColor::White, 0.f, true, 1.1f);
 	}
 }
@@ -270,6 +283,11 @@ void ARPGCombatTestDummy::ReceiveMeleeHit_Implementation(const FRPGMeleeHitInfo&
 	// stop walking: it stands to take the hit and only moves on HitPause after the reaction ends
 	Speed = 0.f;
 	PauseLeft = FMath::Max(PauseLeft, HitPause);
+	if (bUsePowerSystem && PhysicsReaction && PhysicsReaction->bReactionsEnabled)
+	{
+		ReceivePowerHit(Hit);
+		return;
+	}
 	if (PhysicsReaction && PhysicsReaction->bReactionsEnabled)
 	{
 		PhysicsReaction->HandleMeleeHit(Hit);
@@ -285,6 +303,93 @@ void ARPGCombatTestDummy::ReceiveMeleeHit_Implementation(const FRPGMeleeHitInfo&
 	if (Push.IsNearlyZero()) return;
 	FlinchAxis = FVector::CrossProduct(FVector::UpVector, Push).GetSafeNormal();
 	FlinchElapsed = 0.f;
+}
+
+void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
+{
+	const FRPGPowerInput Input = URPGPowerSystem::MakeMeleeInput(Hit);
+	FRPGPowerResult Result = URPGPowerSystem::Calculate(Input);
+
+	// Damage channel -> Health (GAS). Reaching 0 knocks it out: it goes down whatever the hit's own reaction was.
+	UAbilitySystemComponent* AbilitySystem = Stats ? Stats->GetAbilitySystem() : nullptr;
+	if (AbilitySystem && Stats->GetAttributes())
+	{
+		const float Health = AbilitySystem->GetNumericAttribute(URPGAttributeSet::GetHealthAttribute());
+		AbilitySystem->SetNumericAttributeBase(URPGAttributeSet::GetHealthAttribute(), Health - Result.Damage);
+		if (Health - Result.Damage <= 0.f && !bKnockedOut)
+		{
+			bKnockedOut = true;
+			if (Result.Reaction == ERPGPowerReaction::Flinch || Result.Reaction == ERPGPowerReaction::Stagger)
+				Result.Reaction = ERPGPowerReaction::Knockdown;
+		}
+	}
+	LastPowerResult = Result;
+
+	// Reaction and displacement channels -> physics. A ragdoll carries its own velocity; standing, it slides back.
+	PhysicsReaction->HandlePowerHit(Hit, Result);
+	if (PhysicsReaction->GetReactionState() == ERPGPhysicsReactionState::Powered)
+		ShoveVelocity = FVector(Result.DisplacementVelocity.X, Result.DisplacementVelocity.Y, 0.f);
+
+	// Readout: everything the Power System worked out for this hit.
+	const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
+	const FString Readout = URPGPowerSystem::DescribeResult(Input, Result)
+		+ FString::Printf(TEXT("\n  %s Health %.0f / %.0f%s"), *GetActorNameOrLabel(),
+			A ? A->GetHealth() : 0.f, A ? A->GetMaxHealth() : 0.f, bKnockedOut ? TEXT("  KNOCKED OUT") : TEXT(""));
+	UE_LOG(LogRPGInput, Log, TEXT("%s"), *Readout);
+	if (GEngine && CVarPowerDebug.GetValueOnGameThread() > 0)
+		GEngine->AddOnScreenDebugMessage(int32(GetUniqueID()), 8.f, FColor::Yellow, Readout);   // one line block per dummy, replaced each hit
+}
+
+void ARPGCombatTestDummy::HandleLimpEnding()
+{
+	// Legacy hits (bUsePowerSystem off) keep the old behaviour: the body fades back to where the dummy stood.
+	if (bResetting || !Mesh || !bUsePowerSystem) return;
+
+	// Stand up where the body lies: move the actor (capsule) under the pelvis. The ragdoll bodies stay where they are
+	// in the world, and the fade back to the animation then happens at the new spot instead of snapping home.
+	const FVector Pelvis = Mesh->GetBoneLocation(TEXT("pelvis"));
+	float FloorZ = 0.f;
+	FVector Target = Home;   // fell off the world: back to its spot
+	const bool bFloor = FindFloor(FVector(Pelvis.X, Pelvis.Y, Pelvis.Z + 60.f), FloorZ);
+	if (bFloor)
+		Target = FVector(Pelvis.X, Pelvis.Y, FloorZ + Capsule->GetScaledCapsuleHalfHeight() + 1.f);
+	UE_LOG(LogRPGInput, Log, TEXT("%s gets up: pelvis (%.0f, %.0f, %.0f), %.0f cm from where it stood, floor %s -> (%.0f, %.0f, %.0f)"),
+		*GetActorNameOrLabel(), Pelvis.X, Pelvis.Y, Pelvis.Z, FVector::Dist2D(Pelvis, GetActorLocation()),
+		bFloor ? *FString::Printf(TEXT("at Z %.0f"), FloorZ) : TEXT("NOT FOUND (back home)"), Target.X, Target.Y, Target.Z);
+
+	ShoveVelocity = FVector::ZeroVector;
+	FallSpeed = 0.f;
+	bHasTarget = false;
+
+	if (!bFloor)
+	{
+		// Fell off the world: reappear at its spot at once, instead of fading back up from wherever the body fell.
+		bResetting = true;
+		PhysicsReaction->ReturnToAnimated(0.f);
+		bResetting = false;
+		SetActorLocationAndRotation(Home, HomeRotation, false, nullptr, ETeleportType::ResetPhysics);
+		ShoveOffset = FVector::ZeroVector;
+	}
+	else
+	{
+		const FVector Before = GetActorLocation();
+		SetActorLocation(Target, false, nullptr, ETeleportType::None);
+		ShoveOffset += GetActorLocation() - Before;
+	}
+
+	if (bKnockedOut)
+	{
+		SetHealthToMax();
+		bKnockedOut = false;
+	}
+}
+
+void ARPGCombatTestDummy::SetHealthToMax()
+{
+	UAbilitySystemComponent* AbilitySystem = Stats ? Stats->GetAbilitySystem() : nullptr;
+	if (AbilitySystem && Stats->GetAttributes())
+		AbilitySystem->SetNumericAttributeBase(URPGAttributeSet::GetHealthAttribute(),
+			AbilitySystem->GetNumericAttribute(URPGAttributeSet::GetMaxHealthAttribute()));
 }
 
 void ARPGCombatTestDummy::ReceiveContactPush_Implementation(const FVector& PushVelocity, FName Bone)
@@ -307,8 +412,12 @@ void ARPGCombatTestDummy::ResetDummy()
 	ShoveVelocity = FVector::ZeroVector;
 	if (!ShoveOffset.IsNearlyZero() && HasActorBegunPlay()) SetActorLocation(GetActorLocation() - ShoveOffset);
 	ShoveOffset = FVector::ZeroVector;
+	bResetting = true;
 	if (PhysicsReaction && HasActorBegunPlay()) PhysicsReaction->ReturnToAnimated(0.f);
+	bResetting = false;
 	if (Mesh && HasActorBegunPlay()) Mesh->SetRelativeLocationAndRotation(MeshRestLocation, MeshRestRotation);
+	if (HasActorBegunPlay()) SetHealthToMax();
+	bKnockedOut = false;
 }
 
 void ARPGCombatTestDummy::StopWanderingAtHome()

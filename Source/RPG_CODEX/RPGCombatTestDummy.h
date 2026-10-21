@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "RPGMeleeTarget.h"
+#include "RPGPowerTypes.h"
 #include "RPGCombatTestDummy.generated.h"
 
 class UCapsuleComponent;
@@ -14,7 +15,9 @@ class URPGCharacterStatsComponent;
 
 /**
  * Mannequin to throw punches and kicks at. No AI. Its stats are the Power System's standard test bandit (180 lb,
- * low-moderate Strength and Durability, moderate Stability and Health); it doesn't take damage yet. It wanders slowly around where it was placed (bWander),
+ * low-moderate Strength and Durability, moderate Stability and Health). Each hit goes through the Power System: it
+ * takes the damage, and flinches, staggers, is knocked down or launched by the result; after a ragdoll it gets up
+ * where it landed. At 0 Health it is knocked out and revives (full Health) when it gets up. It wanders slowly around where it was placed (bWander),
  * blocks the player with its capsule, and its mesh's physics asset (PA_Mannequin: head, torso, arms, legs) is what the
  * melee hit sweeps detect. Hits are passed to its PhysicsReaction (partial physics / ragdoll); it stops while reacting.
  * It shows a hit counter.
@@ -96,8 +99,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Wander", meta = (ClampMin = "0"))
 	float MaxStepHeight = 15.f;
 
-	/** Balance response to a hit: the dummy is driven back along the strike (sliding, decelerating) by this many cm/s
-	 *  per unit of strike strength (1 = a typical tap; charged strikes are stronger), while its body yields physically. */
+	/** Hits go through the Power System (damage, reaction and displacement from both sides' stats). Off = the older
+	 *  prototype response below (full charge = ragdoll, a fixed shove); the physics reaction tests use that. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy")
+	bool bUsePowerSystem = true;
+
+	/** The last Power System result (Details panel while playing; tests read it). */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Dummy")
+	FRPGPowerResult LastPowerResult;
+
+	/** Legacy (bUsePowerSystem off): the dummy is driven back along the strike (sliding, slowing at the Power System's
+	 *  Shove Deceleration) by this many cm/s per unit of strike strength (1 = a typical tap). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy", meta = (ClampMin = "0"))
 	float ShoveSpeed = 55.f;
 
@@ -108,10 +120,6 @@ public:
 	 *  limb's speed into it: it gives way like something of its weight, instead of a wall. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy", meta = (ClampMin = "0", ClampMax = "1"))
 	float ContactPushShare = 0.35f;
-
-	/** cm/s per second the shove slows by (it travels speed^2 / 2 / this: ~3 cm for a tap). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy", meta = (ClampMin = "1"))
-	float ShoveDeceleration = 500.f;
 
 	/** Temporary visual only: the mesh tips a few degrees away from the hit and springs back. Not a stagger.
 	 *  Only used when the physics reaction is off. */
@@ -151,6 +159,17 @@ private:
 	void SnapToFloor(float DeltaTime);
 	bool FindFloor(const FVector& At, float& OutFloorZ) const;
 	bool TryStepUp(const FVector& Move);
+
+	/** Power System hit: damage, reaction, shove, readout. */
+	void ReceivePowerHit(const FRPGMeleeHitInfo& Hit);
+	/** A ragdoll is about to stand back up: move the actor to where the body lies, so it gets up there. */
+	void HandleLimpEnding();
+	void SetHealthToMax();
+
+	/** Health reached 0; revives when it gets up. */
+	bool bKnockedOut = false;
+	/** ResetDummy is putting it back home: don't move to the ragdoll. */
+	bool bResetting = false;
 
 	FVector Home = FVector::ZeroVector;
 	FRotator HomeRotation = FRotator::ZeroRotator;
