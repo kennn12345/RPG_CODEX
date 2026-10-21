@@ -47,3 +47,15 @@ All headless with the editor closed; Unreal paths must use forward slashes (`\r`
 - **Charged right (overhand) aimed at the head** misses: it comes in from above and doesn't follow upward aim well.
 - **Off-axis hits**: the mocap cross sweeps ~50 cm across the body, so it can clip a target 30° off to the side
   that the test expects to miss.
+
+## Flight poses (2026-10-21, WORK IN PROGRESS)
+
+`RPG_Proto_FlyHover` / `FlyForward` / `FlyFast` (Tools/ProtoAnim/poses.py, section 7): 2 s floating loops. Relaxed,
+loose arms in hover and normal flight (user's choice), streamlined fast flight. `URPGFlightAnimationComponent` loops
+them while flying, chosen by horizontal speed (forward >= 150 cm/s, fast >= 900 or L3 fast flight), 0.35 s blends;
+attacks / charges / blocks take over while they run.
+
+**The user wants the flight animations changed later** (they approved wiring them in, not their final look).
+Still to do: tilting the body into climbs / dives, upper-body-only attacks in the air, take-off / landing
+transitions, the old FlightStart (FlyingUp jump) montage on flight start is now overridden next frame.
+Preview tools: `Visual.ClipShots` (any clip on the dummy), `Visual.AttackShots`.

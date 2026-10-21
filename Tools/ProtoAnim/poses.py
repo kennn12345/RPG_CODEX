@@ -378,6 +378,52 @@ def living_loop(base, T=2.0, scale=1.0):
 COMBAT_STANCE = living_loop(STANCE)
 UNARMED_GUARD = living_loop(GUARD, scale=0.8)   # a held guard is tighter: a little less of everything
 
+# ---- 7. Flight (2026-10-21): hover, forward and fast loops, 2.0 s each ----
+# Arms relaxed and loose in hover and normal flight (the user's choice: a calm, floating look), streamlined in fast
+# flight. Feet are free (no planted pivot, no balance solver). The head holds level in the world by itself, so as the
+# body tilts forward the eyes stay on where it is flying. The game picks the loop from the flight speed and tilts the
+# whole body further into climbs and dives on top of these.
+FLY_FREE = dict(balance=[0], pivot_l=[0], pivot_r=[0], foot_turn_l=[0], foot_turn_r=[0],
+                guard_follow_l=[0], guard_follow_r=[0], guard_raise_l=[0], guard_raise_r=[0],
+                hand_rel_l=[0], hand_rel_r=[0], fist_roll_l=[0], fist_roll_r=[0], clav_l=[0, 0, 0], clav_r=[0, 0, 0])
+# Hover: nearly upright with a slight lean, right knee tucked up, left leg hanging with the toes pointed, arms loose
+# at the sides a little out from the body.
+FLY_HOVER = S(**FLY_FREE, pelvis_off=[0, 0, 6], pelvis_rot=[0, -6, 0], spine_lo=[-6, 1, 0], spine_hi=[-8, 1, 0],
+              head_rot=[0, -2, 0],
+              foot_r=[-12, 8, 52], foot_rot_r=[0, -30, 0], knee_pole_r=[-0.2, 1, 0.3],
+              foot_l=[10, -4, 16], foot_rot_l=[-10, -45, 0], knee_pole_l=[0.1, 1, 0],
+              hand_l=[26, 4, 98], elbow_pole_l=[0.5, -1, 0], hand_r=[-26, 2, 98], elbow_pole_r=[-0.5, -1, 0])
+# Forward flight: the body tilts ~35 deg into the travel, legs trail well behind and up (not hanging down: that read as
+# leaning forward on the ground) with the toes pointed, arms relaxed and a little back.
+FLY_FORWARD = S(**FLY_FREE, pelvis_off=[0, 4, 4], pelvis_rot=[0, -35, 0], spine_lo=[-6, -4, 0], spine_hi=[-8, -4, 0],
+                head_rot=[0, 0, 0],
+                foot_r=[-10, -52, 52], foot_rot_r=[0, -65, 0], knee_pole_r=[-0.1, 1, -0.3],
+                foot_l=[10, -60, 44], foot_rot_l=[-10, -65, 0], knee_pole_l=[0.1, 1, -0.3],
+                hand_l=[24, -6, 96], elbow_pole_l=[0.5, -1, 0.2], hand_r=[-24, -8, 96], elbow_pole_r=[-0.5, -1, 0.2])
+# Fast flight: streamlined - nearly horizontal, legs straight and together behind, arms tucked along the sides.
+FLY_FAST = S(**FLY_FREE, pelvis_off=[0, 8, 6], pelvis_rot=[0, -75, 0], spine_lo=[-6, -5, 0], spine_hi=[-8, -5, 0],
+             head_rot=[0, 0, 0],
+             foot_r=[-6, -82, 74], foot_rot_r=[0, -80, 0], knee_pole_r=[0, 0.3, -1],
+             foot_l=[6, -80, 78], foot_rot_l=[0, -80, 0], knee_pole_l=[0, 0.3, -1],
+             hand_l=[18, -24, 100], elbow_pole_l=[0.3, 0, 1], hand_r=[-18, -24, 100], elbow_pole_r=[-0.3, 0, 1])
+
+def flight_loop(base, bob, sway, T=2.0):
+    """A floating loop: the living stance's breath and hand drift, plus a slow bob of the whole body and a little
+    swing in the free legs (whole cycles, so it wraps seamlessly)."""
+    keys = living_loop(base, T, scale=0.6)
+    out = []
+    for t, d, ease, lags in keys:
+        u = 2 * math.pi * t / T
+        d = dict(d)
+        d['pelvis_off'] = [d['pelvis_off'][0], d['pelvis_off'][1], d['pelvis_off'][2] + bob * math.sin(u)]
+        d['foot_l'] = [d['foot_l'][0], d['foot_l'][1] + sway * math.sin(u + 0.6), d['foot_l'][2] + bob * math.sin(u) + 0.5 * sway * math.sin(2 * u)]
+        d['foot_r'] = [d['foot_r'][0], d['foot_r'][1] + sway * math.sin(u + 2.2), d['foot_r'][2] + bob * math.sin(u) + 0.5 * sway * math.sin(2 * u + 1)]
+        out.append((t, d, ease, lags))
+    return out
+FLIGHT_HOVER = flight_loop(FLY_HOVER, bob=1.5, sway=2.0)
+FLIGHT_FORWARD = flight_loop(FLY_FORWARD, bob=0.8, sway=3.0)
+FLIGHT_FAST = flight_loop(FLY_FAST, bob=0.4, sway=1.5)
+
 # Both punches play 10% faster than their authored timing (key times and lags scale together).
 PUNCH_SPEED = 1.1
 def faster(keys, k):
@@ -563,6 +609,9 @@ SPECS = {
     'RPG_Proto_FrontKick_L_Charged': (LEFT_KICK_CHARGED, 0.33 + LEFT_KICK_CHARGED_T[2], KICK_SPRINGS, LEFT_KICK_CHARGED_T[:2]),
     'RPG_Proto_UnarmedGuard': (UNARMED_GUARD, None, None, ()),
     'RPG_Proto_CombatStance': (COMBAT_STANCE, None, None, ()),
+    'RPG_Proto_FlyHover': (FLIGHT_HOVER, None, None, ()),
+    'RPG_Proto_FlyForward': (FLIGHT_FORWARD, None, None, ()),
+    'RPG_Proto_FlyFast': (FLIGHT_FAST, None, None, ()),
 }
 CLIPS = [(name, spec[0], spec[1]) for name, spec in SPECS.items()]
 
