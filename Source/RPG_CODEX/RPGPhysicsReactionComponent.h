@@ -1,0 +1,263 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "RPGPlayerTypes.h"
+#include "RPGPhysicsReactionComponent.generated.h"
+
+class UPhysicsControlComponent;
+class USkeletalMeshComponent;
+
+UENUM(BlueprintType)
+enum class ERPGPhysicsReactionState : uint8
+{
+	/** Animation only: every body is kinematic and the pose is the animation's. */
+	Animated,
+	/** Partial physics: the bodies simulate, motors pull each one back toward the animation, the pelvis stays on the
+	 *  animation, and the struck limb's motors are weakened so it visibly gives way. */
+	Powered,
+	/** Full ragdoll: every body simulates and the motors are off. */
+	Limp
+};
+
+/** What the last reaction did (debug output and the automation test read it). */
+USTRUCT(BlueprintType)
+struct FRPGPhysicsReactionInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	ERPGPhysicsReactionState State = ERPGPhysicsReactionState::Animated;
+
+	/** The body that was hit (FRPGMeleeHitInfo::HitBone) and the limb it belongs to (ArmLeft, Spine, Head...). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	FName HitBone;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	FName Limb;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	FVector ImpactPoint = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	FVector ImpulseDirection = FVector::ZeroVector;
+
+	/** kg cm/s, as applied to the body. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	float ImpulseMagnitude = 0.f;
+
+	/** Set once the impulse has actually reached the simulated body (it waits for the body to start simulating). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	bool bImpulseApplied = false;
+
+	/** Furthest the struck limb got from its animated position during this reaction, cm. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	float PeakDeviation = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	FString AttackName;
+
+	/** GetStrikeStrength of the hit: 1 = a typical tap at its usual speed. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG")
+	float Strength = 0.f;
+};
+
+/**
+ * Physical hit reactions on a skeletal mesh, through Unreal's PhysicsControl plugin: a UPhysicsControlComponent is made
+ * at BeginPlay with one body modifier per physics body and parent-space motors (each body driven toward its animated
+ * pose relative to its parent), built from the mesh's own physics asset. No Physics Control Asset is needed.
+ *
+ * It does no hit detection: the owner passes on the melee hits it already receives (HandleMeleeHit), e.g. from
+ * IRPGMeleeTarget::ReceiveMeleeHit. Written for any skeletal mesh actor (test dummy now; NPCs / player later), but it
+ * leaves the mesh's animation alone: in ANIMATED the physics has zero blend weight.
+ *
+ * Prototype states: ANIMATED -> POWERED (partial physics, struck limb yields, motors recover) -> back to ANIMATED;
+ * or LIMP (full ragdoll) -> back to ANIMATED by fading the pose to the animation. No get-up animations yet.
+ *
+ * Debug: bDrawDebug, or the console variable rpg.PhysicsReactionDebug (-1 = with rpg.Debug, 0 = off, 1 = on).
+ * Every reaction is also logged (LogRPGInput).
+ */
+UCLASS(ClassGroup = (RPG), meta = (BlueprintSpawnableComponent))
+class RPG_CODEX_API URPGPhysicsReactionComponent : public UActorComponent
+{
+	GENERATED_BODY()
+
+public:
+	URPGPhysicsReactionComponent();
+
+	virtual void BeginPlay() override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+	/** Entry point from the existing melee hit: picks POWERED or LIMP and queues the impulse at the impact point. */
+	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
+	void HandleMeleeHit(const FRPGMeleeHitInfo& Hit);
+
+	/** Partial physics: bodies simulate under motors toward the animation, the limb holding HitBone yields. */
+	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
+	void EnterPoweredReaction(FName HitBone);
+
+	/** Full ragdoll for LimpTime seconds (<= 0: until ReturnToAnimated is called), then returns on its own. */
+	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
+	void EnterFullRagdoll(float LimpTime = -1.f);
+
+	/** Impulse (kg cm/s) at a world point on HitBone's body. Waits for the body to be simulating if it is not yet. */
+	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
+	void ApplyReactionImpulse(FName HitBone, FVector ImpactPoint, FVector Direction, float Magnitude);
+
+	/** Fades the pose back to the animation over BlendTime (< 0: ReturnBlendTime), then makes every body kinematic. */
+	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
+	void ReturnToAnimated(float BlendTime = -1.f);
+
+	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
+	ERPGPhysicsReactionState GetReactionState() const { return State; }
+
+	/** True while fading back to the animation. */
+	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
+	bool IsReturning() const { return bReturning; }
+
+	/** Bodies currently simulating. */
+	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
+	int32 GetNumSimulatingBodies() const;
+
+	/** The limb a bone belongs to (walks up to the nearest bone with a body). None if the mesh has no such bone. */
+	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
+	FName GetLimbForBone(FName Bone) const;
+
+	/** How far the struck limb (its furthest bone) is off its animated position right now, cm. 0 when ANIMATED. */
+	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
+	float GetStruckChainDeviation() const;
+
+	/** Debug: a powered hit on the chest from the front / a full ragdoll (Details panel buttons while playing). */
+	UFUNCTION(CallInEditor, Category = "RPG|Physics Reaction|Debug")
+	void DebugPoweredHit();
+
+	UFUNCTION(CallInEditor, Category = "RPG|Physics Reaction|Debug")
+	void DebugFullRagdoll();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction")
+	bool bReactionsEnabled = true;
+
+	// --- Motors (parent-space controls). Strengths are drive frequencies (acceleration mode, so mass independent). ---
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
+	float MotorStrength = 40.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
+	float MotorDampingRatio = 1.f;
+
+	/** The struck limb's motors drop to this fraction of MotorStrength on impact... */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0", ClampMax = "1"))
+	float StruckLimbStrengthScale = 0.25f;
+
+	/** ...stay there this long... */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
+	float PoweredYieldTime = 0.1f;
+
+	/** ...then ramp back to full strength over this long, after which the pose fades back to the animation. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
+	float PoweredRecoverTime = 0.6f;
+
+	/** Seconds to fade from the physics pose to the animation at the end of a reaction. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction", meta = (ClampMin = "0"))
+	float ReturnBlendTime = 0.2f;
+
+	/** Bone that stays on the animation in POWERED, so the body keeps its footing (only the rest of it yields). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered")
+	FName AnchorBone = TEXT("pelvis");
+
+	// --- Limp ---
+
+	/** Charged hits released at or above this charge go LIMP instead of POWERED (> 1 = never). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
+	float LimpChargeThreshold = 0.99f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
+	float LimpTime = 2.f;
+
+	/** Fade from the ragdoll back to the animation (a placeholder until there are get-up animations). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
+	float LimpReturnBlendTime = 0.5f;
+
+	// --- Impulse. TEMPORARY placeholder values: the Power System will own the real magnitudes. ---
+
+	/** TEMPORARY. Speed (cm/s) the impulse gives the struck body alone: impulse = this * the body's mass. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Impulse (TEMPORARY)", meta = (ClampMin = "0"))
+	float PlaceholderImpulseSpeed = 350.f;
+
+	/** TEMPORARY. Extra impulse at full charge (x(1 + this * ChargePercent)). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Impulse (TEMPORARY)", meta = (ClampMin = "0"))
+	float PlaceholderChargeScale = 1.f;
+
+	/** Limb speed (cm/s, from the animation) of a typical tap strike: strength 1 at this speed. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Impulse (TEMPORARY)", meta = (ClampMin = "1"))
+	float ReferenceStrikeSpeed = 800.f;
+
+	/** How much the strike's speed scales the impulse (0 = not at all, 1 = in proportion), within 0.4x..1.6x. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Impulse (TEMPORARY)", meta = (ClampMin = "0", ClampMax = "1"))
+	float StrikeSpeedInfluence = 0.6f;
+
+	/** How hard a hit is, 1 = a typical tap: its limb speed against ReferenceStrikeSpeed (by StrikeSpeedInfluence) times
+	 *  the charge bonus. Scales the impulse; the owner can use it for its own response (the dummy's shove). */
+	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
+	float GetStrikeStrength(const FRPGMeleeHitInfo& Hit) const;
+
+	/** TEMPORARY. Impulse multiplier when the hit sends the body LIMP. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Impulse (TEMPORARY)", meta = (ClampMin = "0"))
+	float PlaceholderLimpImpulseScale = 2.f;
+
+	// --- Debug ---
+
+	/** Hit bone, impact point, impulse arrow and magnitude, current state above the mesh. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Debug")
+	bool bDrawDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Debug", meta = (ClampMin = "0"))
+	float DebugDrawTime = 2.f;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Physics Reaction|Debug")
+	FRPGPhysicsReactionInfo LastReaction;
+
+	/** Impulses that have reached a body since BeginPlay (tests check there is exactly one per hit). */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Physics Reaction|Debug")
+	int32 ImpulsesApplied = 0;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Physics Reaction|Debug")
+	TObjectPtr<UPhysicsControlComponent> PhysicsControl;
+
+private:
+	USkeletalMeshComponent* GetMesh() const;
+	bool SetUpControls();
+	void SetLimbMotorScale(FName Limb, float Scale);
+	void SetAllMotorScale(float Scale);
+	void SetPhysicsBlend(float Weight);
+	void FinishReturn();
+	void ApplyPendingImpulse();
+	bool ShouldDrawDebug() const;
+
+	ERPGPhysicsReactionState State = ERPGPhysicsReactionState::Animated;
+	bool bSetUp = false;
+
+	/** Body modifier per bone, the bone's limb, and each limb's motors. */
+	TMap<FName, FName> BoneModifiers;
+	TMap<FName, FName> BoneLimbs;
+	TMap<FName, TArray<FName>> LimbControls;
+	TArray<FName> AllModifiers;
+	TArray<FName> AllControls;
+
+	FName StruckLimb;
+	float StateTime = 0.f;
+	/** <= 0: stays LIMP until told otherwise. */
+	float LimpDuration = 0.f;
+
+	bool bReturning = false;
+	float ReturnTime = 0.f;
+	float ReturnDuration = 0.f;
+	float PhysicsBlend = 0.f;
+	float ReturnStartBlend = 1.f;
+
+	bool bImpulsePending = false;
+	FName PendingBone;
+	FVector PendingPoint = FVector::ZeroVector;
+	FVector PendingImpulse = FVector::ZeroVector;
+	int32 PendingFrames = 0;
+};

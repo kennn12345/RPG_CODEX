@@ -1,0 +1,165 @@
+"""First-person versions of the prototype clips (RPG_FP_*), baked from the SAME keys as the third-person clips.
+
+Run after poses.py: it adds the RPG_FP_* clips to clips.json (ue_import.py then imports everything).
+
+In first person the game shows the same body mesh from the eyes (head hidden, see URPGCameraModeComponent), so legs,
+hips, torso and timing are untouched. The only change is where the hands sit relative to the eyes: the third-person
+guard holds the fists beside the chin, which from the eyes is below / beside the camera, off screen. Each frame the
+hand targets get a view-space offset (fp_off_l / fp_off_r) moving the guard out in front of the face, into the lower
+part of the screen. The offset is the same for the whole clip, so every path (windup, coil, arc) keeps its shape; it
+fades out as a fist extends toward the target, and on the striking arm it is exactly zero inside the hit window, so
+the melee sweeps see identical bones (same reach, impact location and timing) in both perspectives.
+"""
+import json, math, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import contextlib, io
+with contextlib.redirect_stdout(io.StringIO()):
+    import poses
+from protoanim import build_pose, sample, bake, add, sub, lerp, qrot, HERE, FPS, BONES
+
+# ---- camera model (mirrored by URPGCameraModeComponent; keep the numbers in sync) ----
+EYE_LOCAL = [15.0, 13.0, 0.0]  # camera point in the head bone's space (X up, Y forward on Manny): a little above and in front of
+                               # the eyes, so the upper chest and shoulders never reach it in the lunges
+FOLLOW_H, FOLLOW_V = 0.2, 0.4  # share of the head's horizontal / vertical motion the camera follows
+
+def head_eye(cs): return add(cs['head'][1], qrot(cs['head'][0], EYE_LOCAL))
+REST_EYE = head_eye(build_pose(poses.STANCE, return_cs=True))
+def camera(cs):
+    d = sub(head_eye(cs), REST_EYE)
+    return [REST_EYE[0] + FOLLOW_H * d[0], REST_EYE[1] + FOLLOW_H * d[1], REST_EYE[2] + FOLLOW_V * d[2]]
+
+# ---- where the combat-stance fists sit in first person, relative to the camera (component axes: +X character-left,
+# +Y forward, +Z up). Lower corners of the view, out from the face; the guard is this plus its usual 7 cm up / closer.
+# The rear (right) shoulder sits further back in the bladed stance, so its fist rests a little closer to the face.
+FP_STANCE_FIST = {'l': [21.5, 33.0, -12.0], 'r': [-14.5, 20.0, -8.0]}
+EXTEND_FADE = (22.0, 55.0)     # fist this far forward of its first-person rest (cm): offset fades from full to none
+STRIKE_RAMP = 0.10             # s: the striking arm's offset eases out / back in around the hit window
+BACK_KEEP = 0.3                # a fist drawn back behind its rest (the charge rear-back) keeps this share of the
+                               # draw-back depth, so the loaded arm stays in view instead of passing behind the camera
+KEEP_MAX = 0.75                 # share of the way to its resting screen spot such a fist goes (all the way would put it
+                               # right in front of the camera, it is so shallow)
+BACK_FULL = 6.0                # cm behind its rest at which a fist fully keeps its resting screen spot (see fp_frame)
+GUARD_STEADY = 0.6             # the off (guarding) hand cancels this share of the body's lunge relative to the steadier
+                               # camera, so it holds its place in view while the other arm strikes
+LENS_CLEAR = 20.0              # cm: a fist's centre never comes nearer the camera than this (outside the hit window), so
+                               # it never fills the screen or meets the lens (e.g. the charged right fist leaving its coil)
+GUARD_WIDEN = {'l': 0.0, 'r': -0.8}   # cm further apart in the first-person guard (left / right fist) than the stance's
+                                     # offset gives; the guard stays a little tighter than the stance, centre open
+
+def fist(cs, s): return lerp(cs['hand_' + s][1], cs['middle_01_' + s][1], 0.6)
+def _offsets():
+    cs = build_pose(poses.STANCE, return_cs=True); cam = camera(cs)
+    return {s: sub(add(cam, FP_STANCE_FIST[s]), fist(cs, s)) for s in 'lr'}
+OFFSET = _offsets()
+
+def smooth(x): x = min(max(x, 0.0), 1.0); return x * x * (3 - 2 * x)
+
+def strike_weight(t, window):
+    if not window: return 1.0
+    a, b = window
+    if a <= t <= b: return 0.0
+    return smooth((a - t) / STRIKE_RAMP) if t < a else smooth((t - b) / STRIKE_RAMP)
+
+def fp_frame(keys, t, striking=None, window=None, widen=None):
+    P = sample(keys, t, poses.GROUPS)
+    cs = build_pose(P, return_cs=True); cam = camera(cs)
+    lunge = sub(head_eye(cs), cam)   # the body's drive the camera doesn't follow
+    for s in 'lr':
+        # how far this fist has travelled forward of where the offset would put it at rest
+        fwd = fist(cs, s)[1] + OFFSET[s][1] - (cam[1] + FP_STANCE_FIST[s][1])
+        w = 1.0 - smooth((fwd - EXTEND_FADE[0]) / (EXTEND_FADE[1] - EXTEND_FADE[0]))
+        back = max(0.0, -fwd) * (1.0 - BACK_KEEP)
+        if s == striking: w *= strike_weight(t, window)
+        side = (widen or {}).get(s, 0.0) * (1.0 if s == 'l' else -1.0)   # +X is the character's left
+        steady = [0.0, 0.0, 0.0] if s == striking else [-GUARD_STEADY * x for x in lunge]
+        P['fp_off_' + s] = [(OFFSET[s][0] + side) * w + steady[0], (OFFSET[s][1] + back) * w + steady[1], OFFSET[s][2] * w + steady[2]]
+        P['_w_' + s], P['_back_' + s] = w, smooth(-fwd / BACK_FULL)
+    # A fist drawn back behind its rest (the charge load / coil) can't reach further forward, so instead it keeps its
+    # resting spot on screen: moved in / up to where its rest direction from the eyes meets its actual depth.
+    cs = build_pose(P, return_cs=True); cam = camera(cs)
+    for s in 'lr':
+        k = P['_w_' + s] * P.pop('_back_' + s) * KEEP_MAX
+        if k <= 0.0: continue
+        rel = sub(fist(cs, s), cam); rest = FP_STANCE_FIST[s]; depth = max(rel[1], 1.0)
+        want = [rest[0] * depth / rest[1], rel[1], rest[2] * depth / rest[1]]
+        o = P['fp_off_' + s]
+        P['fp_off_' + s] = [o[0] + (want[0] - rel[0]) * k, o[1], o[2] + (want[2] - rel[2]) * k]
+    # Lens guard: push a fist that would come too near the camera straight back out along its line from the eyes.
+    cs = build_pose(P, return_cs=True); cam = camera(cs)
+    for s in 'lr':
+        w = P.pop('_w_' + s, 1.0) if s != striking else strike_weight(t, window)
+        rel = sub(fist(cs, s), cam); d = math.sqrt(sum(x * x for x in rel))
+        if d < LENS_CLEAR and d > 1e-3 and w > 0.0:
+            push = (LENS_CLEAR - d) / d * w
+            P['fp_off_' + s] = [o + r * push for o, r in zip(P['fp_off_' + s], rel)]
+    for s in 'lr': P.pop('_w_' + s, None); P.pop('_back_' + s, None)
+    return build_pose(P)
+
+def fp_bake(name, keys, impact=None, striking=None, before=0.07, after=0.05, widen=None):
+    # one extra frame each side: the melee sweep starts from the previous frame's limb position
+    window = (impact - before - 1.0 / FPS, impact + after + 1.0 / FPS) if impact is not None and striking else None
+    n = int(round(keys[-1][0] * FPS)) + 1
+    n += (-(n - 1)) % (FPS // 30)    # whole 30 fps frames, as bake()
+    frames = [fp_frame(keys, i / FPS, striking, window, widen) for i in range(n)]
+    return {'name': name, 'fps': FPS, 'frames': n, 'impact': impact, 'bones': BONES, 'poses': frames, 'keys': [k[0] for k in keys]}
+
+# ---- calmer holds: the third-person charge holds have a faint arm tremor and sway; seen from the eyes, a few cm from the
+# camera, it reads as fidgeting. The first-person versions are rebuilt from the same keys with less of it (same times).
+FP_HOLD_SWAY, FP_HOLD_TREMOR = 0.5, 0.05      # third person: poses.HOLD_SWAY 1.0, HOLD_TREMOR 0.25
+FP_KICK_SWAY, FP_KICK_TREMOR = 0.5, 0.2      # share of the kick hold's hand sway / tremor kept
+
+def _fp_kick_hold_pose(P, u, raised=None):
+    # poses.kick_hold_pose with its hand sway and tremor scaled down (the breath and the raised foot's balance stay)
+    full = _tp_kick_hold_pose(P, u, raised)
+    env = 0.5 - 0.5 * math.cos(2 * math.pi * u)
+    sway = [0.8 * math.sin(2 * math.pi * u) * env, 0.0, 0.5 * math.sin(4 * math.pi * u + 1) * env]
+    t = [0.15 * math.sin(2 * math.pi * 7 * u) * env, 0.0, 0.15 * math.sin(2 * math.pi * 7 * u + 2) * env]
+    d = [sway[i] * (1 - FP_KICK_SWAY) + t[i] * (1 - FP_KICK_TREMOR) for i in range(3)]
+    full['hand_l'] = [full['hand_l'][i] - d[i] for i in range(3)]
+    full['hand_r'] = [full['hand_r'][i] + d[i] for i in range(3)]
+    return full
+_tp_kick_hold_pose = poses.kick_hold_pose
+
+def _charged_sets():
+    def build():
+        pr = poses.charged_keys(poses.PUNCH, 'r', poses.P_COIL, poses.P_OVER_C, poses.P_IMPACT_C, poses.P_FOLLOW_C, poses.BODY, snap=('torso_hi', 'shoulder_r'))[0]
+        pl = poses.charged_keys(poses.JAB, 'l', poses.J_COIL, poses.J_OVER_C, poses.J_IMPACT_C, poses.J_FOLLOW_C, poses.BODY_L)[0]
+        kr = poses.kick_charged(poses.RIGHT_KICK, 0.1167, power={id(poses.RK_IMPACT): poses.RK_IMPACT_P, id(poses.RK_FOLLOW): poses.RK_FOLLOW_P})[0]
+        kl = poses.kick_charged(poses.LEFT_KICK, 0.2333, raised='l', power={id(poses.LK_IMPACT): poses.LK_IMPACT_P, id(poses.LK_FOLLOW): poses.LK_FOLLOW_P})[0]
+        return pr, pl, kr, kl
+    # rebuilding with the third-person settings must give exactly the third-person keys (so only the hold differs)
+    same = build()
+    for a, b in zip(same, (poses.PUNCH_CHARGED, poses.JAB_CHARGED, poses.RIGHT_KICK_CHARGED, poses.LEFT_KICK_CHARGED)):
+        assert [k[0] for k in a] == [k[0] for k in b] and all(x[1] == y[1] for x, y in zip(a, b)), 'charged keys out of sync with poses.py'
+    saved = (poses.HOLD_SWAY, poses.HOLD_TREMOR, poses.kick_hold_pose)
+    poses.HOLD_SWAY, poses.HOLD_TREMOR, poses.kick_hold_pose = FP_HOLD_SWAY, FP_HOLD_TREMOR, _fp_kick_hold_pose
+    try:
+        return build()
+    finally:
+        poses.HOLD_SWAY, poses.HOLD_TREMOR, poses.kick_hold_pose = saved
+FP_PUNCH_CHARGED, FP_JAB_CHARGED, FP_RIGHT_KICK_CHARGED, FP_LEFT_KICK_CHARGED = _charged_sets()
+
+P_IMP_R, P_IMP_L = 0.275 / poses.PUNCH_SPEED, 0.235 / poses.PUNCH_SPEED
+# (first-person name, keys, impact, striking arm) - punches strike with an arm; kicks only offset the guard hands
+FP_CLIPS = [
+    ('RPG_FP_Punch_R', poses.PUNCH, P_IMP_R, 'r'),
+    ('RPG_FP_Punch_L', poses.JAB, P_IMP_L, 'l'),
+    ('RPG_FP_Punch_R_Charged', FP_PUNCH_CHARGED, P_IMP_R + poses.PUNCH_CHARGED_T[3], 'r'),
+    ('RPG_FP_Punch_L_Charged', FP_JAB_CHARGED, P_IMP_L + poses.JAB_CHARGED_T[3], 'l'),
+    ('RPG_FP_FrontKick_R', poses.RIGHT_KICK, 0.40, None),
+    ('RPG_FP_FrontKick_L', poses.LEFT_KICK, 0.33, None),
+    ('RPG_FP_FrontKick_R_Charged', FP_RIGHT_KICK_CHARGED, 0.40 + poses.RIGHT_KICK_CHARGED_T[2], None),
+    ('RPG_FP_FrontKick_L_Charged', FP_LEFT_KICK_CHARGED, 0.33 + poses.LEFT_KICK_CHARGED_T[2], None),
+    ('RPG_FP_UnarmedGuard', poses.UNARMED_GUARD, None, None),
+    ('RPG_FP_CombatStance', poses.COMBAT_STANCE, None, None),
+]
+
+if __name__ == '__main__':
+    path = os.path.join(HERE, 'clips.json')
+    clips = json.load(open(path))
+    only = set(sys.argv[1:])
+    for name, keys, impact, striking in FP_CLIPS:
+        if only and name not in only: continue
+        clips[name] = fp_bake(name, keys, impact, striking, widen=GUARD_WIDEN if name == 'RPG_FP_UnarmedGuard' else None)
+        print(name, clips[name]['frames'], 'frames')
+    json.dump(clips, open(path, 'w'))

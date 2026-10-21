@@ -1,0 +1,23 @@
+# Unreal generated folders (rebuilt automatically)
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+
+# Visual Studio / IDE files (regenerated from the .uproject)
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Misc
+New folder/
+*.tmp
