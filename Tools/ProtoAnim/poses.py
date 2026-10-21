@@ -125,7 +125,8 @@ SMOOTH_ARM = {'elbow_pole_r': 'flow', 'fist_roll_r': 'flow', 'guard_follow_r': '
 P_STRETCH = only(S(spine_lo=[5, -4, 2], spine_hi=[7, -5, 3]), GROUPS, 'torso_lo', 'torso_hi')
 PUNCH_IMPACT_LAGS = {'leg_r': -0.06, 'hips': -0.04, 'torso_lo': 0.0, 'torso_hi': 0.02, 'shoulder_r': 0.03,
                      'head': 0.015, 'arm_l': -0.03, 'arm_r': 0.0}
-PUNCH = [(0.00, STANCE, 'smooth', {}),
+# The original tap punch was this overhand. It is kept (unchanged) as the base the charged punch is built from.
+PUNCH_OVERHAND = [(0.00, STANCE, 'smooth', {}),
          (0.10, P_LOAD, 'smooth', {}),
          (0.16, P_STRETCH, 'flow', {}),
          (0.18, P_ARC_A, 'flow', {}),
@@ -136,6 +137,40 @@ PUNCH = [(0.00, STANCE, 'smooth', {}),
                                   'head': 0.04, 'arm_r': -0.01}),
          # the fist comes home first and fast; the body unwinds behind it, the rear heel sets down last
          (0.46, P_RETRACT, 'flow', {'arm_r': 0.04, 'shoulder_r': 0.04, 'hips': 0.0, 'torso_lo': 0.03, 'torso_hi': 0.05,
+                                    'leg_r': 0.06, 'head': 0.05}),
+         (0.59, P_SETTLE, 'flow', {'hips': 0.0, 'torso_lo': 0.01, 'torso_hi': 0.02, 'head': 0.02}),
+         (0.68, STANCE, 'smooth', {'arm_r': -0.03, 'arm_l': -0.03})]
+
+# ---- 1b. Right cross (the tap punch), 2026-10-21 rework ----
+# A straight cross instead of the overhand: the power comes from rotation, not from leaning or looping. The rear heel
+# turns out and lifts, the hips and then the chest turn through, and the fist travels straight out along the line from
+# the chin to the target and straight back along the same line. The torso stays nearly upright (no reach), the spine
+# turns without bending sideways, the elbow stays down behind the fist, the left fist stays on the face, the head
+# stays over the lead knee. Same start, load key and impact time as before, so the game's timings don't change.
+X_IMPACT = S(pelvis_off=[3, 8, -4.5], pelvis_rot=[-30, -1, 0],
+             spine_lo=[-13, -2.5, 1], spine_hi=[-19, -3, 1.5],
+             clav_r=[-22, 0, 4], clav_l=[6, 0, -2],
+             hand_r=[-3, 96, 142], elbow_pole_r=[-0.35, -0.25, -1], reach_r=[0.995], fist_roll_r=[0], guard_follow_r=[0],
+             hand_l=STANCE['hand_l'], elbow_pole_l=STANCE['elbow_pole_l'],
+             foot_rot_r=[-35, -22, 0], knee_pole_r=[0.05, 1, -0.15],
+             head_rot=[-6, -6, 0])
+# Follow-through: the turn finishes and the arm reaches its last few cm along the same line (not down and across).
+X_FOLLOW = with_(X_IMPACT, pelvis_off=[3.3, 8.6, -4.6], pelvis_rot=[-32, -1, 0],
+                 spine_lo=[-14, -2.5, 1], spine_hi=[-21, -3, 1.5],
+                 hand_r=[-2.5, 99, 142], reach_r=[0.998])
+# Retract: the fist comes straight back along its line to the face, elbow down; the body unwinds behind it.
+X_RETRACT = S(pelvis_off=[1, 3, -4], pelvis_rot=[-5, 0, 0],
+              spine_lo=[-4, -2, 0], spine_hi=[-4, -3, 0],
+              clav_r=[-4, 0, 3],
+              hand_r=[-14, 34, 141], elbow_pole_r=[-0.4, -0.3, -1], fist_roll_r=[0], guard_follow_r=[0.6],
+              foot_rot_r=[-15, -8, 0], knee_pole_r=[-0.3, 1, 0])
+PUNCH = [(0.00, STANCE, 'smooth', {}),
+         (0.10, P_LOAD, 'smooth', {}),
+         (0.16, P_STRETCH, 'flow', {}),
+         (0.275, X_IMPACT, 1.0, PUNCH_IMPACT_LAGS, {**B('flow'), **SMOOTH_ARM, 'arm_l': 'flow'}),
+         (0.34, X_FOLLOW, 'out', {'leg_r': -0.05, 'hips': -0.04, 'torso_lo': -0.005, 'torso_hi': 0.02, 'shoulder_r': 0.03,
+                                  'head': 0.04, 'arm_r': -0.01}),
+         (0.46, X_RETRACT, 'flow', {'arm_r': 0.04, 'shoulder_r': 0.04, 'hips': 0.0, 'torso_lo': 0.03, 'torso_hi': 0.05,
                                     'leg_r': 0.06, 'head': 0.05}),
          (0.59, P_SETTLE, 'flow', {'hips': 0.0, 'torso_lo': 0.01, 'torso_hi': 0.02, 'head': 0.02}),
          (0.68, STANCE, 'smooth', {'arm_r': -0.03, 'arm_l': -0.03})]
@@ -368,6 +403,7 @@ PUNCH_SPEED = 1.1
 def faster(keys, k):
     return [(k_[0] / k, k_[1], k_[2], {g: v / k for g, v in k_[3].items()}, *k_[4:]) for k_ in keys]
 PUNCH, JAB = faster(PUNCH, PUNCH_SPEED), faster(JAB, PUNCH_SPEED)
+PUNCH_OVERHAND = faster(PUNCH_OVERHAND, PUNCH_SPEED)
 
 # ---- Charged punches (RT / LT held): charged from the guard, rearing back ----
 # The tap punch with a charge in it. Identical up to the punch's load key (its first small load from the guard; the
@@ -473,7 +509,7 @@ J_ARC_A_C = {'hand_l': [21, 44, 152], 'hand_rel_l': [0.6], 'hand_off_l': [4, 24,
 J_LOOP_C = {'hand_l': [9, 74, 158], 'hand_rel_l': [0], 'elbow_pole_l': [0.5, -0.55, -0.08]}
 J_STRETCH_C = {'spine_lo': [-15, -2, 0], 'spine_hi': [-19, -3, -1]}
 def make_punch_charged():
-    return charged_keys(PUNCH, 'r', P_COIL, {id(P_ARC_A): P_ARC_A_C, id(P_LOOP): P_LOOP_C, id(P_STRETCH): P_STRETCH_C,
+    return charged_keys(PUNCH_OVERHAND, 'r', P_COIL, {id(P_ARC_A): P_ARC_A_C, id(P_LOOP): P_LOOP_C, id(P_STRETCH): P_STRETCH_C,
                                             id(P_IMPACT): P_IMPACT_C, id(P_FOLLOW): P_FOLLOW_C},
                         BODY, snap=('torso_hi', 'shoulder_r'), roles=(P_IMPACT, P_FOLLOW))
 def make_jab_charged():
