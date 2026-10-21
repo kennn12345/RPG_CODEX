@@ -16,6 +16,7 @@ import contextlib, io
 with contextlib.redirect_stdout(io.StringIO()):
     import poses
 from protoanim import build_pose, sample, sample_track, frame_count, add, sub, lerp, qrot, to_cs, HERE, FPS, BONES
+import protoanim as _pa
 
 # ---- camera model (mirrored by URPGCameraModeComponent; keep the numbers in sync) ----
 EYE_LOCAL = [15.0, 13.0, 0.0]  # camera point in the head bone's space (X up, Y forward on Manny): a little above and in front of
@@ -96,6 +97,10 @@ def fp_frame(P, t, striking=None, window=None, shift=None, keep_until=0.0, poles
         sh = (shift or {}).get(s, [0.0, 0.0, 0.0])
         steady = [0.0, 0.0, 0.0] if s == striking else [-GUARD_STEADY * x for x in lunge]
         P['fp_off_' + s] = [(OFFSET[s][0] + sh[0]) * w + steady[0], (OFFSET[s][1] + sh[1] + back) * w + steady[1], (OFFSET[s][2] + sh[2]) * w + steady[2]]
+        # First person keeps its own tuned hand layout: cancel the whole set's third-person guard raise
+        # (protoanim.GUARD_OFFSET, applied in proportion to guard_follow), which would put the forearms in the lens.
+        gf = P.get('guard_follow_' + s, [0])[0] * P.get('guard_raise_' + s, [1])[0]
+        P['fp_off_' + s] = [P['fp_off_' + s][k] - _pa.GUARD_OFFSET[s][k] * gf for k in range(3)]
         P['_w_' + s], P['_back_' + s] = w, smooth(-fwd / BACK_FULL)
     # A fist drawn back behind its rest (the charge load / coil) can't reach further forward, so instead it keeps its
     # resting spot on screen: moved in / up to where its rest direction from the eyes meets its actual depth.

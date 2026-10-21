@@ -34,8 +34,8 @@ GROUPS = {
     'torso_lo': ('spine_lo',),
     'torso_hi': ('spine_hi',),
     'shoulder_r': ('clav_r',),
-    'arm_r': ('hand_r', 'elbow_pole_r', 'reach_r', 'fist_roll_r', 'guard_follow_r', 'hand_rel_r', 'hand_off_r', 'loop_r'),
-    'arm_l': ('hand_l', 'elbow_pole_l', 'reach_l', 'fist_roll_l', 'clav_l', 'guard_follow_l', 'hand_rel_l', 'hand_off_l', 'loop_l'),
+    'arm_r': ('hand_r', 'elbow_pole_r', 'reach_r', 'fist_roll_r', 'guard_follow_r', 'guard_raise_r', 'hand_rel_r', 'hand_off_r', 'loop_r'),
+    'arm_l': ('hand_l', 'elbow_pole_l', 'reach_l', 'fist_roll_l', 'clav_l', 'guard_follow_l', 'guard_raise_l', 'hand_rel_l', 'hand_off_l', 'loop_l'),
     'leg_r': ('foot_r', 'foot_rot_r', 'foot_turn_r', 'knee_pole_r', 'pivot_r', 'plant_r'),
     'leg_l': ('foot_l', 'foot_rot_l', 'foot_turn_l', 'knee_pole_l', 'pivot_l', 'plant_l'),
     'head': ('head_rot',),
@@ -45,6 +45,13 @@ import protoanim as _pa
 # Compact stance (2026-10-20 rework): the rear foot stands turned out ~27 deg (was ~47), applied under every pose by the
 # generator's base foot turn, so each pose's own rear-foot pivot keeps its relative motion.
 _pa.FOOT_BASE_TURN['r'] = -20.0
+# General-purpose stance (2026-10-21, for every NPC from peasant to expert; power comes from the Power System, not
+# from perfect technique): eyes forward instead of at the floor (the face pointed 17 deg down, now ~5), guard fists up
+# at cheek / jaw height and a little apart (they sat at the collarbones), feet a little wider (see STANCE plant_*).
+# Torso turn unchanged. Applied under every pose, so attacks keep their shapes and nothing snaps mid-move.
+_pa.HEAD_PITCH_LIFT = 12.0
+_pa.GUARD_OFFSET['l'] = [3.0, 0.0, 6.0]
+_pa.GUARD_OFFSET['r'] = [-3.0, 0.0, 9.0]
 # Orthodox fighting stance: feet bladed, upper body fairly square, soft knees, chin slightly down. Guard: rear fist
 # in front of the cheek (not on the jaw), lead fist held in close enough that the left punch has room to travel.
 # The lead foot is turned out ~18 deg (foot_rot_l yaw -24; every foot_rot_l below includes that same -24).
@@ -53,10 +60,10 @@ STANCE = {
     'spine_lo': [1, -2, 0], 'spine_hi': [2, -3, 0],
     'clav_l': [0, 0, -3], 'clav_r': [0, 0, 2],
     'head_rot': [-4, -5, 0],
-    'hand_r': [-17, 20, 140], 'elbow_pole_r': [-0.4, -0.3, -1], 'reach_r': [0.97], 'fist_roll_r': [0], 'guard_follow_r': [1], 'hand_rel_r': [0], 'hand_off_r': [3, 22, -4], 'loop_r': [0, 0, 0],
-    'hand_l': [12, 30, 142], 'elbow_pole_l': [0.5, 0, -1], 'reach_l': [0.97], 'fist_roll_l': [0], 'guard_follow_l': [1], 'hand_rel_l': [0], 'hand_off_l': [-2, 22, -4], 'loop_l': [0, 0, 0],
-    'foot_l': L_FOOT, 'foot_rot_l': [-24, 0, 0], 'foot_turn_l': [0], 'knee_pole_l': [0.22, 1, 0], 'pivot_l': [1], 'plant_l': [-1, 1.5, 0],
-    'foot_r': R_FOOT, 'foot_rot_r': [0, 0, 0], 'foot_turn_r': [0], 'knee_pole_r': [-0.65, 1, 0], 'pivot_r': [1], 'plant_r': [1, 0.5, 0],
+    'hand_r': [-17, 20, 140], 'elbow_pole_r': [-0.4, -0.3, -1], 'reach_r': [0.97], 'fist_roll_r': [0], 'guard_follow_r': [1], 'guard_raise_r': [1], 'hand_rel_r': [0], 'hand_off_r': [3, 22, -4], 'loop_r': [0, 0, 0],
+    'hand_l': [12, 30, 142], 'elbow_pole_l': [0.5, 0, -1], 'reach_l': [0.97], 'fist_roll_l': [0], 'guard_follow_l': [1], 'guard_raise_l': [1], 'hand_rel_l': [0], 'hand_off_l': [-2, 22, -4], 'loop_l': [0, 0, 0],
+    'foot_l': L_FOOT, 'foot_rot_l': [-24, 0, 0], 'foot_turn_l': [0], 'knee_pole_l': [0.22, 1, 0], 'pivot_l': [1], 'plant_l': [3.5, 3.5, 0],
+    'foot_r': R_FOOT, 'foot_rot_r': [0, 0, 0], 'foot_turn_r': [0], 'knee_pole_r': [-0.65, 1, 0], 'pivot_r': [1], 'plant_r': [-3.5, -1, 0],
 }
 def planted_ankle(P, side):
     """Where the ankle of a planted foot actually is in pose P (pivoting on its ball), so a foot can leave from / land on
@@ -329,8 +336,9 @@ JAB = [(0.00, STANCE, 'smooth', {}),
 GUARD_UP, GUARD_IN = 7, 1.3
 _gl, _gr = STANCE['hand_l'], STANCE['hand_r']
 _gd = [(_gr[i] - _gl[i]) for i in (0, 1)]; _gn = math.hypot(*_gd); _gd = [x / _gn * GUARD_IN for x in _gd]
+# (guard_raise 0: the held block keeps its own hands-at-the-face layout instead of adding the stance's guard raise)
 GUARD = S(hand_l=[_gl[0] + _gd[0], _gl[1] + _gd[1], _gl[2] + GUARD_UP],
-          hand_r=[_gr[0] - _gd[0], _gr[1] - _gd[1], _gr[2] + GUARD_UP])
+          hand_r=[_gr[0] - _gd[0], _gr[1] - _gd[1], _gr[2] + GUARD_UP], guard_raise_l=[0], guard_raise_r=[0])
 # ---- 6. Combat stance (between attacks) and 5. guard: 2.0 s seamless loops ----
 # A living stance instead of a single breathing sine: layered, low-amplitude motions at different rhythms, each a whole
 # number of cycles per loop (cosine shaped, so the loop wraps with no jump in position or speed):

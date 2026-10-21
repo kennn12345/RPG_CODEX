@@ -140,6 +140,9 @@ LEG_REACH = 0.995   # leg two-bone max reach (the soft zone starts SOFT_IK below
 # Stance-wide turn of each foot about the vertical (deg, - = toes in / less turnout for the rear foot), under every pose's
 # own foot_turn / foot_rot: the stance's foot angle, set once (poses.py) instead of in every key.
 FOOT_BASE_TURN = {'l': 0.0, 'r': 0.0}
+# Whole-set adjustments, applied under every pose (set from poses.py before set_reference):
+HEAD_PITCH_LIFT = 0.0                       # degrees added to every head_rot pitch (+ = eyes up)
+GUARD_OFFSET = {'l': [0.0, 0.0, 0.0], 'r': [0.0, 0.0, 0.0]}   # added to a hand's target in proportion to its guard_follow_*
 HEEL_MAX = 38.0     # most a planted heel ever lifts (deg of sole off the floor), authored + automatic
 HEEL_SOFT = 4.0     # cm over which the automatic heel lift eases in
 
@@ -255,7 +258,8 @@ def _build_pose(P, return_cs=False):
     for side in ('l', 'r'):
         y, p, r = P['clav_' + side]; rot_chain('clavicle_' + side, qeuler(y, p, r))
     # head: hold roughly level in world, plus a little of the body's turn
-    hq_target = qmul(qeuler(*P['head_rot']), IDLE_CS['head'][0])
+    hy, hp, hr = P['head_rot']
+    hq_target = qmul(qeuler(hy, hp + HEAD_PITCH_LIFT, hr), IDLE_CS['head'][0])
     nk = cs['neck_02'][0]; cur = cs['head'][0]
     blend = qmul(hq_target, qconj(cur))   # remaining world rotation needed at the head
     half = qnorm(lerp([0, 0, 0, 1], blend if blend[3] >= 0 else [-x for x in blend], 0.4))
@@ -272,6 +276,9 @@ def _build_pose(P, return_cs=False):
             target = lerp(target, add(cs['upperarm_' + side][1], P['hand_off_' + side]), rel)
         target = add(target, P.get('loop_' + side, [0, 0, 0]))   # arc bump on top of the forward drive
         target = add(target, P.get('fp_off_' + side, [0, 0, 0]))   # first-person clips only (fpanim.py): hand moved into view
+        # the whole set's guard height / width: guard hands only (guard_follow), and only in poses that use it (guard_raise;
+        # the held block has its own layout)
+        target = add(target, mul(GUARD_OFFSET[side], w * P.get('guard_raise_' + side, [1])[0]))
         if REF_CHEST:
             # elbow direction is always relative to the chest, like a real elbow: if it stayed fixed in
             # world space while the torso turns, the upper arm would wring around inside the shoulder
