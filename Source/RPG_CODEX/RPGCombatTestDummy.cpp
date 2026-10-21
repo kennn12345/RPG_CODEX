@@ -1,5 +1,6 @@
 #include "RPGCombatTestDummy.h"
 
+#include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "RPG_CODEX.h"
@@ -49,6 +50,19 @@ ARPGCombatTestDummy::ARPGCombatTestDummy()
 	if (Locomotion.Succeeded()) LocomotionBlendSpace = Locomotion.Object;
 
 	PhysicsReaction = CreateDefaultSubobject<URPGPhysicsReactionComponent>(TEXT("PhysicsReaction"));
+
+	// The Power System's standard test bandit: 180 lb, low-moderate Strength and Durability, moderate everything else,
+	// minimal magic.
+	Stats = CreateDefaultSubobject<URPGCharacterStatsComponent>(TEXT("Stats"));
+	Stats->StartingStats.MaxHealth = 100.f;
+	Stats->StartingStats.Strength = 3.f;
+	Stats->StartingStats.Mass = 82.f;
+	Stats->StartingStats.Durability = 40.f;
+	Stats->StartingStats.Stability = 50.f;
+	Stats->StartingStats.StaggerResistance = 50.f;
+	Stats->StartingStats.Recovery = 50.f;
+	Stats->StartingStats.MagicPower = 0.f;
+	Stats->StartingStats.MagicControl = 0.f;
 }
 
 void ARPGCombatTestDummy::OnConstruction(const FTransform& Transform)

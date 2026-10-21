@@ -15,7 +15,10 @@ public class RPG_CODEX : ModuleRules
 			"EnhancedInput",
 			"PhysicsCore",
 			"PhysicsControl",
-			"AnimationCore"
+			"AnimationCore",
+			"GameplayAbilities",
+			"GameplayTags",
+			"GameplayTasks"
 		});
 		if (Target.bBuildEditor)
 		{

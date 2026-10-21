@@ -10,9 +10,11 @@ class USkeletalMeshComponent;
 class UAnimSequence;
 class UBlendSpace;
 class URPGPhysicsReactionComponent;
+class URPGCharacterStatsComponent;
 
 /**
- * Mannequin to throw punches and kicks at. No AI, no health: it wanders slowly around where it was placed (bWander),
+ * Mannequin to throw punches and kicks at. No AI. Its stats are the Power System's standard test bandit (180 lb,
+ * low-moderate Strength and Durability, moderate Stability and Health); it doesn't take damage yet. It wanders slowly around where it was placed (bWander),
  * blocks the player with its capsule, and its mesh's physics asset (PA_Mannequin: head, torso, arms, legs) is what the
  * melee hit sweeps detect. Hits are passed to its PhysicsReaction (partial physics / ragdoll); it stops while reacting.
  * It shows a hit counter.
@@ -45,6 +47,10 @@ public:
 	/** Physical hit reactions (PhysicsControl plugin). Turn off bReactionsEnabled for the old flinch instead. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|Dummy")
 	TObjectPtr<URPGPhysicsReactionComponent> PhysicsReaction;
+
+	/** Health, Strength, Mass, Durability, Stability... (GAS attributes). Defaults are the standard test bandit. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|Dummy")
+	TObjectPtr<URPGCharacterStatsComponent> Stats;
 
 	/** Looping pose it stands in (empty = the mesh's reference pose). Used when it isn't wandering. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy")

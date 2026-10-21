@@ -1,6 +1,7 @@
 #include "RPGControllerInputComponent.h"
 
 #include "RPGCameraModeComponent.h"
+#include "RPGCharacterStatsComponent.h"
 #include "RPGCombatAimComponent.h"
 #include "RPGHUD.h"
 #include "RPGCombatStateComponent.h"
@@ -86,6 +87,7 @@ void URPGControllerInputComponent::EnsureHelperComponents()
 	FindOrCreateComponent<URPGMeleeHitComponent>(Owner, TEXT("RPGMeleeHits"));
 	FindOrCreateComponent<URPGStrikeContactComponent>(Owner, TEXT("RPGStrikeContact"));
 	FindOrCreateComponent<URPGCombatAimComponent>(Owner, TEXT("RPGCombatAim"));
+	FindOrCreateComponent<URPGCharacterStatsComponent>(Owner, TEXT("RPGStats"));	// Player defaults: Strength 5
 }
 
 UInputAction* URPGControllerInputComponent::CreateInputAction(const TCHAR* Name, EInputActionValueType ValueType)
