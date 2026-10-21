@@ -161,17 +161,19 @@ RK_LOAD = S(pelvis_off=[6, 4, -4.5], pelvis_rot=[7, 0, -2], spine_lo=[0, -1, 1],
 # Lift-off (kicking leg only): the heel has peeled, now the foot rises nearly straight up, toes hanging down, so the
 # toe never scuffs forward along the floor.
 _ra = planted_ankle(RK_LOAD, 'r'); RK_LOAD['foot_r'] = list(_ra)
-RK_LIFT = only(S(foot_r=[_ra[0], _ra[1] + 1.0, _ra[2] + 9.0], foot_rot_r=[0, -24, 0], foot_turn_r=[0], pivot_r=[0], knee_pole_r=[-0.1, 1, 0.6]),
+RK_LIFT = only(S(foot_r=[_ra[0], _ra[1] + 1.0, _ra[2] + 9.0], foot_rot_r=[0, -24, 0], foot_turn_r=[0], pivot_r=[0], knee_pole_r=[-0.4, 1, 0.6]),
                GROUPS, 'leg_r')
 # Knee-up (kicking leg only): the thigh lifts first, the foot tucked under the knee (below and a little ahead of the hip),
 # before the shin swings forward into the chamber - the knee leads, the foot follows.
-RK_KNEEUP = only(S(foot_r=[2, 34, 58], foot_rot_r=[-8, -22, -3], foot_turn_r=[-4], pivot_r=[0], knee_pole_r=[0, 1, 1.0]), GROUPS, 'leg_r')
+RK_KNEEUP = only(S(foot_r=[-12, 40, 50], foot_rot_r=[-8, -22, -3], foot_turn_r=[-4], pivot_r=[0], knee_pole_r=[-0.4, 1, 1.0]), GROUPS, 'leg_r')
 RK_CHAMBER = S(pelvis_off=[5, 1, -2.5], pelvis_rot=[1, 4, -3], spine_lo=[-2, 3, 2], spine_hi=[-1, 2, 3], balance=[1], weight_l=[1],
-               foot_r=[2, 44, 92], foot_rot_r=[-14.5, -12, -6], foot_turn_r=[-6.5], knee_pole_r=[0, 1, 1.5], pivot_r=[0],
+               foot_r=[-11, 58, 68], foot_rot_r=[-14.5, -12, -6], foot_turn_r=[-6.5], knee_pole_r=[-0.4, 1, 1.5], pivot_r=[0],
                hand_r=[-16, 22, 136], elbow_pole_r=[-0.4, -0.2, -1], hand_l=[11, 36, 142])
+# (2026-10-21: the foot stays in line with its own hip and the knee points forward and a little out - it used to swing
+# across the centre line, through the other leg, with the knee turned in.)
 # Chamber: the foot comes in under its own hip as it rises and the knee lifts straight up and forward in front of that
-# hip (no swing out and across). Knee lifted high with the foot well up (ankle ~90 cm), so the extension drives FORWARD into the target, not
-# up into it - a push, not a flick. The target is the midsection (ankle ~106 cm), level with the chamber. The foot finishes turning sole-to-target ~40 ms before the impact frame (foot_rot lag), so it
+# hip (no swing out and across). Thigh about level with the shin angled forward (ankle ~68 cm, 2026-10-21: it used to
+# lift to ~92 cm, which drove the knee up into the belly), so the extension drives forward into the target - a push, not a flick. The target is the midsection (ankle ~106 cm), level with the chamber. The foot finishes turning sole-to-target ~40 ms before the impact frame (foot_rot lag), so it
 # the target, so it
 # lands set and pushes through the sole instead of still flicking up at contact.
 # The rear foot stands turned out ~27 deg; it straightens toward the target as the knee lifts (foot_turn_r) and then
@@ -180,13 +182,13 @@ RK_CHAMBER = S(pelvis_off=[5, 1, -2.5], pelvis_rot=[1, 4, -3], spine_lo=[-2, 3, 
 # foot (which turns out a little more on its ball), the support knee straightens a touch (hips rise ~1 cm, not 5),
 # and the leg arrives with the knee just short of locked, pushing through the ball of the foot.
 RK_IMPACT = S(pelvis_off=[3, 18, 1], pelvis_rot=[-12, 22, -8], spine_lo=[0, 7, 3], spine_hi=[0, 5, 4], balance=[1], weight_l=[1],
-              foot_r=[1, 106, 107], foot_rot_r=[0, 92, 0], foot_turn_r=[-25], knee_pole_r=[0, 1, 1.5], pivot_r=[0],
+              foot_r=[-4, 106, 107], foot_rot_r=[0, 92, 0], foot_turn_r=[-25], knee_pole_r=[-0.4, 1, 1.5], pivot_r=[0],
               foot_rot_l=[-34, -6, 0],
               hand_r=[-20, 34, 132], elbow_pole_r=[-0.45, -0.2, -1],
               hand_l=[12, 36, 144], head_rot=[-4, -12, 0])
-RK_FOLLOW = with_(RK_IMPACT, foot_r=[1, 114, 109], pelvis_off=[3.5, 20.5, 1.2], pelvis_rot=[-13, 24, -8])
+RK_FOLLOW = with_(RK_IMPACT, foot_r=[-4, 114, 109], pelvis_off=[3.5, 20.5, 1.2], pelvis_rot=[-13, 24, -8])
 # Recoil: the knee snaps back to the chamber with the body coming upright over the standing foot.
-RK_RETRACT = with_(RK_CHAMBER, foot_r=[1, 32, 72], foot_rot_l=[-30, -3, 0])
+RK_RETRACT = with_(RK_CHAMBER, foot_r=[-11, 42, 60], foot_rot_l=[-30, -3, 0])
 # Set-down (kicking leg + weight): the foot comes down onto its spot from above, then takes weight again.
 _rs = planted_ankle(STANCE, 'r')
 RK_DOWN = only(S(foot_r=[_rs[0], _rs[1], _rs[2] + 7.0], foot_rot_r=[0, 0, 0], foot_turn_r=[0], pivot_r=[0], knee_pole_r=[-0.15, 1, 0.1]),
@@ -213,6 +215,8 @@ RIGHT_KICK = [(0.00, STANCE, 'smooth', {}),
               (0.86, STANCE, 'smooth', {'arm_r': -0.03, 'arm_l': -0.03, 'torso_hi': -0.02, 'hips': 0.0, 'foot_rot_r': -0.06, 'foot_turn_r': -0.06})]
 
 # ---- 3. Left teep (lead-leg push kick), 0.68 s ----
+# (2026-10-21: about half the lean-back / sideways tilt and chest twist it had, and less support-foot swivel - it read
+# as the body pivoting round, more like a side kick than a push kick.)
 # Not a mirror: the lead leg is already forward, so weight rocks back onto the rear leg,
 # the chamber is quicker, the lean-back is bigger and the hips drive less. Hands stay in guard; the lead hand
 # sways a little out and down with the kick.
@@ -227,7 +231,7 @@ LK_SHIFT = {'balance': [1], 'weight_l': [0], 'pivot_l': [1]}   # (the foot stays
 # Knee-up (kicking leg only): the thigh lifts first with the foot under the knee, then the shin comes up to the chamber.
 LK_KNEEUP = only(S(foot_l=[6, 38, 60], foot_rot_l=[-26, -18, 0], pivot_l=[0], knee_pole_l=[0, 1, 1.0]), GROUPS, 'leg_l')
 # (the kick travels along the line from the lead hip, which sits over the rear foot now, to the target's centre)
-LK_CHAMBER = S(pelvis_off=[-5, -8, -3], pelvis_rot=[11, 8, 4], spine_lo=[-6, 4, -2], spine_hi=[-7, 3, -3], balance=[1], weight_l=[0],
+LK_CHAMBER = S(pelvis_off=[-5, -8, -3], pelvis_rot=[11, 5, 2], spine_lo=[-2, 2, -1], spine_hi=[-3, 2, -1], balance=[1], weight_l=[0],
                foot_l=[6, 44, 95], foot_rot_l=[-28, -20, 0], knee_pole_l=[0.1, 1, 1.5], pivot_l=[0],
                hand_l=[15, 42, 138.5], elbow_pole_l=[0.8, 0, -0.7],
                hand_r=[-14, 22, 140])
@@ -235,13 +239,13 @@ LK_CHAMBER = S(pelvis_off=[-5, -8, -3], pelvis_rot=[11, 8, 4], spine_lo=[-6, 4, 
 # touch, the leg arrives just short of locked. The lead leg can't reach the target with the weight fully over the rear
 # foot, so at contact the fighter commits forward onto the kick (balance 0.6): the target pushing back on the foot is
 # part of the support for that moment, as in a real push kick that lands; balanced again in the recoil.
-LK_IMPACT = S(pelvis_off=[-1, 15, 1], pelvis_rot=[8, 22, 8], spine_lo=[0, 10, -3], spine_hi=[0, 8, -4], balance=[0.6], weight_l=[0],
+LK_IMPACT = S(pelvis_off=[-1, 15, 1], pelvis_rot=[9, 12, 3], spine_lo=[0, 5, -1], spine_hi=[0, 4, -1], balance=[0.6], weight_l=[0],
               foot_l=[1, 97, 106], foot_rot_l=[-32, 92, 0], knee_pole_l=[0.1, 1, 1.5], pivot_l=[0],
-              foot_rot_r=[12, -6, 0],
+              foot_rot_r=[4, -6, 0],
               hand_l=[18, 42, 135], elbow_pole_l=[0.9, 0, -0.6],
               hand_r=[-16, 36, 141], head_rot=[-4, -12, 0])
-LK_FOLLOW = with_(LK_IMPACT, foot_l=[0, 102, 108], pelvis_off=[-0.5, 16.5, 1.2], pelvis_rot=[8, 23, 8])
-LK_RETRACT = with_(LK_CHAMBER, foot_l=[8, 32, 76], foot_rot_r=[6, -2, 0])
+LK_FOLLOW = with_(LK_IMPACT, foot_l=[0, 102, 108], pelvis_off=[-0.5, 16.5, 1.2], pelvis_rot=[9, 13, 3])
+LK_RETRACT = with_(LK_CHAMBER, foot_l=[8, 32, 76], foot_rot_r=[2, -2, 0])
 _ls = planted_ankle(STANCE, 'l')
 LK_DOWN = only(S(foot_l=[_ls[0], _ls[1], _ls[2] + 7.0], foot_rot_l=[-24, 0, 0], pivot_l=[0], knee_pole_l=[0.1, 1, 0.1]), GROUPS, 'leg_l')
 LK_TOUCH = only(S(foot_l=list(_ls)), GROUPS, 'leg_l')
@@ -524,11 +528,11 @@ def kick_charged(keys, t_hold, raised=None, power=None):
 # (built on the tap kicks' impacts: a little more hip drive and counter-lean, the support leg giving ~1 cm, the weight
 # committing a touch further onto the kick; the balance solver still holds the base)
 RK_IMPACT_P = with_(RK_IMPACT, pelvis_off=[3, 21, 1.5], pelvis_rot=[-14, 26, -8], spine_lo=[0, 9, 0], spine_hi=[0, 7, 1],
-                    foot_r=[1, 110, 108], head_rot=[-4, -12, 0], balance=[0.85])
-RK_FOLLOW_P = with_(RK_IMPACT_P, foot_r=[1, 116, 110], pelvis_off=[3.5, 23, 1.7], pelvis_rot=[-15, 27, -8])
-LK_IMPACT_P = with_(LK_IMPACT, pelvis_off=[-1, 17, 1.5], pelvis_rot=[8, 25, 8], spine_lo=[0, 12, 1], spine_hi=[0, 10, 1],
+                    foot_r=[-4, 110, 108], head_rot=[-4, -12, 0], balance=[0.85])
+RK_FOLLOW_P = with_(RK_IMPACT_P, foot_r=[-4, 116, 110], pelvis_off=[3.5, 23, 1.7], pelvis_rot=[-15, 27, -8])
+LK_IMPACT_P = with_(LK_IMPACT, pelvis_off=[-1, 17, 1.5], pelvis_rot=[9, 15, 3], spine_lo=[0, 6, 0], spine_hi=[0, 5, 0],
                     foot_l=[1, 100, 107], head_rot=[-4, -12, 0], hand_r=[-19, 44, 140], balance=[0.55])
-LK_FOLLOW_P = with_(LK_IMPACT_P, foot_l=[0, 105, 109], pelvis_off=[-0.5, 18.5, 1.7], pelvis_rot=[8, 26, 8])
+LK_FOLLOW_P = with_(LK_IMPACT_P, foot_l=[0, 105, 109], pelvis_off=[-0.5, 18.5, 1.7], pelvis_rot=[9, 16, 3])
 def make_kick_charged_r():
     return kick_charged(RIGHT_KICK, 0.1167, power={id(RK_IMPACT): RK_IMPACT_P, id(RK_FOLLOW): RK_FOLLOW_P})
 def make_kick_charged_l():
