@@ -47,48 +47,48 @@ public:
      * which slowly rears the body back from the load key to full coil (HoldStart, about when the charge is full), then
      * repeats a breathing loop [HoldStart, HoldEnd) while the button is held. Release jumps to HoldEnd (the same pose; a
      * release while still rearing back crossfades there) and the charged strike plays from the coil. Taps never leave the
-     * tap clip. Kicks stop at their hold time inside the regular clip. All times come from Tools/ProtoAnim/poses.py.
+     * tap clip. Kicks stop at their hold time inside the regular clip. All times come from Tools/AnimImport/mocap_timings.json (written by compose.py).
      */
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightPunchChargeSwitchTime = 0.0909f;
+    float RightPunchChargeSwitchTime = 0.0667f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftPunchChargeSwitchTime = 0.0545f;
+    float LeftPunchChargeSwitchTime = 0.0667f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightPunchHoldStart = 0.8409f;
+    float RightPunchHoldStart = 0.8f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightPunchHoldEnd = 1.7409f;
+    float RightPunchHoldEnd = 1.7f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftPunchHoldStart = 0.8045f;
+    float LeftPunchHoldStart = 0.8f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftPunchHoldEnd = 1.7045f;
+    float LeftPunchHoldEnd = 1.7f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightKickHoldTime = 0.1167f;
+    float RightKickHoldTime = 0.2f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftKickHoldTime = 0.2333f;
+    float LeftKickHoldTime = 0.2f;
     /** Kicks hold the same way as punches: at their hold time they switch to their Charged clip, which breathes in the
      *  locked stance over [HoldTime, HoldEnd) while Y is held. */
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightKickHoldEnd = 1.0167f;
+    float RightKickHoldEnd = 1.1f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftKickHoldEnd = 1.1333f;
+    float LeftKickHoldEnd = 1.1f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightKickChargedImpactTime = 1.30f;
+    float RightKickChargedImpactTime = 1.24f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftKickChargedImpactTime = 1.23f;
+    float LeftKickChargedImpactTime = 1.24f;
 
-    /** Impact time in each clip, where AttackPhase goes from Strike to Recovery. From the impact times in poses.py. */
+    /** Impact time in each clip, where AttackPhase goes from Strike to Recovery. From mocap_timings.json. */
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightPunchImpactTime = 0.25f;
+    float RightPunchImpactTime = 0.23f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftPunchImpactTime = 0.2136f;
+    float LeftPunchImpactTime = 0.14f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightPunchChargedImpactTime = 1.93f;
+    float RightPunchChargedImpactTime = 1.84f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftPunchChargedImpactTime = 1.8936f;
+    float LeftPunchChargedImpactTime = 1.94f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float RightKickImpactTime = 0.40f;
+    float RightKickImpactTime = 0.34f;
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation|Charge", meta=(ClampMin="0"))
-    float LeftKickImpactTime = 0.33f;
+    float LeftKickImpactTime = 0.34f;
 
     /**
      * Melee hit window around each strike's impact time (the same window for the tap and Charged clips), in seconds

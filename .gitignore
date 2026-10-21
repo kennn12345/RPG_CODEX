@@ -21,3 +21,7 @@ __pycache__/
 # Misc
 New folder/
 *.tmp
+
+# Large intermediate animation dumps (regenerate with Tools/AnimImport/dump_poses.py / compose.py)
+Tools/AnimImport/source_poses.json
+Tools/AnimImport/mocap_clips.json

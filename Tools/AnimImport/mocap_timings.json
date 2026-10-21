@@ -1,0 +1,20 @@
+{
+ "RightPunchChargeSwitchTime": 0.0667,
+ "RightPunchImpactTime": 0.23,
+ "RightPunchHoldStart": 0.8,
+ "RightPunchHoldEnd": 1.7,
+ "RightPunchChargedImpactTime": 1.84,
+ "LeftPunchChargeSwitchTime": 0.0667,
+ "LeftPunchImpactTime": 0.14,
+ "LeftPunchHoldStart": 0.8,
+ "LeftPunchHoldEnd": 1.7,
+ "LeftPunchChargedImpactTime": 1.94,
+ "RightKickHoldTime": 0.2,
+ "LeftKickHoldTime": 0.2,
+ "RightKickHoldEnd": 1.1,
+ "LeftKickHoldEnd": 1.1,
+ "RightKickImpactTime": 0.34,
+ "LeftKickImpactTime": 0.34,
+ "RightKickChargedImpactTime": 1.24,
+ "LeftKickChargedImpactTime": 1.24
+}

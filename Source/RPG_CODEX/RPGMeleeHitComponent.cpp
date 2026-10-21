@@ -116,6 +116,10 @@ void URPGMeleeHitComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	const FColor Color = LimbColor(State->StrikeLimb);
 	if (bDraw && bNewStrike)
 		DrawDebugString(World, Points.Last() + FVector(0, 0, 12), UEnum::GetDisplayValueAsText(State->StrikeLimb).ToString(), nullptr, Color, DebugDrawTime, true);
+	if (bDraw)
+		UE_LOG(LogRPGInput, Log, TEXT("MELEE WINDOW %s: point0 (%.0f, %.0f, %.0f) last (%.0f, %.0f, %.0f) from (%.0f, %.0f, %.0f), owner at (%.0f, %.0f, %.0f)"),
+			*UEnum::GetDisplayValueAsText(State->StrikeLimb).ToString(), Points[0].X, Points[0].Y, Points[0].Z, Points.Last().X, Points.Last().Y, Points.Last().Z,
+			From[0].X, From[0].Y, From[0].Z, GetOwner()->GetActorLocation().X, GetOwner()->GetActorLocation().Y, GetOwner()->GetActorLocation().Z);
 
 	// The strike contact holds the limb at a surface (it can be the knee / shin of a close kick, before the foot gets
 	// there): that is the strike landing, on that body.
