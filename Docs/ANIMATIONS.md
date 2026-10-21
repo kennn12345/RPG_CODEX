@@ -1,6 +1,6 @@
 # RPG_CODEX — Combat animations
 
-Last updated: 2026-10-21.
+Last updated: 2026-10-21. **Not in use:** combat was switched back to the procedural RPG_Proto_* clips (the mocap cut looked wrong in play: combo fragments, a spinning kick instead of a teep, contorted wrists). Kept for reference.
 
 ## Current set: motion capture (RamsterZ Free Anims Volume 1)
 
