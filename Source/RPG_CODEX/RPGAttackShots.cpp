@@ -3,7 +3,9 @@
 //   UnrealEditor.exe RPG_CODEX.uproject -ExecCmds="Automation RunTests Visual.AttackShots;Quit" -unattended
 // Environment: RPG_SHOT_ATTACK = IA_RightAttack (default), IA_Defense (left punch) or IA_Kick; RPG_SHOT_DIR = output folder
 // (default Saved/Screenshots/Attack/<action>). The game runs at 1/10 speed while filming so each shot lands on its moment.
-// File names: <view>_<nn>_<t>s.png, t = game seconds after the button press.
+// Kicks alternate legs, so IA_Kick presses twice per view (p0 = right leg, p1 = left leg) and spreads the shots over the
+// longer kick (x1.3).
+// File names: <view>_p<press>_<nn>_<t>s.png, t = game seconds after the button press.
 
 #include "CoreMinimal.h"
 
@@ -52,6 +54,9 @@ namespace
 			if (Action.IsEmpty()) Action = TEXT("IA_RightAttack");
 			Dir = FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_SHOT_DIR"));
 			if (Dir.IsEmpty()) Dir = FPaths::ProjectSavedDir() / TEXT("Screenshots/Attack") / Action;
+			const bool bKick = Action == TEXT("IA_Kick");
+			PressesPerView = bKick ? 2 : 1;
+			TimeScale = bKick ? 1.3f : 1.f;
 		}
 
 		virtual bool Update() override
@@ -114,17 +119,27 @@ namespace
 				Input->StopContinuousInputInjectionForAction(Button);
 				bReleased = true;
 			}
-			while (NextShot < UE_ARRAY_COUNT(ShotTimes) && T >= ShotTimes[NextShot])
+			while (NextShot < UE_ARRAY_COUNT(ShotTimes) && T >= ShotTimes[NextShot] * TimeScale)
 			{
-				const FString File = Dir / FString::Printf(TEXT("%s_%02d_%+.2fs.png"), Views[View].Name, NextShot, ShotTimes[NextShot]);
+				const FString File = Dir / FString::Printf(TEXT("%s_p%d_%02d_%+.2fs.png"), Views[View].Name, Press, NextShot, ShotTimes[NextShot] * TimeScale);
 				FScreenshotRequest::RequestScreenshot(File, false, false);
 				++NextShot;
 			}
-			if (NextShot >= UE_ARRAY_COUNT(ShotTimes) && T >= ShotTimes[UE_ARRAY_COUNT(ShotTimes) - 1] + 0.6f)
+			if (NextShot >= UE_ARRAY_COUNT(ShotTimes) && T >= ShotTimes[UE_ARRAY_COUNT(ShotTimes) - 1] * TimeScale + 0.6f)
 			{
+				// Next press (kicks: the other leg) or next view. The camera stays put relative to where the character
+				// stood when the view started; a stepping kick may have moved it a little.
+				if (++Press < PressesPerView)
+				{
+					ViewStart = Now + 0.3f;
+					NextShot = 0;
+					bPressed = bReleased = false;
+					return false;
+				}
 				// Next view: back to normal speed for a moment so the stance settles, same spot.
 				World->GetWorldSettings()->SetTimeDilation(1.f);
 				++View;
+				Press = 0;
 				bViewPlaced = bPressed = bReleased = false;
 			}
 			return false;
@@ -142,8 +157,8 @@ namespace
 		FString Action, Dir;
 		TObjectPtr<ACameraActor> CameraActor = nullptr;
 		bool bSetUp = false, bViewPlaced = false, bPressed = false, bReleased = false;
-		int32 View = 0, NextShot = 0, WaitFrames = 0;
-		float ViewStart = 0.f;
+		int32 View = 0, NextShot = 0, WaitFrames = 0, Press = 0, PressesPerView = 1;
+		float ViewStart = 0.f, TimeScale = 1.f;
 	};
 }
 
