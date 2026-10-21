@@ -167,6 +167,8 @@ private:
 
 	/** Power System hit: damage, reaction, shove, readout. */
 	void ReceivePowerHit(const FRPGMeleeHitInfo& Hit);
+	/** Hit-stop (attacker and dummy freeze briefly) and the attacking player's camera shake, by reaction. */
+	void PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Reaction);
 	/** A ragdoll is about to stand back up: move the actor to where the body lies, so it gets up there. */
 	void HandleLimpEnding();
 	void SetHealthToMax();
@@ -175,6 +177,9 @@ private:
 	bool bKnockedOut = false;
 	/** ResetDummy is putting it back home: don't move to the ragdoll. */
 	bool bResetting = false;
+
+	FTimerHandle HitStopTimer;
+	TWeakObjectPtr<AActor> HitStopAttacker;
 
 	FVector Home = FVector::ZeroVector;
 	FRotator HomeRotation = FRotator::ZeroRotator;

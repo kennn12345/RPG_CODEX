@@ -140,9 +140,14 @@ public:
 
 	// ---------------- Displacement motion ----------------
 
-	/** Launch angle above horizontal, degrees. */
+	/** Launch angle above horizontal, degrees. Lower = flatter and faster (less hang time), for the same distance. */
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1", ClampMax = "80"))
-	float LaunchAngle = 20.f;
+	float LaunchAngle = 15.f;
+
+	/** Ragdolls from Power System hits fall this many times harder than normal gravity. Real-world gravity looks
+	 *  floaty at game scale; games commonly use 1.5-2.5x. Launch speeds account for it, so distances still match. */
+	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1", ClampMax = "4"))
+	float RagdollGravityScale = 1.6f;
 
 	/** cm/s^2. Gravity used to work out launch speed. */
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1"))
@@ -152,8 +157,9 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1"))
 	float ShoveDeceleration = 500.f;
 
-	/** cm/s^2 a ragdoll slows down sliding along the ground after it lands (or is knocked down sideways). Measured on
-	 *  flat ground with the mannequin: about 1100. Launches aim short by the slide, so the total matches the ladder. */
+	/** cm/s^2 a ragdoll slows down sliding along the ground after it lands (or is knocked down sideways), at normal
+	 *  gravity (scaled up with RagdollGravityScale). Measured on flat ground with the mannequin: about 1100. Launches
+	 *  aim short by the slide, so the total matches the ladder. */
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1"))
 	float RagdollSlideDeceleration = 1100.f;
 
@@ -161,4 +167,47 @@ public:
 	 *  Launches account for the extra fall time. */
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "0"))
 	float LaunchDropHeight = 80.f;
+
+	// ---------------- Impact feel ----------------
+
+	/** A launched / knocked-down body doesn't move as one block: parts near the impact get up to (1 + this) times the
+	 *  body's average velocity, far parts down to (1 - this), so it folds around the hit and the limbs whip after it.
+	 *  The body's overall (average) motion is unchanged, so distances still match. 0 = moves as one block. */
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "0", ClampMax = "0.9"))
+	float RagdollWhip = 0.5f;
+
+	/** Distance from the impact point (cm) over which the whip fades from near to far. */
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "1"))
+	float RagdollWhipRadius = 90.f;
+
+	/** Hit-stop: attacker and target freeze for this long on impact (seconds), by reaction. Sells the force of a hit.
+	 *  0 = none. Console rpg.HitStop 0 turns it off. */
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float HitStopStagger = 0.04f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float HitStopKnockdown = 0.07f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float HitStopLaunch = 0.1f;
+
+	/** How slow time runs for both during hit-stop (0.02 = nearly frozen). */
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "0.001", ClampMax = "1"))
+	float HitStopTimeDilation = 0.02f;
+
+	/** Camera shake strength for the attacking player, by reaction (0 = none). */
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "0"))
+	float ShakeStagger = 0.25f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "0"))
+	float ShakeKnockdown = 0.6f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Impact Feel", meta = (ClampMin = "0"))
+	float ShakeLaunch = 1.f;
+
+	/** Effective ragdoll gravity (cm/s^2). */
+	float GetRagdollGravity() const { return Gravity * RagdollGravityScale; }
+
+	/** Effective ragdoll slide deceleration: friction grows with the extra gravity. */
+	float GetRagdollSlideDeceleration() const { return RagdollSlideDeceleration * RagdollGravityScale; }
 };

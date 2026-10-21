@@ -148,7 +148,7 @@ FRPGPowerResult URPGPowerSystem::Calculate(const FRPGPowerInput& Input)
 	else if (R.Displacement > 0.f)
 	{
 		// Speed that slides to a stop after Displacement: on its feet, or as a ragdoll if knocked down.
-		const float Deceleration = R.bKnockdown ? S->RagdollSlideDeceleration : S->ShoveDeceleration;
+		const float Deceleration = R.bKnockdown ? S->GetRagdollSlideDeceleration() : S->ShoveDeceleration;
 		R.DisplacementVelocity = Direction * FMath::Sqrt(2.f * Deceleration * R.Displacement);
 	}
 
@@ -167,9 +167,10 @@ float URPGPowerSystem::GetLaunchTotalDistance(float Speed)
 	const float Angle = FMath::DegreesToRadians(S->LaunchAngle);
 	const float Horizontal = Speed * FMath::Cos(Angle);
 	const float Vertical = Speed * FMath::Sin(Angle);
-	// Time to come down LaunchDropHeight below where it started: Vertical*t - g/2*t^2 = -Drop.
-	const float AirTime = (Vertical + FMath::Sqrt(Vertical * Vertical + 2.f * S->Gravity * S->LaunchDropHeight)) / S->Gravity;
-	return Horizontal * AirTime + Horizontal * Horizontal / (2.f * S->RagdollSlideDeceleration);
+	// Time to come down LaunchDropHeight below where it started: Vertical*t - g/2*t^2 = -Drop (ragdoll gravity).
+	const float G = S->GetRagdollGravity();
+	const float AirTime = (Vertical + FMath::Sqrt(Vertical * Vertical + 2.f * G * S->LaunchDropHeight)) / G;
+	return Horizontal * AirTime + Horizontal * Horizontal / (2.f * S->GetRagdollSlideDeceleration());
 }
 
 FRPGPowerStats URPGPowerSystem::ReadStats(AActor* Actor)

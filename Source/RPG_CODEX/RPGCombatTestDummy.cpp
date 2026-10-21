@@ -3,13 +3,16 @@
 #include "RPGAttributeSet.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
+#include "RPGHitCameraShake.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "RPGPowerSettings.h"
 #include "RPGPowerSystem.h"
 #include "RPG_CODEX.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/Engine.h"
+#include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "TimerManager.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Animation/BlendSpace.h"
@@ -24,6 +27,10 @@
 static TAutoConsoleVariable<int32> CVarPowerDebug(
 	TEXT("rpg.PowerDebug"), 1,
 	TEXT("Power System readout on screen for every hit on a combat test dummy (1 = on, 0 = off). Always logged."));
+
+static TAutoConsoleVariable<int32> CVarHitStop(
+	TEXT("rpg.HitStop"), 1,
+	TEXT("Hit-stop on Power System hits: attacker and target freeze for a moment on impact (1 = on, 0 = off)."));
 
 ARPGCombatTestDummy::ARPGCombatTestDummy()
 {
@@ -330,6 +337,7 @@ void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	PhysicsReaction->HandlePowerHit(Hit, Result);
 	if (PhysicsReaction->GetReactionState() == ERPGPhysicsReactionState::Powered)
 		ShoveVelocity = FVector(Result.DisplacementVelocity.X, Result.DisplacementVelocity.Y, 0.f);
+	PlayImpactFeel(Hit.Attacker, Result.Reaction);
 
 	// Readout: everything the Power System worked out for this hit.
 	const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
@@ -339,6 +347,40 @@ void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	UE_LOG(LogRPGInput, Log, TEXT("%s"), *Readout);
 	if (GEngine && CVarPowerDebug.GetValueOnGameThread() > 0)
 		GEngine->AddOnScreenDebugMessage(int32(GetUniqueID()), 8.f, FColor::Yellow, Readout);   // one line block per dummy, replaced each hit
+}
+
+void ARPGCombatTestDummy::PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Reaction)
+{
+	const URPGPowerSettings* S = URPGPowerSettings::Get();
+	float StopTime = 0.f, Shake = 0.f;
+	switch (Reaction)
+	{
+		case ERPGPowerReaction::Stagger:	StopTime = S->HitStopStagger;	Shake = S->ShakeStagger;	break;
+		case ERPGPowerReaction::Knockdown:	StopTime = S->HitStopKnockdown;	Shake = S->ShakeKnockdown;	break;
+		case ERPGPowerReaction::Launch:		StopTime = S->HitStopLaunch;	Shake = S->ShakeLaunch;		break;
+		default: break;
+	}
+
+	// Hit-stop: both nearly freeze for a moment. The timer runs on world time, so it ends on time even though the
+	// dummy and attacker themselves are slowed.
+	if (StopTime > 0.f && CVarHitStop.GetValueOnGameThread() > 0)
+	{
+		if (AActor* Previous = HitStopAttacker.Get()) Previous->CustomTimeDilation = 1.f;
+		HitStopAttacker = Attacker;
+		CustomTimeDilation = S->HitStopTimeDilation;
+		if (Attacker) Attacker->CustomTimeDilation = S->HitStopTimeDilation;
+		GetWorldTimerManager().SetTimer(HitStopTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			CustomTimeDilation = 1.f;
+			if (AActor* Held = HitStopAttacker.Get()) Held->CustomTimeDilation = 1.f;
+			HitStopAttacker = nullptr;
+		}), StopTime, false);
+	}
+
+	// Camera jolt for the player who landed it.
+	const APawn* Pawn = Cast<APawn>(Attacker);
+	if (APlayerController* Controller = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr)
+		if (Shake > 0.f) Controller->ClientStartCameraShake(URPGHitCameraShake::StaticClass(), Shake);
 }
 
 void ARPGCombatTestDummy::HandleLimpEnding()

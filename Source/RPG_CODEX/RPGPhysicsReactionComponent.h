@@ -301,5 +301,7 @@ private:
 	/** A launch / shove velocity for every body, waiting for the bodies to start simulating. */
 	bool bVelocityPending = false;
 	FVector PendingVelocity = FVector::ZeroVector;
+	/** Where the hit landed: body parts near it get more of PendingVelocity (the whip). */
+	FVector PendingVelocityPoint = FVector::ZeroVector;
 	int32 PendingVelocityFrames = 0;
 };

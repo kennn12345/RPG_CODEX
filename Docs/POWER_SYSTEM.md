@@ -56,6 +56,19 @@ lower level (a 164 kg target hit at Strength 20 moves like the bandit hit at Str
 - On-screen readout of every channel per hit (`rpg.PowerDebug 0` hides it; always in the log).
 - `bUsePowerSystem` (on by default) off = the older fixed prototype response; the older physics tests use that.
 
+## Impact feel (2026-10-21, after "launches feel floaty")
+
+- **Whip**: a launched / knocked-down body doesn't move as one block. Parts within 90 cm of the impact get up to 1.5×
+  the body's average velocity, far parts down to 0.5×, mass-weighted so the overall motion (and distance) is
+  unchanged. The body folds around the hit and the limbs trail.
+- **Flatter, faster launches**: 15° (was 20°) and **1.6× gravity** on Power System ragdolls (extra downward
+  acceleration on every body). The solver uses the same gravity and the matching higher slide friction, so
+  distances still match the ladder (sweep: 98–113%).
+- **Hit-stop**: attacker and target nearly freeze (time × 0.02) for 0.04 s on a stagger, 0.07 s knockdown,
+  0.1 s launch. `rpg.HitStop 0` turns it off.
+- **Camera shake** for the attacking player (`URPGHitCameraShake`): 0.25 / 0.6 / 1.0 strength by reaction.
+- All in Project Settings → RPG Power System → *Impact Feel* / *Displacement Motion*.
+
 ## Calibration arena (stage 4)
 
 While playing, console `rpg.Arena`: builds a flat 300 m floor 100 m above the player and four dummies in a row,

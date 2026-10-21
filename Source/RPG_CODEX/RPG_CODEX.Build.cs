@@ -19,7 +19,8 @@ public class RPG_CODEX : ModuleRules
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks",
-			"DeveloperSettings"
+			"DeveloperSettings",
+			"EngineCameras"
 		});
 		if (Target.bBuildEditor)
 		{

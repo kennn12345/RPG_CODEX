@@ -253,7 +253,7 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 	if (bLimp)
 	{
 		// A launch stays limp for its whole flight (up and back down) before the usual LimpTime on the ground.
-		const float Gravity = URPGPowerSettings::Get()->Gravity;
+		const float Gravity = URPGPowerSettings::Get()->GetRagdollGravity();
 		const float FlightTime = Result.DisplacementVelocity.Z > 0.f ? 2.f * float(Result.DisplacementVelocity.Z) / Gravity : 0.f;
 		EnterFullRagdoll(LimpTime + FlightTime);
 		bWaitForSettle = true;
@@ -263,6 +263,7 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 		{
 			bVelocityPending = true;
 			PendingVelocity = Result.DisplacementVelocity;
+			PendingVelocityPoint = Hit.ImpactLocation;
 			PendingVelocityFrames = 0;
 			ApplyPendingVelocity();
 		}
@@ -295,7 +296,24 @@ void URPGPhysicsReactionComponent::ApplyPendingVelocity()
 	const FBodyInstance* Root = Mesh->GetBodyInstance(AnchorBone);
 	if (Root && Root->IsInstanceSimulatingPhysics())
 	{
-		Mesh->SetAllPhysicsLinearVelocity(PendingVelocity, false);
+		// The whip: parts near the impact get more than the average velocity, far parts less, weighted so the body's
+		// overall (mass-weighted average) velocity is exactly PendingVelocity. The body folds around the hit.
+		const URPGPowerSettings* S = URPGPowerSettings::Get();
+		TArray<TPair<FBodyInstance*, float>> Weighted;
+		float TotalMass = 0.f, WeightedMass = 0.f;
+		for (FBodyInstance* Body : Mesh->Bodies)
+		{
+			if (!Body || !Body->IsInstanceSimulatingPhysics()) continue;
+			const float Mass = Body->GetBodyMass();
+			const float Near = 1.f - FMath::Clamp(float(FVector::Dist(Body->GetCOMPosition(), PendingVelocityPoint)) / S->RagdollWhipRadius, 0.f, 1.f);
+			const float Weight = 1.f + S->RagdollWhip * (2.f * Near - 1.f);
+			Weighted.Emplace(Body, Weight);
+			TotalMass += Mass;
+			WeightedMass += Mass * Weight;
+		}
+		const float Normalize = WeightedMass > KINDA_SMALL_NUMBER ? TotalMass / WeightedMass : 1.f;
+		for (const TPair<FBodyInstance*, float>& Pair : Weighted)
+			Pair.Key->SetLinearVelocity(PendingVelocity * (Pair.Value * Normalize), false);
 		bVelocityPending = false;
 	}
 	else if (++PendingVelocityFrames > MaxPendingFrames)
@@ -454,6 +472,14 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	if (!bSetUp) return;
 	ApplyPendingImpulse();
 	ApplyPendingVelocity();
+
+	// Power System ragdolls fall with the heavier ragdoll gravity (the launch speeds are worked out with it).
+	const float ExtraGravity = URPGPowerSettings::Get()->GetRagdollGravity() - URPGPowerSettings::Get()->Gravity;
+	if (State == ERPGPhysicsReactionState::Limp && bWaitForSettle && ExtraGravity > 0.f)
+		if (USkeletalMeshComponent* LimpMesh = GetMesh())
+			for (FBodyInstance* Body : LimpMesh->Bodies)
+				if (Body && Body->IsInstanceSimulatingPhysics())
+					Body->AddForce(FVector(0.f, 0.f, -ExtraGravity), true, true);   // acceleration: same for every mass
 
 	USkeletalMeshComponent* Mesh = GetMesh();
 	if (State != ERPGPhysicsReactionState::Animated)
