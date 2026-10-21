@@ -168,6 +168,7 @@ void URPGControllerInputComponent::BindInputActions()
 	Input->BindAction(ConsumableAction,		ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnConsumablePressed);
 	Input->BindAction(SprintAction,			ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnSprintPressed);
 	Input->BindAction(CrouchAction,			ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnCrouchPressed);
+	Input->BindAction(CrouchAction,			ETriggerEvent::Completed,	this, &URPGControllerInputComponent::OnCrouchReleased);
 	Input->BindAction(QuickMenuAction,		ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnQuickMenuPressed);
 	Input->BindAction(DrawSheatheAction,	ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnDrawSheathePressed);
 	Input->BindAction(CameraButtonAction,	ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnCameraButtonPressed);
@@ -261,6 +262,24 @@ void URPGControllerInputComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		{
 			JumpHold.bFullChargeAnnounced = true;
 			CombatState->ReportSimpleAction(ERPGPlayerAction::ChargedJump);
+		}
+	}
+
+	// R3 held while flying: stop flying once the hold is long enough to not be an accidental click.
+	if (CrouchHold.bHeld)
+	{
+		CrouchHold.HeldTime += DeltaTime;
+
+		if (!CrouchHold.bFullChargeAnnounced && CrouchHold.HeldTime >= FlightExitHoldTime)
+		{
+			CrouchHold.bFullChargeAnnounced = true; // Only once per press.
+			CombatState->UpdateDerivedStates();
+
+			if (CombatState->bIsFlying)
+			{
+				MovementAbilities->StopFlight();
+				CombatState->ReportSimpleAction(ERPGPlayerAction::FlightCancelled);
+			}
 		}
 	}
 
@@ -607,7 +626,7 @@ void URPGControllerInputComponent::OnDodgePressed()
 }
 
 // =====================================================================================
-// A: flight toggle in the air, otherwise interact (if something is in range) or jump.
+// A: start flight in the air (hold to rise while flying), otherwise interact (if something is in range) or jump.
 // =====================================================================================
 
 void URPGControllerInputComponent::OnJumpPressed()
@@ -624,8 +643,8 @@ void URPGControllerInputComponent::OnJumpPressed()
 
 	if (CombatState->bIsFlying)
 	{
-		MovementAbilities->StopFlight();
-		CombatState->ReportSimpleAction(ERPGPlayerAction::FlightCancelled);
+		// Hold A while flying = rise straight up. Flight is stopped with a held R3 instead.
+		MovementAbilities->SetFlightRiseHeld(true);
 		return;
 	}
 
@@ -668,6 +687,7 @@ void URPGControllerInputComponent::OnJumpReleased()
 {
 	JumpHold.bHeld = false;
 	bJumpStartedFromGround = false;
+	MovementAbilities->SetFlightRiseHeld(false);
 
 	if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
 	{
@@ -690,7 +710,7 @@ void URPGControllerInputComponent::OnSprintPressed()
 
 	if (CombatState->bIsFlying)
 	{
-		// Reserved for a future flight speed boost.
+		MovementAbilities->ToggleFastFlight();
 		CombatState->ReportSimpleAction(ERPGPlayerAction::FlightBoost);
 		return;
 	}
@@ -709,8 +729,9 @@ void URPGControllerInputComponent::OnSprintPressed()
 void URPGControllerInputComponent::OnCrouchPressed()
 {
 	CombatState->UpdateDerivedStates();
+	CrouchHold.Press();
 
-	// Grounded only. No crouch while jumping or flying.
+	// Grounded only. No crouch while jumping or flying (holding R3 while flying stops flight, see TickComponent).
 	if (CombatState->bIsFlying || CombatState->bIsInAir)
 	{
 		return;
@@ -718,6 +739,11 @@ void URPGControllerInputComponent::OnCrouchPressed()
 
 	const bool bNowCrouched = MovementAbilities->ToggleCrouch();
 	CombatState->ReportSimpleAction(bNowCrouched ? ERPGPlayerAction::CrouchOn : ERPGPlayerAction::CrouchOff);
+}
+
+void URPGControllerInputComponent::OnCrouchReleased()
+{
+	CrouchHold.bHeld = false;
 }
 
 void URPGControllerInputComponent::OnQuickMenuPressed()

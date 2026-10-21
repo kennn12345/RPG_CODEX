@@ -120,7 +120,7 @@ enum class ERPGPlayerAction : uint8
 	// Sticks
 	SprintStarted		UMETA(DisplayName = "Sprint Started"),
 	SprintStopped		UMETA(DisplayName = "Sprint Stopped"),
-	FlightBoost			UMETA(DisplayName = "Flight Boost (not built yet)"),
+	FlightBoost			UMETA(DisplayName = "Fast Flight Toggle"),
 	CrouchOn			UMETA(DisplayName = "Crouch / Stealth On"),
 	CrouchOff			UMETA(DisplayName = "Crouch / Stealth Off"),
 

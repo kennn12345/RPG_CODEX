@@ -41,6 +41,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight")
 	float FlyingBrakingDeceleration = 1500.f;
 
+	/** Fly where you look: pushing forward climbs when looking up and dives when looking down. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight")
+	bool bFlightFollowsLookPitch = true;
+
+	/** Looking up/down less than this many degrees keeps level flight, so a slightly tilted camera doesn't drift. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight", meta = (ClampMin = "0", ClampMax = "45"))
+	float FlightPitchDeadZone = 8.f;
+
+	/** Steepest climb/dive angle when looking straight up/down. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight", meta = (ClampMin = "10", ClampMax = "85"))
+	float FlightMaxPitch = 80.f;
+
+	/** Flight speed with L3 fast flight on. Normal flight uses the movement component's Max Fly Speed. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight")
+	float FastFlightSpeed = 1600.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dodge")
 	float DodgeSpeed = 1400.f;
 
@@ -72,6 +88,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RPG|Flight")
 	void StopFlight();
 
+	/** While true and flying, the character rises straight up (hold A). */
+	UFUNCTION(BlueprintCallable, Category = "RPG|Flight")
+	void SetFlightRiseHeld(bool bHeld) { bFlightRiseHeld = bHeld; }
+
+	/** L3 while flying. Returns true if fast flight is now on. */
+	UFUNCTION(BlueprintCallable, Category = "RPG|Flight")
+	bool ToggleFastFlight();
+
+	UFUNCTION(BlueprintPure, Category = "RPG|Flight")
+	bool IsFastFlight() const { return bFastFlight; }
+
 	/** Ground dodge in the Left Stick direction (backstep if the stick is centered). */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Dodge")
 	bool TryDodge();
@@ -89,7 +116,14 @@ private:
 	FVector GetEvadeDirection() const;
 	bool IsDodgeOnCooldown() const;
 
+	/** Adds the climb/dive and hold-A rise on top of the Left Stick input while flying. */
+	void ApplyFlightVerticalInput();
+
 	bool bSprinting = false;
 	float WalkSpeedBeforeSprint = 0.f;
+
+	bool bFlightRiseHeld = false;
+	bool bFastFlight = false;
+	float FlySpeedBeforeFastFlight = 0.f;
 	double LastDodgeTime = -1000.0;
 };

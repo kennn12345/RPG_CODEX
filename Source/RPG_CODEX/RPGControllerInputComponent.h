@@ -88,6 +88,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Timing")
 	float ChargedJumpMessageTime = 0.2f;
 
+	/** Hold R3 this long while flying to stop flying. Short enough to feel instant, long enough to ignore accidental clicks. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Timing")
+	float FlightExitHoldTime = 0.25f;
+
 	// ---------------- Mapping context priorities ----------------
 
 	/** Higher than the template IMC_Default (0) so our A button wins over the template jump. */
@@ -131,6 +135,7 @@ private:
 	void OnConsumablePressed();			// X
 	void OnSprintPressed();				// Left Stick Click
 	void OnCrouchPressed();				// Right Stick Click
+	void OnCrouchReleased();
 	void OnQuickMenuPressed();			// D-Pad Up
 	void OnDrawSheathePressed();		// D-Pad Left
 	void OnCameraButtonPressed();		// D-Pad Right
@@ -208,6 +213,7 @@ private:
 	FRPGButtonHold LeftTriggerHold;
 	FRPGButtonHold KickHold;
 	FRPGButtonHold JumpHold;
+	FRPGButtonHold CrouchHold;
 	FRPGButtonHold CameraButtonHold;
 
 	bool bInDualGuard = false;

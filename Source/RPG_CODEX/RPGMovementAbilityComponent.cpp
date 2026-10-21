@@ -37,6 +37,8 @@ void URPGMovementAbilityComponent::TickComponent(float DeltaTime, ELevelTick Tic
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	ApplyFlightVerticalInput();
+
 	if (!bSprinting)
 	{
 		return;
@@ -154,6 +156,86 @@ void URPGMovementAbilityComponent::StopFlight()
 	if (Movement && Movement->IsFlying())
 	{
 		Movement->SetMovementMode(MOVE_Falling);
+	}
+
+	bFlightRiseHeld = false;
+	if (bFastFlight && Movement)
+	{
+		Movement->MaxFlySpeed = FlySpeedBeforeFastFlight;
+	}
+	bFastFlight = false;
+}
+
+bool URPGMovementAbilityComponent::ToggleFastFlight()
+{
+	UCharacterMovementComponent* Movement = GetMovement();
+	if (!Movement || !Movement->IsFlying())
+	{
+		return false;
+	}
+
+	if (bFastFlight)
+	{
+		Movement->MaxFlySpeed = FlySpeedBeforeFastFlight;
+		bFastFlight = false;
+	}
+	else
+	{
+		FlySpeedBeforeFastFlight = Movement->MaxFlySpeed;
+		Movement->MaxFlySpeed = FastFlightSpeed;
+		bFastFlight = true;
+	}
+	return bFastFlight;
+}
+
+void URPGMovementAbilityComponent::ApplyFlightVerticalInput()
+{
+	ACharacter* Character = GetCharacter();
+	UCharacterMovementComponent* Movement = GetMovement();
+	if (!Character || !Movement)
+	{
+		return;
+	}
+
+	if (!Movement->IsFlying())
+	{
+		// Flight can also end without StopFlight (e.g. a knockback switches to falling), so tidy up here.
+		if (bFastFlight)
+		{
+			Movement->MaxFlySpeed = FlySpeedBeforeFastFlight;
+			bFastFlight = false;
+		}
+		bFlightRiseHeld = false;
+		return;
+	}
+
+	float Vertical = bFlightRiseHeld ? 1.f : 0.f;
+
+	const AController* Controller = Character->GetController();
+	if (bFlightFollowsLookPitch && Controller)
+	{
+		const FRotator ControlRotation = Controller->GetControlRotation();
+		const float Pitch = FRotator::NormalizeAxis(ControlRotation.Pitch);
+
+		if (FMath::Abs(Pitch) > FlightPitchDeadZone)
+		{
+			// Ease in from level flight just past the dead zone, up to FlightMaxPitch when looking straight up/down.
+			const float ClimbAngle = FMath::GetMappedRangeValueClamped(
+				FVector2f(FlightPitchDeadZone, 90.f), FVector2f(0.f, FlightMaxPitch), FMath::Abs(Pitch));
+
+			// The template's Move code only feeds flat (yaw-based) input. Only its forward/back part climbs
+			// or dives; strafing stays level. Last frame's input is used, which is a one-frame delay at most.
+			const FVector LookForward = FRotator(0.f, ControlRotation.Yaw, 0.f).Vector();
+			const float ForwardInput = FVector::DotProduct(Character->GetLastMovementInputVector(), LookForward);
+
+			// Adding forward * tan(angle) upward points the (length-clamped) input along the look direction.
+			Vertical += ForwardInput * FMath::Tan(FMath::DegreesToRadians(ClimbAngle)) * FMath::Sign(Pitch);
+		}
+	}
+
+	if (!FMath::IsNearlyZero(Vertical))
+	{
+		Character->AddMovementInput(FVector::UpVector, Vertical);
 	}
 }
 
