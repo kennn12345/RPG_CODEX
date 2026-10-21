@@ -143,6 +143,26 @@ FOOT_BASE_TURN = {'l': 0.0, 'r': 0.0}
 # Whole-set adjustments, applied under every pose (set from poses.py before set_reference):
 HEAD_PITCH_LIFT = 0.0                       # degrees added to every head_rot pitch (+ = eyes up)
 GUARD_OFFSET = {'l': [0.0, 0.0, 0.0], 'r': [0.0, 0.0, 0.0]}   # added to a hand's target in proportion to its guard_follow_*
+WRIST_FIX = {'l': [0.0, 0.0, 0.0, 1.0], 'r': [0.0, 0.0, 0.0, 1.0]}   # hand-local rotation applied to every fist (see straighten_wrists)
+
+
+def straighten_wrists(P):
+    """Set WRIST_FIX so the fist continues in a straight line from the forearm (wrist to middle knuckle along the
+    forearm) in pose P. The fist pose relative to the forearm is the same in every frame (only the roll changes, about
+    the forearm axis), so one hand-local correction per side straightens every clip."""
+    for s in ('l', 'r'):
+        WRIST_FIX[s] = [0.0, 0.0, 0.0, 1.0]
+    cs = build_pose(P, return_cs=True)
+    for s in ('l', 'r'):
+        hq, h = cs['hand_' + s]
+        fore = norm(sub(h, cs['lowerarm_' + s][1]))
+        palm = norm(sub(cs['middle_01_' + s][1], h))
+        ax = cross(palm, fore)
+        if length(ax) < 1e-6:
+            continue
+        ang = math.degrees(math.acos(max(-1.0, min(1.0, dot(palm, fore)))))
+        world = qaxis(norm(ax), ang)                       # turns the knuckle line onto the forearm line
+        WRIST_FIX[s] = qnorm(qmul(qconj(hq), qmul(world, hq)))   # the same turn, in the hand's own space
 HEEL_MAX = 38.0     # most a planted heel ever lifts (deg of sole off the floor), authored + automatic
 HEEL_SOFT = 4.0     # cm over which the automatic heel lift eases in
 
@@ -292,7 +312,7 @@ def _build_pose(P, return_cs=False):
         fq = cs['lowerarm_' + side][0]
         axis = norm(qrot(fq, local[hand][1]))
         roll = P['fist_roll_' + side][0]
-        cs[hand] = (qnorm(qmul(qaxis(axis, roll), qmul(fq, local[hand][0]))), cs[hand][1])
+        cs[hand] = (qnorm(qmul(qmul(qaxis(axis, roll), qmul(fq, local[hand][0])), WRIST_FIX[side])), cs[hand][1])
         for tb, w in FOREARM_TWIST:   # spread the roll along the forearm instead of snapping at the wrist
             b = tb + '_' + side
             local[b] = (qnorm(qmul(qaxis(qrot(qconj(fq), axis), roll * w), IDLE[b][0])), IDLE[b][1])  # roll in forearm space

@@ -75,6 +75,9 @@ def planted_ankle(P, side):
 STANCE['foot_l'], STANCE['foot_r'] = list(planted_ankle(STANCE, 'l')), list(planted_ankle(STANCE, 'r'))
 S = lambda **kw: with_(STANCE, **kw)
 set_reference(STANCE)
+# Straight wrists (2026-10-21): the sampled fist bent ~10 deg at the wrist; every fist now continues in a straight line
+# from its forearm (guard, punches and impact alike).
+_pa.straighten_wrists(STANCE)
 
 # ---- 1. Right overhand cross, 0.68 s ----
 # A cross thrown over the top. Every body part follows one smooth rise-and-fall of speed, in order:
