@@ -92,6 +92,18 @@ bool URPGPhysicsReactionComponent::SetUpControls()
 	// animation in place. (Moving the owner to where the ragdoll lies is a job for the later get-up work.)
 	Mesh->PhysicsTransformUpdateMode = EPhysicsTransformUpdateMode::ComponentTransformIsKinematic;
 
+	// Same feel on any mannequin's physics asset; continuous collision so fast limbs don't pass through the floor.
+	for (FBodyInstance* Body : Mesh->Bodies)
+		if (Body)
+		{
+			Body->AngularDamping = BodyAngularDamping;
+			Body->UpdateDampingProperties();
+			Body->SetUseCCD(true);
+			// GASP's asset gives every body its own (grippy) physical material, so the feet stick to the floor while the
+			// top half falls; the engine default is what the hit and Power System feel was tuned with.
+			if (bUseDefaultPhysMaterial && GEngine && GEngine->DefaultPhysMaterial) Body->SetPhysMaterialOverride(GEngine->DefaultPhysMaterial);
+		}
+
 	PhysicsControl = GetOwner()->FindComponentByClass<UPhysicsControlComponent>();
 	if (!PhysicsControl)
 	{
@@ -197,6 +209,8 @@ void URPGPhysicsReactionComponent::HandleMeleeHit(const FRPGMeleeHitInfo& Hit)
 	if (!Mesh) return;
 
 	const bool bLimp = State == ERPGPhysicsReactionState::Limp || (Hit.bCharged && Hit.ChargePercent >= LimpChargeThreshold);
+	// Ragdoll is all or nothing: no half-ragdoll for ordinary hits (staggers will be animations).
+	if (!bLimp && !bPartialRagdoll) return;
 	bWaitForSettle = false;
 	if (bLimp) EnterFullRagdoll(LimpTime);
 	else EnterPoweredReaction(Hit.HitBone);
@@ -249,6 +263,8 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 
 	const bool bLimp = Result.Reaction == ERPGPowerReaction::Knockdown || Result.Reaction == ERPGPowerReaction::Launch
 		|| State == ERPGPhysicsReactionState::Limp;
+	// Ragdoll is all or nothing: flinches and staggers don't ragdoll part of the body (they will be animations).
+	if (!bLimp && !bPartialRagdoll) return;
 
 	if (bLimp)
 	{
@@ -296,24 +312,27 @@ void URPGPhysicsReactionComponent::ApplyPendingVelocity()
 	const FBodyInstance* Root = Mesh->GetBodyInstance(AnchorBone);
 	if (Root && Root->IsInstanceSimulatingPhysics())
 	{
-		// The whip: parts near the impact get more than the average velocity, far parts less, weighted so the body's
-		// overall (mass-weighted average) velocity is exactly PendingVelocity. The body folds around the hit.
+		// Momentum, not a puppet throw: the whole body's momentum (total mass x PendingVelocity) is shared out with the
+		// trunk (pelvis, spine, neck, head) taking most, weighted toward the bodies near the impact, and arms and legs
+		// only LimbVelocityShare of it, so they trail behind and swing the way the force carries them.
 		const URPGPowerSettings* S = URPGPowerSettings::Get();
-		TArray<TPair<FBodyInstance*, float>> Weighted;
-		float TotalMass = 0.f, WeightedMass = 0.f;
+		TArray<TPair<FBodyInstance*, float>> Trunk;
+		float TotalMass = 0.f, TrunkWeighted = 0.f;
 		for (FBodyInstance* Body : Mesh->Bodies)
 		{
 			if (!Body || !Body->IsInstanceSimulatingPhysics()) continue;
 			const float Mass = Body->GetBodyMass();
-			const float Near = 1.f - FMath::Clamp(float(FVector::Dist(Body->GetCOMPosition(), PendingVelocityPoint)) / S->RagdollWhipRadius, 0.f, 1.f);
-			const float Weight = 1.f + S->RagdollWhip * (2.f * Near - 1.f);
-			Weighted.Emplace(Body, Weight);
 			TotalMass += Mass;
-			WeightedMass += Mass * Weight;
+			const FName Limb = BoneLimbs.FindRef(Mesh->GetBoneName(Body->InstanceBoneIndex));
+			const float Share = Limb == TEXT("Spine") || Limb == TEXT("Head") ? 1.f : LimbVelocityShare;
+			const float Near = 1.f - FMath::Clamp(float(FVector::Dist(Body->GetCOMPosition(), PendingVelocityPoint)) / S->RagdollWhipRadius, 0.f, 1.f);
+			const float Weight = Share * (1.f + S->RagdollWhip * (2.f * Near - 1.f));
+			Trunk.Emplace(Body, Weight);
+			TrunkWeighted += Mass * Weight;
 		}
-		const float Normalize = WeightedMass > KINDA_SMALL_NUMBER ? TotalMass / WeightedMass : 1.f;
-		for (const TPair<FBodyInstance*, float>& Pair : Weighted)
-			Pair.Key->SetLinearVelocity(PendingVelocity * (Pair.Value * Normalize), false);
+		const float Scale = TrunkWeighted > KINDA_SMALL_NUMBER ? TotalMass / TrunkWeighted : 1.f;
+		for (const TPair<FBodyInstance*, float>& Pair : Trunk)
+			Pair.Key->SetLinearVelocity(PendingVelocity * (Pair.Value * Scale), false);
 		bVelocityPending = false;
 	}
 	else if (++PendingVelocityFrames > MaxPendingFrames)

@@ -65,6 +65,10 @@ ARPGCombatTestDummy::ARPGCombatTestDummy()
 	if (Idle.Succeeded()) IdleAnimation = Idle.Object;
 	static ConstructorHelpers::FObjectFinder<UBlendSpace> Locomotion(TEXT("/Game/RPG/Combat/GASP/BS_GASP_Dummy_IdleWalk.BS_GASP_Dummy_IdleWalk"));
 	if (Locomotion.Succeeded()) LocomotionBlendSpace = Locomotion.Object;
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> GetUpDown(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F.M_ragdoll_getup_stand_F"));
+	if (GetUpDown.Succeeded()) GetUpFaceDown = GetUpDown.Object;
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> GetUpUp(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B.M_ragdoll_getup_stand_B"));
+	if (GetUpUp.Succeeded()) GetUpFaceUp = GetUpUp.Object;
 
 	PhysicsReaction = CreateDefaultSubobject<URPGPhysicsReactionComponent>(TEXT("PhysicsReaction"));
 
@@ -113,6 +117,7 @@ void ARPGCombatTestDummy::BeginPlay()
 void ARPGCombatTestDummy::PlayIdle()
 {
 	if (!Mesh) return;
+	GetUpTimeLeft = 0.f;
 	Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 	// Wandering: the locomotion blend space, driven by speed each frame (0 = its idle). Otherwise the plain idle.
 	bPlayingLocomotion = bWander && LocomotionBlendSpace;
@@ -122,13 +127,23 @@ void ARPGCombatTestDummy::PlayIdle()
 
 void ARPGCombatTestDummy::PickWanderTarget()
 {
-	// Somewhere else within the radius, at least a short walk away.
+	// Somewhere else within the radius, at least a short walk away, that it can walk straight to: a capsule swept
+	// there (lifted a step, so slopes and steps don't count) must not hit a wall. So it never keeps picking spots behind
+	// the wall or corner it just walked into.
 	const FVector Here = GetActorLocation();
-	for (int32 Try = 0; Try < 8; ++Try)
+	const float Lift = MaxStepHeight + 2.f;
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(), FMath::Max(Capsule->GetScaledCapsuleHalfHeight() - Lift, Capsule->GetScaledCapsuleRadius()));
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RPGDummyWander), false, this);
+	FCollisionResponseParams Responses(Capsule->GetCollisionResponseToChannels());
+	for (int32 Try = 0; Try < 16; ++Try)
 	{
 		const FVector2D P = FMath::RandPointInCircle(WanderRadius);
 		const FVector Candidate(Home.X + P.X, Home.Y + P.Y, Here.Z);
-		if (FVector::Dist2D(Candidate, Here) >= 120.f) { WanderTarget = Candidate; bHasTarget = true; return; }
+		if (FVector::Dist2D(Candidate, Here) < 120.f) continue;
+		const FVector Up(0.f, 0.f, Lift);
+		const FVector End = Here + (Candidate - Here).GetClampedToMaxSize(600.f);   // only the first few metres: slopes change Z further out
+		if (GetWorld()->SweepTestByChannel(Here + Up, End + Up, FQuat::Identity, Capsule->GetCollisionObjectType(), Shape, Params, Responses)) continue;
+		WanderTarget = Candidate; bHasTarget = true; return;
 	}
 	WanderTarget = FVector(Home.X, Home.Y, Here.Z);
 	bHasTarget = true;
@@ -238,6 +253,13 @@ void ARPGCombatTestDummy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (GetUpTimeLeft > 0.f)
+	{
+		GetUpTimeLeft -= DeltaTime;
+		if (GetUpTimeLeft > 0.f) return;
+		PlayIdle();
+	}
+
 	if (bWander != bPlayingLocomotion && (bWander ? LocomotionBlendSpace != nullptr : true))
 	{
 		// switched on / off at runtime (e.g. by a test): swap to the matching animation and stop where it stands
@@ -335,7 +357,7 @@ void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 
 	// Reaction and displacement channels -> physics. A ragdoll carries its own velocity; standing, it slides back.
 	PhysicsReaction->HandlePowerHit(Hit, Result);
-	if (PhysicsReaction->GetReactionState() == ERPGPhysicsReactionState::Powered)
+	if (PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Limp)   // not ragdolled (flinch / stagger): slide back on its feet
 		ShoveVelocity = FVector(Result.DisplacementVelocity.X, Result.DisplacementVelocity.Y, 0.f);
 	PlayImpactFeel(Hit.Attacker, Result.Reaction);
 
@@ -416,7 +438,28 @@ void ARPGCombatTestDummy::HandleLimpEnding()
 	else
 	{
 		const FVector Before = GetActorLocation();
-		SetActorLocation(Target, false, nullptr, ETeleportType::None);
+		// Face down or up (the chest's front, from the spine and hips), then turn and place the actor so the get-up
+		// clip's first frame lies where the body does; the fade back to animation then blends into that frame.
+		const FVector Left = Mesh->GetBoneLocation(TEXT("thigh_l")) - Mesh->GetBoneLocation(TEXT("thigh_r"));
+		const bool bFaceDown = FVector::CrossProduct(Mesh->GetBoneLocation(TEXT("spine_05")) - Pelvis, Left).Z < 0.f;
+		UAnimSequence* GetUp = bFaceDown ? GetUpFaceDown : GetUpFaceUp;
+		if (GetUp)
+		{
+			const FVector Start = bFaceDown ? GetUpFaceDownStart : GetUpFaceUpStart;
+			const FVector Head = Mesh->GetBoneLocation(TEXT("head")) - Pelvis;
+			const float MeshYaw = FMath::RadiansToDegrees(FMath::Atan2(Head.Y, Head.X)) - Start.Z;
+			const FVector Offset = FRotator(0.f, MeshYaw, 0.f).RotateVector(FVector(Start.X, Start.Y, 0.f));
+			Target.X = Pelvis.X - Offset.X;
+			Target.Y = Pelvis.Y - Offset.Y;
+			SetActorLocationAndRotation(Target, FRotator(0.f, MeshYaw - Mesh->GetRelativeRotation().Yaw, 0.f), false, nullptr, ETeleportType::None);
+			Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+			Mesh->PlayAnimation(GetUp, false);
+			bPlayingLocomotion = false;
+			Speed = 0.f;
+			GetUpTimeLeft = GetUp->GetPlayLength();
+			UE_LOG(LogRPGInput, Log, TEXT("%s gets up %s (%s)"), *GetActorNameOrLabel(), bFaceDown ? TEXT("from face down") : TEXT("from its back"), *GetUp->GetName());
+		}
+		else SetActorLocation(Target, false, nullptr, ETeleportType::None);
 		ShoveOffset += GetActorLocation() - Before;
 	}
 

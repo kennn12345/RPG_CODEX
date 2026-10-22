@@ -4,7 +4,9 @@
 // Plays the startup map, builds a flat 200 m floor high above the level (the map's dummy stands on a raised platform
 // with drops and slopes around it), stands the dummy on it, gives the player Strength 12 and hits the dummy once: it
 // must take the calculated damage, be launched (LIMP), land about the calculated distance away (it slides a little
-// after landing), and get up where it landed instead of snapping back to where it stood.
+// after landing), and get up where it landed instead of snapping back to where it stood. The body must never sink
+// below the floor. RPG_SHOT_GETUP=1 (rendered editor, not -nullrhi) also films the fall and get-up from the side into
+// Saved/Screenshots/GetUp/.
 
 #include "CoreMinimal.h"
 
@@ -18,6 +20,10 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "UnrealClient.h"
 #include "Editor.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
@@ -56,6 +62,7 @@ namespace
 
 				// Flat floor: the engine cube scaled to 200 m x 200 m x 1 m, its top 80 m above the dummy's spot.
 				const FVector ArenaTop = D->GetActorLocation() + FVector(0.f, 0.f, 8000.f);
+				FloorZ = ArenaTop.Z;
 				AStaticMeshActor* Floor = World->SpawnActor<AStaticMeshActor>(ArenaTop - FVector(0.f, 0.f, 50.f), FRotator::ZeroRotator);
 				UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 				if (!Floor || !Cube) { Test->AddError(TEXT("RPGTEST could not build the flat test floor")); return true; }
@@ -79,6 +86,7 @@ namespace
 				const URPGAttributeSet* A = D->Stats->GetAttributes();
 				HealthBefore = A->GetHealth();
 				StartSpot = D->GetActorLocation();
+				StartRotation = D->GetActorRotation();
 
 				// A normal punch to the chest, throwing it the way it faces.
 				FRPGMeleeHitInfo Hit;
@@ -98,6 +106,25 @@ namespace
 
 			const ERPGPhysicsReactionState State = D->PhysicsReaction->GetReactionState();
 			if (State == ERPGPhysicsReactionState::Limp) bSawLimp = true;
+			const FVector Pelvis = D->Mesh->GetBoneLocation(TEXT("pelvis"));
+			MinPelvisAboveFloor = FMath::Min(MinPelvisAboveFloor, float(Pelvis.Z - FloorZ));
+			if (FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_SHOT_GETUP")) == TEXT("1") && Now - LastShot >= 0.4f)
+			{
+				// Side camera following the body at its height, 4.5 m off to the strike's left.
+				if (!Camera)
+				{
+					Camera = World->SpawnActor<ACameraActor>(FVector::ZeroVector, FRotator::ZeroRotator);
+					Camera->GetCameraComponent()->SetFieldOfView(50.f);
+					Camera->GetCameraComponent()->bConstrainAspectRatio = false;
+					if (APlayerController* PC = World->GetFirstPlayerController()) PC->SetViewTarget(Camera);
+				}
+				const FVector Look(Pelvis.X, Pelvis.Y, FloorZ + 60.f);
+				const FVector Eye = Look + FRotationMatrix(StartRotation).GetUnitAxis(EAxis::Y) * -450.f + FVector(0.f, 0.f, 60.f);
+				Camera->SetActorLocationAndRotation(Eye, (Look - Eye).Rotation());
+				if (LastShot >= 0.f)
+					FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / FString::Printf(TEXT("Screenshots/GetUp/getup_%02d_%.1fs.png"), ShotIndex++, Now - HitAt), false, false);
+				LastShot = Now;
+			}
 
 			// Flight trace every 0.25 s (diagnostics for calibration).
 			if (Now - LastTrace >= 0.25f)
@@ -116,19 +143,22 @@ namespace
 
 			const bool bDone = bSawLimp && State == ERPGPhysicsReactionState::Animated;
 			if (!bDone && Now - HitAt < 12.f) return false;
+			if (bDone && DoneAt < 0.f) DoneAt = Now;
+			if (Camera && Now - DoneAt < 5.5f) return false;   // filming: keep going through the get-up clip
 
 			const float Landed = float(FVector::Dist2D(D->GetActorLocation(), StartSpot));
 			const float Ratio = Expected.Displacement > 0.f ? Landed / Expected.Displacement : 0.f;
 			const bool bDamageOk = FMath::IsNearlyEqual(HealthBefore - HealthAfterHit, FMath::Min(Expected.Damage, HealthBefore), 0.5f);
 			// On flat ground arc + slide should cover the calculated distance; ragdolls tumble differently each time.
-			const bool bPass = bDone && Expected.Reaction == ERPGPowerReaction::Launch && bDamageOk && Ratio > 0.7f && Ratio < 1.35f && MaxReturnGap < 80.f;
+			const bool bPass = bDone && Expected.Reaction == ERPGPowerReaction::Launch && bDamageOk && Ratio > 0.7f && Ratio < 1.35f && MaxReturnGap < 80.f
+				&& MinPelvisAboveFloor > 0.f;
 
 			const FString Line = FString::Printf(TEXT("RPGTEST %s  Power launch (Strength %.0f normal punch on the standard bandit): reaction %s, ")
 				TEXT("damage %.1f (health %.0f -> %.0f), calculated displacement %.1f ft, got up %.1f ft away (%.0f%% of calculated), ")
-				TEXT("ragdoll seen %d, back to animated %d, largest body-to-actor gap while standing up %.0f cm"),
+				TEXT("ragdoll seen %d, back to animated %d, largest body-to-actor gap while standing up %.0f cm, lowest pelvis %.0f cm above the floor"),
 				bPass ? TEXT("PASS") : TEXT("FAIL"), TestStrength, *UEnum::GetDisplayValueAsText(Expected.Reaction).ToString(),
 				Expected.Damage, HealthBefore, HealthAfterHit, Expected.Displacement / 30.48f, Landed / 30.48f, Ratio * 100.f,
-				bSawLimp, bDone, MaxReturnGap);
+				bSawLimp, bDone, MaxReturnGap, MinPelvisAboveFloor);
 			UE_LOG(LogRPGInput, Display, TEXT("%s"), *Line);
 			if (bPass) Test->AddInfo(Line); else Test->AddError(Line);
 			return true;
@@ -148,6 +178,10 @@ namespace
 		float Start = -1.f, HitAt = 0.f, HealthBefore = 0.f, HealthAfterHit = 0.f, MaxReturnGap = 0.f, LastTrace = -1.f;
 		bool bHit = false, bSawLimp = false;
 		FVector StartSpot = FVector::ZeroVector;
+		FRotator StartRotation = FRotator::ZeroRotator;
+		float FloorZ = 0.f, MinPelvisAboveFloor = 1e9f, LastShot = -1.f, DoneAt = -1.f;
+		int32 ShotIndex = 0;
+		ACameraActor* Camera = nullptr;
 		FRPGPowerResult Expected;
 	};
 }

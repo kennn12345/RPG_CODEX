@@ -141,6 +141,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy")
 	FString DisplayLabel;
 
+	/** Get-up clips (from GASP), played where the body lies after a knockdown: lying face down / face up. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
+	TObjectPtr<UAnimSequence> GetUpFaceDown;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
+	TObjectPtr<UAnimSequence> GetUpFaceUp;
+	/** Where each clip's first frame lies in its own component space: pelvis X / Y (cm) and the pelvis-to-head direction
+	 *  (degrees about up), measured from the clips. The dummy is turned and placed so that frame lands on the ragdoll. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
+	FVector GetUpFaceDownStart = FVector(2.8f, -1.0f, 84.6f);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
+	FVector GetUpFaceUpStart = FVector(0.1f, -35.0f, -92.1f);
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Dummy")
 	int32 HitCount = 0;
 
@@ -157,6 +169,9 @@ public:
 	void ResetDummy();
 
 private:
+	/** Seconds of get-up clip left (the dummy does nothing else meanwhile). */
+	float GetUpTimeLeft = 0.f;
+
 	void PlayIdle();
 	void UpdateWander(float DeltaTime);
 	void PickWanderTarget();

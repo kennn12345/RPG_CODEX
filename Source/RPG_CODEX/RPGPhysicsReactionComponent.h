@@ -154,6 +154,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
 	float MotorStrength = 40.f;
 
+	/** Rotation damping put on every ragdoll body (the physics asset's own is replaced). 0.01 is UE5 Manny's; GASP's
+	 *  mannequin asset uses 5, which makes hits look locked. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction", meta = (ClampMin = "0"))
+	float BodyAngularDamping = 0.01f;
+
+	/** Put the engine's default physical material on every ragdoll body instead of the physics asset's own (GASP's
+	 *  makes the feet grip the floor so only the top half falls). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction")
+	bool bUseDefaultPhysMaterial = true;
+
+	/** Off (the rule): a ragdoll is always the whole body, so only knockdowns / launches (LIMP) go to physics and
+	 *  ordinary hits leave the body on its animation (staggers will be animations). On: the older POWERED reaction,
+	 *  the body above the anchored pelvis reacting on motors. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered")
+	bool bPartialRagdoll = false;
+
+	/** Knockdowns / launches: how much of the trunk's starting speed the arms and legs get (0 = they start still and
+	 *  are only dragged along, 1 = the whole body moves as one). The body's total momentum is the same either way. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0", ClampMax = "1"))
+	float LimbVelocityShare = 0.55f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
 	float MotorDampingRatio = 1.f;
 
