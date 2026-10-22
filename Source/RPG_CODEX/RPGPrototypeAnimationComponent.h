@@ -257,6 +257,9 @@ private:
     class URPGCombatStateComponent* GetCombatState() const;
     /** The version of a (third-person) clip to play in the current perspective. */
     UAnimSequence* Present(UAnimSequence* Sequence) const;
+    /** The clip for this skeleton: the clip itself if it fits, else the same-named clip in
+     *  /Game/RPG/Animations/<skeleton asset name>/ (e.g. SK_UEFN_Mannequin for the GASP player); null if neither exists. */
+    static UAnimSequence* LoadFor(const TSoftObjectPtr<UAnimSequence>& Clip, const USkeleton* Skeleton);
     /** Third-person clip -> first-person clip, filled when first person is first used. */
     void BuildPresentationMap(const USkeleton* Skeleton);
 

@@ -95,14 +95,14 @@ P_LOAD = S(pelvis_off=[-1.5, -3, -5.5], pelvis_rot=[15, 0, 0], spine_lo=[2, -2, 
 # begins to turn, tops its arc above shoulder height about two thirds of the way out, and comes down onto the target.
 # Its speed builds the whole way (fastest just before contact) and the arm extends progressively with the turn, rather
 # than the body turning first and the arm firing alone at the end.
-P_ARC_A = {'hand_r': [-17, 34, 141], 'elbow_pole_r': [-0.6, -0.6, -0.8]}
-P_LOOP = {'hand_r': [-10, 66, 148], 'elbow_pole_r': [-0.3, -1, -0.15]}
+P_ARC_A = {'hand_r': [-18, 34, 145], 'elbow_pole_r': [-0.7, -0.6, -0.5]}
+P_LOOP = {'hand_r': [-12, 62, 156], 'elbow_pole_r': [-0.7, -0.6, 0.35]}
 # Impact: level change, hips and chest turned through, fist arriving downward with the elbow high,
 # right shoulder covering the chin, left hand on the face.
-P_IMPACT = S(pelvis_off=[5, 16, -6.5], pelvis_rot=[-28, -5, -3],
-             spine_lo=[-14, -8, 6], spine_hi=[-20, -10, 11],
-             clav_r=[-28, 0, 13], clav_l=[8, 0, -2],
-             hand_r=[-2, 100, 140], elbow_pole_r=[0.15, -1, 0.15], reach_r=[0.995], fist_roll_r=[-20], guard_follow_r=[0],
+P_IMPACT = S(pelvis_off=[5, 16, -8], pelvis_rot=[-28, -5, -3],
+             spine_lo=[-14, -8, 8], spine_hi=[-20, -10, 15],
+             clav_r=[-30, 0, 18], clav_l=[8, 0, -2],
+             hand_r=[0, 100, 141], elbow_pole_r=[-0.2, -0.8, 0.5], reach_r=[0.995], fist_roll_r=[-35], guard_follow_r=[0],
              hand_l=[8, 27, 147], elbow_pole_l=[0.6, 0.2, -1],
              foot_rot_r=[-35, -20, 0], knee_pole_r=[0.05, 1, -0.15],
              head_rot=[-10, -12, 5])
@@ -662,7 +662,7 @@ if __name__ == '__main__':
     # python poses.py [name-filter ...]: re-bake only matching clips, keeping the rest of clips.json
     import sys
     want = sys.argv[1:]
-    path = os.path.join(HERE, 'clips.json')
+    path = _pa.SP.path('clips', '.json')
     out = json.load(open(path)) if want and os.path.exists(path) else {}
     for name in SPECS:
         if want and not any(w in name for w in want): continue

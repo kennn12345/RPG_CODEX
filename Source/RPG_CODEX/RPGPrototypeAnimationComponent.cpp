@@ -193,7 +193,7 @@ void URPGPrototypeAnimationComponent::UpdateCombatStance(UAnimInstance* Instance
         LastCombatActionTime = GetWorld()->GetTimeSeconds();
         if (bWantFullBody && !CombatStanceMontage)
         {
-            UAnimSequence* Sequence = CombatStance.LoadSynchronous();
+            UAnimSequence* Sequence = LoadFor(CombatStance, Instance->CurrentSkeleton);
             if (!Sequence || Sequence->GetSkeleton() != Instance->CurrentSkeleton) return;
             // A stance still blending out (the punch the first trigger started stopped it a moment ago) is picked up
             // where it is at full weight, so the legs and the pose under the guard never sink toward the idle.
@@ -215,7 +215,7 @@ void URPGPrototypeAnimationComponent::UpdateCombatStance(UAnimInstance* Instance
     // while it blends out and the guard never drops.
     const FAnimMontageInstance* Active = ActiveMontage ? Instance->GetActiveInstanceForMontage(ActiveMontage) : nullptr;
     if (Active && !Active->IsStopped()) return;
-    UAnimSequence* Sequence = CombatStance.LoadSynchronous();
+    UAnimSequence* Sequence = LoadFor(CombatStance, Instance->CurrentSkeleton);
     if (!Sequence || Sequence->GetSkeleton() != Instance->CurrentSkeleton) return;
     // Switching between the two: start the other one where this one is, so the breathing doesn't jump.
     const FAnimMontageInstance* Old = CombatStanceMontage ? Instance->GetActiveInstanceForMontage(CombatStanceMontage) : nullptr;
@@ -291,6 +291,17 @@ FString URPGPrototypeAnimationComponent::SetupAimAnimInstance()
 #else
     return TEXT("Editor only.");
 #endif
+}
+
+UAnimSequence* URPGPrototypeAnimationComponent::LoadFor(const TSoftObjectPtr<UAnimSequence>& Clip, const USkeleton* Skeleton)
+{
+    UAnimSequence* Sequence = Clip.LoadSynchronous();
+    if (!Skeleton || (Sequence && Sequence->GetSkeleton() == Skeleton)) return Sequence;
+    const FString Name = Clip.GetAssetName();
+    if (Name.IsEmpty()) return Sequence;
+    const FString Path = FString::Printf(TEXT("/Game/RPG/Animations/%s/%s.%s"), *Skeleton->GetName(), *Name, *Name);
+    UAnimSequence* Fitted = LoadObject<UAnimSequence>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+    return Fitted && Fitted->GetSkeleton() == Skeleton ? Fitted : Sequence;
 }
 
 UAnimSequence* URPGPrototypeAnimationComponent::Present(UAnimSequence* Sequence) const
@@ -705,7 +716,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
     default: return;
     }
 
-    UAnimSequence* Sequence = Clip.LoadSynchronous();
+    UAnimSequence* Sequence = LoadFor(Clip, Instance->CurrentSkeleton);
     if (!Sequence || Sequence->GetSkeleton() != Instance->CurrentSkeleton)
     {
         UE_LOG(LogRPGInput, Warning, TEXT("Prototype clip unavailable or skeleton mismatch: %s. Run animation setup."), *Clip.ToString());
@@ -776,7 +787,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
             ChargedHoldStart = bLeft ? LeftPunchHoldStart : RightPunchHoldStart;
             ChargedHoldEnd = bLeft ? LeftPunchHoldEnd : RightPunchHoldEnd;
             ChargedImpactTime = bLeft ? LeftPunchChargedImpactTime : RightPunchChargedImpactTime;
-            ChargedSequence = (bLeft ? LeftPunchCharged : RightPunchCharged).LoadSynchronous();
+            ChargedSequence = LoadFor(bLeft ? LeftPunchCharged : RightPunchCharged, Instance->CurrentSkeleton);
         }
         else
         {
@@ -784,7 +795,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
             ChargeSwitchTime = ChargedHoldStart = bLeft ? LeftKickHoldTime : RightKickHoldTime;
             ChargedHoldEnd = bLeft ? LeftKickHoldEnd : RightKickHoldEnd;
             ChargedImpactTime = bLeft ? LeftKickChargedImpactTime : RightKickChargedImpactTime;
-            ChargedSequence = (bLeft ? LeftFrontKickCharged : RightFrontKickCharged).LoadSynchronous();
+            ChargedSequence = LoadFor(bLeft ? LeftFrontKickCharged : RightFrontKickCharged, Instance->CurrentSkeleton);
         }
         if (ChargedSequence && ChargedSequence->GetSkeleton() != Instance->CurrentSkeleton) ChargedSequence = nullptr;
         // Without a Charged clip, stop the regular clip at its switch time instead.

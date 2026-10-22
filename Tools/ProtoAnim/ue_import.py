@@ -1,12 +1,14 @@
 """Run inside UnrealEditor-Cmd -run=pythonscript. Creates/updates the prototype AnimSequences from clips.json."""
-import unreal, json, os
+import unreal, json, os, sys
 try:
     HERE = os.path.dirname(os.path.abspath(__file__))
 except NameError:  # some editor execution paths don't define __file__
     HERE = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), 'Tools', 'ProtoAnim')
-FOLDER = '/Game/RPG/Animations/Prototype'
-clips = json.load(open(os.path.join(HERE, 'clips.json')))
-skel = unreal.load_asset('/Game/Characters/Mannequins/Meshes/SK_Mannequin')
+sys.path.insert(0, HERE)
+import skel_profile as SP
+FOLDER = SP.P['folder']
+clips = json.load(open(SP.path('clips', '.json')))
+skel = unreal.load_asset(SP.P['skeleton'])
 tools = unreal.AssetToolsHelpers.get_asset_tools()
 report = {}
 
@@ -67,5 +69,5 @@ for name, clip in clips.items():
                     'root_lock': str(seq.get_editor_property('root_motion_root_lock')),
                     'root_motion': seq.get_editor_property('enable_root_motion'), 'target_rate': seq.get_editor_property('platform_target_frame_rate').export_text(), 'samples': rows}
 
-json.dump(report, open(os.path.join(HERE, 'ue_import_report.json'), 'w'), indent=1)
+json.dump(report, open(SP.path('ue_import_report', '.json'), 'w'), indent=1)
 unreal.log('PROTOTYPE IMPORT OK: ' + ', '.join(report))

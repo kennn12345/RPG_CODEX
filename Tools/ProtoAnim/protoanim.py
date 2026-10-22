@@ -61,7 +61,8 @@ def qfrom_frames(d0, h0, d1, h1):
 def ortho(v, d): return norm(sub(v, mul(d, dot(v, d))))
 
 # ---------- skeleton ----------
-D = json.load(open(os.path.join(HERE, 'skeleton_dump.json')))
+import skel_profile as SP
+D = json.load(open(SP.path('skeleton_dump', '.json')))
 BONES = D['bones']; PARENT = {b: (None if p == 'None' else p) for b, p in D['parents'].items()}
 IDLE = {b: (D['idle_local'][b]['q'], D['idle_local'][b]['t']) for b in BONES}
 PROBE = json.load(open(os.path.join(HERE, 'probe.json')))
@@ -85,6 +86,38 @@ def to_cs(local):
             pq, pt = cs[p]; cs[b] = (qnorm(qmul(pq, q)), add(pt, qrot(pq, t)))
     return cs
 IDLE_CS = to_cs(IDLE)
+
+# ---------- other skeletons (RPG_SKEL=uefn) ----------
+# Every pose in poses.py is written for UE5 Manny (SK_Mannequin). On another skeleton, hand targets are re-aimed from
+# the shoulder and foot targets from the hip, scaled by arm / leg length, and the fist (sampled on Manny) is carried over
+# as each finger's rotation relative to its reference pose.
+ARM_K, LEG_K = 1.0, 1.0
+_MAP = None
+if SP.NAME != 'manny':
+    _M = json.load(open(os.path.join(HERE, 'skeleton_dump.json')))
+    _MP = {b: (None if p == 'None' else p) for b, p in _M['parents'].items()}
+    def _cs_pos(dump, parents, key, bone):
+        chain = []
+        while bone: chain.append(bone); bone = parents[bone]
+        q, t = [0, 0, 0, 1], [0, 0, 0]
+        for b in reversed(chain):
+            lq, lt = dump[key][b]['q'], dump[key][b]['t']
+            t = add(t, qrot(q, lt)); q = qnorm(qmul(q, lq))
+        return t
+    def _seg(dump, *bones): return sum(length(dump['ref_local'][b]['t']) for b in bones)
+    ARM_K = _seg(D, 'lowerarm_r', 'hand_r') / _seg(_M, 'lowerarm_r', 'hand_r')
+    LEG_K = _seg(D, 'calf_r', 'foot_r') / _seg(_M, 'calf_r', 'foot_r')
+    _MAP = {side: {'sh_m': _cs_pos(_M, _MP, 'idle_local', 'upperarm_' + side), 'sh': IDLE_CS['upperarm_' + side][1],
+                   'hip_m': _cs_pos(_M, _MP, 'idle_local', 'thigh_' + side), 'hip': IDLE_CS['thigh_' + side][1]}
+            for side in ('l', 'r')}
+    FIST = {b: (qnorm(qmul(D['ref_local'][b]['q'], qmul(qconj(_M['ref_local'][b]['q']), q))), list(IDLE[b][1]))
+            for b, (q, t) in FIST.items()}
+def map_hand(side, v):
+    if not _MAP: return v
+    m = _MAP[side]; return add(m['sh'], mul(sub(v, m['sh_m']), ARM_K))
+def map_foot(side, v):
+    if not _MAP: return v
+    m = _MAP[side]; return add(m['hip'], mul(sub(v, m['hip_m']), LEG_K))
 _IDLE_HEEL = math.degrees(math.atan2(IDLE_CS['foot_l'][1][2] - IDLE_CS['ball_l'][1][2],
     math.hypot(IDLE_CS['foot_l'][1][0] - IDLE_CS['ball_l'][1][0], IDLE_CS['foot_l'][1][1] - IDLE_CS['ball_l'][1][1])))
 
@@ -298,11 +331,11 @@ def _build_pose(P, return_cs=False):
     # arms
     for side in ('l', 'r'):
         hand = 'hand_' + side
-        target, pole = P['hand_' + side], P['elbow_pole_' + side]
+        target, pole = map_hand(side, P['hand_' + side]), P['elbow_pole_' + side]
         w = P.get('guard_follow_' + side, [0])[0]
         rel = P.get('hand_rel_' + side, [0])[0]
         if rel > 0:   # target given as a world-axis offset from the shoulder's current position
-            target = lerp(target, add(cs['upperarm_' + side][1], P['hand_off_' + side]), rel)
+            target = lerp(target, add(cs['upperarm_' + side][1], mul(P['hand_off_' + side], ARM_K)), rel)
         target = add(target, P.get('loop_' + side, [0, 0, 0]))   # arc bump on top of the forward drive
         target = add(target, P.get('fp_off_' + side, [0, 0, 0]))   # first-person clips only (fpanim.py): hand moved into view
         # the whole set's guard height / width: guard hands only (guard_follow), and only in poses that use it (guard_raise;
@@ -344,7 +377,7 @@ def _build_pose(P, return_cs=False):
             R = qmul(heel_lift(cs, local, side, ball, qrot(R, sub(ank0, ball0)), p), R)
         frot = qnorm(qmul(R, IDLE_CS[foot][0]))
         pivot_target = add(ball, qrot(R, sub(ank0, ball0)))
-        target = lerp(P['foot_' + side], pivot_target, p)
+        target = lerp(map_foot(side, P['foot_' + side]), pivot_target, p)
         pole = P['knee_pole_' + side]
         if p > 0 and KNEE_TRACK > 0:
             # a loaded knee points over its toes (a touch outside them), whatever the authored pole says
