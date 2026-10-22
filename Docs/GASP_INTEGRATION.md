@@ -45,7 +45,7 @@ Headless attempts using UnrealEditor-Cmd (direct, Start-Process, and a native ba
 
 ## Remaining before completing stage 1
 
-1. Obtain an actual headless test log/report.
+1. A headless log/report has now been obtained (see resume results below); retain the concurrent-run caveat and complete the isolated follow-up.
 2. Investigate the potential moving-target contact regression, including whether plugin/settings effects or test nondeterminism cause it. Keep RPG combat source/assets unchanged unless a necessary fix is established.
 3. Reopen the saved review map and confirm CMC possession survives a reload.
 4. Finish warning review and obtain stage 1 completion approval before stage 2.
@@ -62,3 +62,13 @@ The sandbox's Git shell failed to start the standard LFS filter/hooks. A tempora
 ## Resume check
 
 The local WIP asset checkpoint is `4f2b444`. On resume, all 711 original content hashes matched again and there were no C++ changes. Native GitHub push was attempted, but Git Credential Manager returned access denied before credentials were retrieved. No remote upload is verified. The user has been asked to run the existing headless test helper manually because automated launches produced no log. Do not open another target editor while that helper is running.
+
+## Manual headless results
+
+The user started the helper, which launched two concurrent runs. Both completed all 11 RPG tests: **7 passed / 4 failed**, with no unrun tests in the exported report. Both logged the test-exit request. Failures: DummyWander, StrikeContact, StrikeContactFirstPerson, TestDummyFirstPerson. All four Power tests, ordinary TP combat, FP steadiness, and physics reactions passed.
+
+Evidence: `Saved/GASPIntegration/PostMigrationHeadless.log`, `PostMigrationHeadless_2.log`, `PostMigrationHeadless/index.json`, and `HeadlessRunSummary.json`. The first log has a shared cached-asset-registry rename error; the second has no such error. Because both ran concurrently against the same project and report directory, do not call this an isolated clean validation. The moving-target TP punch fails in both with approximately 2.5 cm fist penetration.
+
+A focused follow-up helper, `Run-GASP-Contact-Check.cmd` in this chat's outputs, was prepared and the user was asked to launch it once. It refuses to launch while an Unreal editor/test process is running and runs two contact-suite launches sequentially with separate logs/reports. The second requests `-DisablePlugins=ChaosMover,MoverExamples` for that launch only; no project settings/assets are saved. Verify the logs actually exclude these modules before interpreting it as a valid control. No result is available yet.
+
+Reason for this control: local UE source shows UChaosMoverSubsystem registers a solver simulation callback in every PIE/game world at BeginPlay, even without a registered Mover backend. This is only a hypothesis for the changed combat behavior, not an established cause. Do not change combat source or permanently disable dependencies without proving the effect and checking the CMC review scene.
