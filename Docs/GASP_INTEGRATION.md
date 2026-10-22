@@ -2,7 +2,7 @@
 
 ## Status
 
-Stage 1 is **in progress, not complete**. Branch: `gasp-integration`, based on `2a17eec` (handoff documentation; parent `9b9d114` is the approved hover backup). Stage 2 has not started. Do not merge main or switch the RPG player yet.
+Stage 1 is **ready for user review, awaiting approval**. Branch: `gasp-integration`, based on `2a17eec` (handoff documentation; parent `9b9d114` is the approved hover backup). Stage 2 has not started. Do not merge main or switch the RPG player yet.
 
 The user approved the isolated CMC review scene, and the log confirms its map save at 2026-10-21 18:33:09 America/Chicago. The original 711 Content files still match their pre-migration SHA-256 manifest. No existing C++ source, RPG input bindings, combat/flight clips, player AnimBP, player Blueprint, or test dummy has changed.
 
@@ -82,3 +82,12 @@ Reason for this control: local UE source shows UChaosMoverSubsystem registers a 
 - Reload warning review: no Error or ensure entries. Initial pose-search warnings said searches were skipped while asynchronous index work was pending or failed; they stopped after the early startup frames. Sample console-variable lookup performance warnings and an editor-layout warning were also present. Movement/possession/jump validation alone does not establish complete visual locomotion quality.
 
 Stage 1 remains in progress. Stage 2 is not authorized yet. Native GitHub credential access from the sandbox is still blocked; a user-launched branch-backup helper is the next fallback. Original RPG assets/source remain unchanged.
+## Backup verified and matched-timing comparison
+
+The user's native backup helper successfully uploaded **2,863 LFS objects (4.6 GB)** and pushed `gasp-integration`. `BranchBackup.log` records GitHub's advertised branch SHA `642a11670e17a032c209e0d2eabe75359a2eff62`, matching the local HEAD and remote-tracking ref at verification. Earlier credential-access blockers describe the automated attempt; the native manual fallback succeeded. Main was not merged or modified.
+
+A final sequential TP-only contact comparison used **-Deterministic -FPS=60** in both launches and the exact filter `^RPG.Combat.StrikeContact$`. The original-settings launch additionally used baseline DefaultEngine.ini, an empty project DefaultGameplayTags.ini override (none existed originally), and disabled all explicitly added plugin declarations. This corrects the added-tag caveat of the preceding headless control. Files: `FixedOriginal.log`, `FixedOriginalReport/`, `FixedIntegration.log`, `FixedIntegrationReport/`, `FixedTimingComparison.json`.
+
+All 30 TP cases ran in each launch. **No case changed from PASS under original settings to FAIL under integration settings.** One case (right kick, close range) changed from FAIL to PASS; other numerical physics results varied. The moving-target right punch failed in both with 3.8 cm fist penetration, matching hit/impulse counts and near-identical contact metrics. Thus the earlier suspected new failure is not isolated to GASP under matched timing. This does not prove an exact causal explanation for earlier editor results, eliminate existing contact defects, establish FP equivalence at fixed timing, or justify claiming every combat behavior is regression-free.
+
+Stage 1 import, standalone CMC validation, saved-scene reload and remote backup are now ready for user review. User approval is still required before stage 2. The next stage must use Manny retargeting, preserve URPGAnimInstance and its proxy, include DefaultSlot AND UpperBody, preserve C++ helper components and Xbox inputs, and keep combat/flight assets unchanged. Retain the existing test defects and timing sensitivity as baseline limitations rather than weakening tests or changing combat source just to pass them.
