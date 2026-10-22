@@ -1,0 +1,43 @@
+{
+  "passed": true,
+  "actual_anim_class": "/Game/Blueprints/SandboxCharacter_CMC_ABP.SandboxCharacter_CMC_ABP_C",
+  "rpg_parent": true,
+  "actions": [
+    "<RPGPlayerAction.ATTACK_CHARGE_STARTED: 46>",
+    "<RPGPlayerAction.ATTACK_CHARGE_CANCELLED: 48>",
+    "<RPGPlayerAction.UNARMED_GUARD: 12>",
+    "<RPGPlayerAction.CAMERA_PERSPECTIVE: 39>",
+    "<RPGPlayerAction.DEFENSE_RELEASED: 13>",
+    "<RPGPlayerAction.ATTACK_CHARGE_STARTED: 46>",
+    "<RPGPlayerAction.POWER_ATTACK: 3>"
+  ],
+  "temporary_uefn_guard_fixture": true,
+  "temporary_in_place_fixture": true,
+  "movement_diagnostics": {
+    "velocity": "<Struct 'Vector' (0x000002AC048B0330) {x: 500.000000, y: 0.000000, z: 0.000000}>",
+    "last_input": "<Struct 'Vector' (0x000002AC048B0330) {x: 1.000000, y: 0.000000, z: 0.000000}>",
+    "movement_mode": "<MovementMode.MOVE_WALKING: 1>",
+    "subsystem": "/Engine/Transient.UnrealEdEngine_0:LocalPlayer_0.EnhancedInputLocalPlayerSubsystem_0",
+    "ignore_move": false,
+    "input_ready": true
+  },
+  "full_body_pelvis_change_cm": 47.67631637358787,
+  "upper_body_pelvis_change_cm": 0.7655649118827276,
+  "upper_body_hand_change_cm": 9.823753896410537,
+  "walking_distance_cm": 939.2367265020227,
+  "walking_foot_span_cm": [
+    14.226590267702061,
+    119.34450018618632,
+    58.39581449056095
+  ],
+  "proxy_yaw": 2.861865758895874,
+  "proxy_pitch": 24.999998092651367,
+  "flags": {
+    "DefaultSlot_started": true,
+    "DefaultSlot_playing": true,
+    "UpperBody_started": true,
+    "UpperBody_playing": true,
+    "first_person_proxy": true,
+    "rpg_shadow_parent": true
+  }
+}

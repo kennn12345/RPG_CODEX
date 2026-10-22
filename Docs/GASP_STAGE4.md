@@ -1,0 +1,15 @@
+# Stage 4 animation hooks
+
+The imported CMC animation Blueprint at `/Game/Blueprints/SandboxCharacter_CMC_ABP` now inherits `URPGAnimInstance`. Its original generated class identity is preserved because GASP Chooser tables type their context to that class. A sibling Blueprint copy was rejected after runtime Chooser type errors; it is not the implementation. The source GameAnimationSample project is untouched. A reference backup is saved at `/Game/RPG/GASPIntegration/Backup/ABP_GASP_CMC_BeforeStage4`; use Git to restore the original asset with its class identity when rolling back.
+
+The existing DefaultSlot remains in the sample graph. Its output feeds a cached pose; UpperBody blends over that pose from spine_01 upward with mesh-space rotation and root-bone-based root-motion weighting. The final layered pose returns to the sample graph's original downstream connection. UpperBody uses RPGUpperBodyGroup so future independent slot playback does not automatically stop DefaultSlot. The UEFN skeleton registers both slots. Sample Chooser tables, pose databases and source animations were not edited.
+
+The native RPG animation parent retains its post-graph spine aim, first-person chest pivot/guard stabilization and strike-contact IK, plus shadow montage mirroring. No combat or flight implementation source was changed for this stage. Hook availability does not establish successful hits with the old incompatible Manny clips.
+
+Verification uses a temporary PIE-only in-place copy of a compatible GASP crouch idle. It is deliberately recognizable, so lower-body override and arm-only layering can be measured separately. The fixture also supplies temporary guard/punch properties on the PIE component to exercise existing combat aim. It is not saved as a replacement combat animation. Root motion is disabled on the transient copy; saved GASP clips remain untouched. Future upper-body combat clips should be in-place: a montage with root motion can override CMC movement independently of the per-bone visual mask. This fixture does not validate finished combat animation appearance.
+
+C++ editor support validates the target and parent before graph edits, compiles after reparenting and after adding the layer, and leaves saving to the caller. Its test-fixture helper refuses worlds outside PIE and returns an unsaved transient sequence.
+
+Final results and limitations are recorded in GASP_STAGE4_VALIDATION.json and the Claude handoff after verification completes.
+
+Focused saved-player checks passed: DefaultSlot moved the pelvis 47.68 cm; UpperBody moved it only 0.77 cm while changing the right-hand pose 9.82 cm. During an upper-body montage the player traveled 939.24 cm and the walking foot moved through a 119.34 cm component-space span. The existing aim pipeline produced yaw 2.86 degrees and attack-only pitch 25 degrees; pitch remains zero during guard by existing design. First-person chest-pivot and RPG-parent shadow checks passed. Fresh movement/input and stage3 gameplay retests also passed. Final headless regression results pending.

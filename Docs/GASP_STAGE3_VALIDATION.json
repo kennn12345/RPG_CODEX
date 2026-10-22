@@ -21,8 +21,8 @@
   "player": "BP_RPGPlayer_C",
   "dive_diagnostics": {
     "pitch": -35.0,
-    "velocity": "<Struct 'Vector' (0x000001C097F790F0) {x: 1038.400644, y: 1038.400644, z: -187.001677}>",
-    "input_vector": "<Struct 'Vector' (0x000001C097F790F0) {x: 0.707107, y: 0.707107, z: -0.350111}>"
+    "velocity": "<Struct 'Vector' (0x000002DA5BC67D00) {x: 1041.410430, y: 1041.410430, z: -187.175244}>",
+    "input_vector": "<Struct 'Vector' (0x000002DA5BC67D00) {x: 0.707107, y: 0.707107, z: -0.350111}>"
   },
   "flags": {
     "flight_started": true,
