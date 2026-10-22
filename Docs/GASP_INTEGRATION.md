@@ -47,7 +47,7 @@ Headless attempts using UnrealEditor-Cmd (direct, Start-Process, and a native ba
 
 1. A headless log/report has now been obtained (see resume results below); retain the concurrent-run caveat and complete the isolated follow-up.
 2. Investigate the potential moving-target contact regression, including whether plugin/settings effects or test nondeterminism cause it. Keep RPG combat source/assets unchanged unless a necessary fix is established.
-3. Reopen the saved review map and confirm CMC possession survives a reload.
+3. Saved review-map reload now passes (see results below).
 4. Finish warning review and obtain stage 1 completion approval before stage 2.
 5. Commit/push a validated stage checkpoint; the current backup may be a WIP checkpoint and must be described that way.
 
@@ -72,3 +72,13 @@ Evidence: `Saved/GASPIntegration/PostMigrationHeadless.log`, `PostMigrationHeadl
 A focused follow-up helper, `Run-GASP-Contact-Check.cmd` in this chat's outputs, was prepared and the user was asked to launch it once. It refuses to launch while an Unreal editor/test process is running and runs two contact-suite launches sequentially with separate logs/reports. The second requests `-DisablePlugins=ChaosMover,MoverExamples` for that launch only; no project settings/assets are saved. Verify the logs actually exclude these modules before interpreting it as a valid control. No result is available yet.
 
 Reason for this control: local UE source shows UChaosMoverSubsystem registers a solver simulation callback in every PIE/game world at BeginPlay, even without a registered Mover backend. This is only a hypothesis for the changed combat behavior, not an established cause. Do not change combat source or permanently disable dependencies without proving the effect and checking the CMC review scene.
+## Focused control and saved-scene reload results
+
+- Sequential contact runs in `Saved/GASPIntegration/ContactCheck_11384_30471/` each completed both contact suites. The control log confirms ChaosMover and MoverExamples were not mounted. The moving-target TP punch failed with approximately 2.5 cm penetration in both runs. Disabling these two plugins did not resolve it; the specific ChaosMover hypothesis above is unsupported by this control. `Comparison.json` records the result.
+- `EngineConfigControl.log` / `EngineConfigControlReport/`: same contact discrepancy using `-DefEngineIni=Saved/GASPIntegration/BaselineEngine.ini`, generated from commit `2a17eec`, with the integration plugins still enabled.
+- `OriginalHeadlessControl.log` / `OriginalHeadlessControlReport/`: same discrepancy using that baseline engine configuration and disabling all 20 explicitly added plugin declarations for this launch. RigLogic and HairStrands still mount, as they also did in the original baseline/editor-control logs. Added sample gameplay tags remain enabled in this control, so it is not an exact original-configuration baseline. The difference between earlier rendered editor controls and these headless controls remains unexplained; do not claim a resolved cause or a regression-free integration.
+- These extra launches used native UnrealEditor.exe shortcuts opened in Explorer. This succeeded where sandboxed process launches failed. They did not overwrite project configurations. Scratch shortcuts are in this chat's `work/` folder.
+- `ReviewReloadResult.json` reports **passed** after a fresh rendered editor launch, explicit loading of the saved review map, and PIE: controller PC_Sandbox_C, pawn SandboxCharacter_CMC_C, CharacterMovementComponent, AnimInstance SandboxCharacter_CMC_ABP_C. Movement reached 500 cm/s and upward jump velocity was observed. The review script ended PIE and closed Unreal without saving assets. `ReviewReload.log` confirms normal exit.
+- Reload warning review: no Error or ensure entries. Initial pose-search warnings said searches were skipped while asynchronous index work was pending or failed; they stopped after the early startup frames. Sample console-variable lookup performance warnings and an editor-layout warning were also present. Movement/possession/jump validation alone does not establish complete visual locomotion quality.
+
+Stage 1 remains in progress. Stage 2 is not authorized yet. Native GitHub credential access from the sandbox is still blocked; a user-launched branch-backup helper is the next fallback. Original RPG assets/source remain unchanged.
