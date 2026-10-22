@@ -58,3 +58,7 @@ When an approval is required, minimize Unreal to reveal the chat and clearly sta
 ## Git tooling note
 
 The sandbox's Git shell failed to start the standard LFS filter/hooks. A temporary Windows-native batch launcher successfully ran `git-lfs filter-process`; the repository's LFS configuration was not removed. All binary additions were staged as LFS pointers. The existing hooks were inspected and are standard LFS-only wrappers; if their shell fails, perform the LFS upload natively before pushing the branch ref. Never push raw Unreal binaries as a workaround.
+
+## Resume check
+
+The local WIP asset checkpoint is `4f2b444`. On resume, all 711 original content hashes matched again and there were no C++ changes. Native GitHub push was attempted, but Git Credential Manager returned access denied before credentials were retrieved. No remote upload is verified. The user has been asked to run the existing headless test helper manually because automated launches produced no log. Do not open another target editor while that helper is running.
