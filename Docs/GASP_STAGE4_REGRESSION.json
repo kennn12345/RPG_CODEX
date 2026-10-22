@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-22",
+  "implementation_commit": "105220f",
+  "report": "Saved/GASPIntegration/Stage4/FinalReport/index.json",
+  "passed": 5,
+  "passed_with_warnings": 1,
+  "failed": 6,
+  "not_run": 0,
+  "in_process": 0,
+  "duration_seconds": 372.55780029296875,
+  "new_failing_suites_since_stage2": [],
+  "chooser_context_errors": 0,
+  "tests": [
+    {
+      "fullTestPath": "RPG.Combat.DummyWander",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.FirstPersonSteadiness",
+      "state": "Success"
+    },
+    {
+      "fullTestPath": "RPG.Combat.PhysicsReaction",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.StrikeContact",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.StrikeContactFirstPerson",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.TestDummy",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.TestDummyFirstPerson",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Power.Calibration",
+      "state": "Success"
+    },
+    {
+      "fullTestPath": "RPG.Power.Channels",
+      "state": "Success"
+    },
+    {
+      "fullTestPath": "RPG.Power.DummyLaunch",
+      "state": "Success"
+    },
+    {
+      "fullTestPath": "RPG.Power.Ladder",
+      "state": "Success"
+    }
+  ]
+}
