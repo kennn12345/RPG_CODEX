@@ -1,9 +1,15 @@
 # GASP integration — handoff brief
 
-Goal: replace the player's **movement** animation (idle, walk, run, starts/stops, turns, jump, land, traversal) with
-Epic's **Game Animation Sample (GASP)** motion matching, while **keeping** everything RPG-specific that already works:
-unarmed combat, kicks, block, flight loops, first person, Power System, ragdolls. Combat/flight clips stay as they are
-(procedural placeholders, user-approved) and play *over* GASP movement.
+Goal: **rebuild the player on GASP's own character** (`SandboxCharacter_CMC`) so it gets Epic's motion-matching movement
+(idle, walk, run, starts/stops, turns, jump, land, traversal) out of the box, and move our RPG gameplay onto it: combat
+logic, flight, first person, Power System, stats, ragdolls, Xbox controls.
+
+**Revised 2026-10-21 by the user's decision:** the old combat/flight animations (`RPG_Proto_*`, `RPG_FP_*`) are **not**
+converted or kept as the look of the new player. The user is not fully happy with them, and converting them is slow.
+They will be **remade later on GASP's skeleton** (Claude, with the user). Until then, attacks / kicks / blocks / flight may
+show no animation or the GASP pose on the new player. **That is expected and is not a stage blocker.** Do not spend time
+retargeting, re-baking or fixing those clips. Do not delete them either (the old player still uses them, and they are
+reference for the remake).
 
 Written 2026-10-21 for whichever agent picks this up (Codex now, Claude later). Read this whole file first.
 
@@ -48,15 +54,28 @@ Written 2026-10-21 for whichever agent picks this up (Codex now, Claude later). 
    not Mover — this project is built on CharacterMovementComponent. Enable the plugins GASP needs (Pose Search, Chooser,
    Motion Warping, Animation Warping, etc. — copy from GameAnimationSample's .uproject). Open the project, fix warnings,
    play GASP's character in a test level. Commit.
-2. **Movement on our player.** Give `BP_ThirdPersonCharacter` GASP movement while keeping our components. Preferred: make
-   the player's ABP the GASP one (Manny version / retarget setup), reparent it to `URPGAnimInstance`, add a `DefaultSlot`
-   slot node near the end, and copy over the CMC settings GASP relies on (rotation, accelerations) without breaking our
-   sprint/flight. Walk/run/jump should look like GASP. Commit.
-3. **Combat + flight on top.** Check every attack, kick, block, charge and the flight loops still play and blend back into
-   GASP movement. Film with `Visual.AttackShots` / `Visual.ClipShots`. Fix slot/blend problems. Run tests. Commit.
-4. **First person.** Check the shadow body and FP clips (`RPG_FP_*`) with the new ABP; fix. Commit.
-5. **Later (Claude, after usage reset):** teach `Tools/ProtoAnim` the UEFN skeleton (or retarget its output) if needed, re-take
-   the fist/stance probes, re-film and get approval; update Docs/ANIMATIONS.md.
+2. **GASP character becomes the player.** Make a new player Blueprint from GASP's CMC character (duplicate
+   `SandboxCharacter_CMC` into `/Game/RPG/Player/`, e.g. `BP_RPGPlayer`; keep GASP's own ABP and its UEFN skeleton as-is).
+   Add `URPGControllerInputComponent` to it so `EnsureHelperComponents()` attaches all our gameplay components. Make a
+   game mode (or change `BP_ThirdPersonGameMode`) so this is the default pawn in our levels. GASP's input and our
+   Enhanced Input / Xbox controls must not fight: our controls win (move, look, jump, sprint, attack, block, flight,
+   camera switch); drop GASP-only bindings that clash. Movement must look like GASP. Keep the old `BP_ThirdPersonCharacter`
+   untouched as a fallback. Commit.
+3. **Gameplay works on the new player.** Check in game: flight takes off, flies, lands (CMC `MOVE_Flying`); attack / block /
+   charge inputs run their gameplay (combat state, Power System, hit-stop, ragdolls on the dummy) even if the body does not
+   animate yet; `rpg.Arena`, `rpg.SetStat`, `rpg.Stats` work; first-person camera switch works (the shadow body copies the
+   mesh's anim class; if GASP's ABP breaks it, note it, don't rebuild FP). **Note anything that depends on the old clips**
+   (e.g. a hit detection that reads the fist bone while an attack clip plays) in the Status section instead of fixing it
+   by reworking combat. Do not change combat source to make tests pass. Commit.
+4. **Hooks for the new animations.** In GASP's ABP add the slots our future clips will use: `DefaultSlot` (full body,
+   after motion matching, before output) and `UpperBody` (layered blend per bone from `spine_01`, so attacks can play
+   while the legs keep walking). Move the behaviour of `URPGAnimInstance` (attack-aim spine turn, first-person chest swing,
+   strike-contact IK) onto the new ABP: preferably reparent GASP's ABP to `URPGAnimInstance` if it compiles cleanly;
+   otherwise write down exactly what blocks it. Test that a GASP/UEFN animation played as a montage in each slot shows
+   correctly. Commit, update Status, stop.
+5. **Later (Claude, with the user, after 2026-10-26):** remake combat and flight animations on `SK_UEFN_Mannequin`
+   (generator pointed at the new skeleton and/or bought or mocap clips), film each in game, user approves; then retire
+   the old player, `ABP_Unarmed`, and the old clips; update Docs/ANIMATIONS.md; merge to `main`.
 
 ## When handing back
 
@@ -64,4 +83,5 @@ Update the "Status" section below: what stage is done, branch name, last commit,
 
 ## Status
 
+- 2026-10-21 (later): **plan revised** (see Goal and Stages 2-5): rebuild the player on GASP's character, old combat/flight clips not converted. User is approving stage 1.
 - 2026-10-21: **Stage 1 ready for user review, awaiting approval** on `gasp-integration`. Import checkpoint `4f2b444`; remote backup verified through `642a116` (2,863 LFS objects, 4.6 GB uploaded). Imported 2,861 CMC dependency packages and sample plugin/tag/traversal settings. Saved standalone CMC review scene reloads, possesses the correct CMC character/AnimBP, moves and jumps, then closes cleanly. All 711 original content files and C++ source are unchanged. Full editor suite: baseline 7 pass / 4 fail; post 8 pass / 3 fail. Manual headless suite: 7 pass / 4 fail. Matched deterministic 60 Hz TP comparison: all 30 cases in each setup, no new failures with integration settings; moving-target punch fails in both, so the earlier suspected regression is not isolated to GASP under matched timing. Existing combat contact defects and timing sensitivity remain. Stage 2 has not started; get stage approval before changing the RPG player and do not merge main. See `Docs/GASP_INTEGRATION.md` for evidence, caveats and remaining stage-2 safeguards.
