@@ -13,6 +13,7 @@ Written 2026-10-21 for whichever agent picks this up (Codex now, Claude later). 
 - **Work on a branch:** `git checkout -b gasp-integration`. `main` (commit 9b9d114, on GitHub) is the known-good backup.
   Commit after every stage that works; push the branch. Merge to `main` only when the user approves in-game.
 - **Close Unreal before every C++ build** (`Build.bat RPG_CODEXEditor Win64 Development -Project="C:/UNREAL PROJECTS/RPG_CODEX/RPG_CODEX.uproject" -WaitMutex`).
+- When user approval is needed, minimize Unreal so this chat is visible and state the approval request clearly. The user requested this on 2026-10-21. Close Unreal when required for builds/restarts, preserving saved work.
 - The user is a beginner: editor steps must be **click by click**. Judge animation from **real in-game screenshots**,
   not numbers; show the user before/after and save only after they approve.
 - Engine: UE 5.8. Project: `C:\UNREAL PROJECTS\RPG_CODEX`. GASP source project: `C:\UNREAL PROJECTS\GameAnimationSample`.
@@ -63,4 +64,4 @@ Update the "Status" section below: what stage is done, branch name, last commit,
 
 ## Status
 
-- 2026-10-21: not started. `main` = 9b9d114 (hover animation approved and pushed).
+- 2026-10-21: stage 1 in progress on `gasp-integration` (base `2a17eec`; approved hover backup `9b9d114`). Imported 2,861 CMC dependency packages and added plugin/tag/traversal settings. User approved the isolated CMC review scene and it is saved. Original 711 content files and C++ source unchanged. Full editor suite: baseline 7 pass / 4 fail; post-migration 8 pass / 3 fail. A moving-target punch case is a potential regression after case-level repeat/control comparisons. Headless execution remains unverified. Integration settings restored after the control run. Stage 2 has not started; do not merge main. See `Docs/GASP_INTEGRATION.md` for evidence and remaining checks. Checkpoint commit pending.
