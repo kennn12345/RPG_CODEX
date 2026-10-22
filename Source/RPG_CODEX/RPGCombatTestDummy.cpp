@@ -57,13 +57,13 @@ ARPGCombatTestDummy::ARPGCombatTestDummy()
 	Mesh->SetGenerateOverlapEvents(false);
 	Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
-	static ConstructorHelpers::FObjectFinder<USkeletalMesh> MeshAsset(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"));
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> MeshAsset(TEXT("/Game/Characters/UEFN_Mannequin/Meshes/SKM_UEFN_Mannequin.SKM_UEFN_Mannequin"));
 	if (MeshAsset.Succeeded()) Mesh->SetSkeletalMeshAsset(MeshAsset.Object);
-	static ConstructorHelpers::FObjectFinder<UPhysicsAsset> Bodies(TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
+	static ConstructorHelpers::FObjectFinder<UPhysicsAsset> Bodies(TEXT("/Game/Characters/UEFN_Mannequin/Rigs/PA_UEFN_Mannequin.PA_UEFN_Mannequin"));
 	if (Bodies.Succeeded()) Mesh->SetPhysicsAsset(Bodies.Object);
-	static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle"));
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Relaxed_Stand_Idle_Loop.M_Relaxed_Stand_Idle_Loop"));
 	if (Idle.Succeeded()) IdleAnimation = Idle.Object;
-	static ConstructorHelpers::FObjectFinder<UBlendSpace> Locomotion(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/BS_Idle_Walk_Run.BS_Idle_Walk_Run"));
+	static ConstructorHelpers::FObjectFinder<UBlendSpace> Locomotion(TEXT("/Game/RPG/Combat/GASP/BS_GASP_Dummy_IdleWalk.BS_GASP_Dummy_IdleWalk"));
 	if (Locomotion.Succeeded()) LocomotionBlendSpace = Locomotion.Object;
 
 	PhysicsReaction = CreateDefaultSubobject<URPGPhysicsReactionComponent>(TEXT("PhysicsReaction"));
