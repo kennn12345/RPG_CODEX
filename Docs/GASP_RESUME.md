@@ -6,4 +6,4 @@ Read GASP_CLAUDE_STAGE5_HANDOFF.md for the complete handoff. Focused saved-playe
 
 The active CMC AnimBP retains its original generated class identity, now parented to RPGAnimInstance with DefaultSlot and cached UpperBody layer from spine_01. A sibling duplicate was rejected and removed because Chooser contexts require the original class identity. A pre-stage4 reference backup remains under RPG/GASPIntegration/Backup. Source GameAnimationSample project untouched. No temporary test clips were saved as gameplay assets. Unreal has closed after tests.
 
-Pause hourly continuation finish-rpg-codex-gasp-integration-through-stage-4 after final handoff backup. User will inspect the result in Unreal. Claude stage5 requires a new user instruction.
+Hourly continuation finish-rpg-codex-gasp-integration-through-stage-4 is PAUSED; stages3-4 are complete and backed up. User will inspect the result in Unreal. Claude stage5 requires a new user instruction.
