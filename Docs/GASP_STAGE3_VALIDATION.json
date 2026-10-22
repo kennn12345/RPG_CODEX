@@ -1,0 +1,44 @@
+{
+  "passed": true,
+  "actions": [
+    "<RPGPlayerAction.JUMP: 26>",
+    "<RPGPlayerAction.FLIGHT_STARTED: 28>",
+    "<RPGPlayerAction.FLIGHT_BOOST: 34>",
+    "<RPGPlayerAction.FLIGHT_CANCELLED: 29>",
+    "<RPGPlayerAction.ATTACK_CHARGE_STARTED: 46>",
+    "<RPGPlayerAction.ATTACK: 1>",
+    "<RPGPlayerAction.ATTACK_CHARGE_STARTED: 46>",
+    "<RPGPlayerAction.POWER_ATTACK: 3>",
+    "<RPGPlayerAction.KICK_CHARGE_STARTED: 47>",
+    "<RPGPlayerAction.POWER_KICK: 20>",
+    "<RPGPlayerAction.ATTACK_CHARGE_STARTED: 46>",
+    "<RPGPlayerAction.ATTACK_CHARGE_CANCELLED: 48>",
+    "<RPGPlayerAction.UNARMED_GUARD: 12>",
+    "<RPGPlayerAction.DEFENSE_RELEASED: 13>",
+    "<RPGPlayerAction.CAMERA_PERSPECTIVE: 39>",
+    "<RPGPlayerAction.CAMERA_PERSPECTIVE: 39>"
+  ],
+  "player": "BP_RPGPlayer_C",
+  "dive_diagnostics": {
+    "pitch": -35.0,
+    "velocity": "<Struct 'Vector' (0x000001C097F790F0) {x: 1038.400644, y: 1038.400644, z: -187.001677}>",
+    "input_vector": "<Struct 'Vector' (0x000001C097F790F0) {x: 0.707107, y: 0.707107, z: -0.350111}>"
+  },
+  "flags": {
+    "flight_started": true,
+    "flight_rise": true,
+    "flight_movement": true,
+    "flight_dive": true,
+    "flight_cancelled": true,
+    "landed": true,
+    "blocking": true,
+    "first_person": true,
+    "shadow_exists": true,
+    "shadow_class_matches": true,
+    "shadow_no_collision": true,
+    "third_person_restored": true
+  },
+  "max_attack_charge": 1.0,
+  "max_kick_charge": 1.0,
+  "max_fly_speed": 1600.0
+}
