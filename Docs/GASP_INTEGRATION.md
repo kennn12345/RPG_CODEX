@@ -2,9 +2,9 @@
 
 ## Status
 
-Stage 1 is **approved**. Stage 2 is **in progress under the revised GASP-character handoff**. Earlier Manny-retargeting guidance below is historical and superseded by Docs/GASP_HANDOFF.md. Branch: `gasp-integration`, based on `2a17eec` (handoff documentation; parent `9b9d114` is the approved hover backup). Stage 2 player and game-mode changes are saved; reload and movement tests are in progress. Do not merge main.
+Stage 1 is **approved**. Stage 2 is **implemented and verified, awaiting user approval** on `gasp-integration`. New `BP_RPGPlayer` uses the original GASP CMC character and UEFN AnimBP/skeleton; RPG movement/input checks passed. Final headless suite: 5 pass / 6 fail; old clip-dependent combat failures are documented in [GASP_STAGE2.md](GASP_STAGE2.md). Implementation checkpoint: `172c8d4`; this validation follow-up completes its verification. Main remains `2a17eec`. Stage 3 has not started; do not merge main. Earlier Manny-retargeting guidance below is historical and superseded by Docs/GASP_HANDOFF.md.
 
-The user approved the isolated CMC review scene, and the log confirms its map save at 2026-10-21 18:33:09 America/Chicago. The original 711 Content files still match their pre-migration SHA-256 manifest. No existing C++ source, RPG input bindings, combat/flight clips, player AnimBP, player Blueprint, or test dummy has changed.
+Stage 1 historical evidence: the user approved the isolated CMC review scene, and the log confirms its map save at 2026-10-21 18:33:09 America/Chicago. The original 711 Content files still match their pre-migration SHA-256 manifest. No existing C++ source, RPG input bindings, combat/flight clips, player AnimBP, player Blueprint, or test dummy has changed.
 
 ## Imported and configured
 

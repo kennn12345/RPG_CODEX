@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-22",
+  "stage": 2,
+  "branch": "gasp-integration",
+  "implementationCommit": "172c8d4",
+  "build": "Succeeded",
+  "player": "BP_RPGPlayer_C",
+  "mesh": "/Game/Characters/UEFN_Mannequin/Meshes/SKM_UEFN_Mannequin.SKM_UEFN_Mannequin",
+  "skeleton": "/Game/Characters/UEFN_Mannequin/Meshes/SK_UEFN_Mannequin.SK_UEFN_Mannequin",
+  "animInstance": "SandboxCharacter_CMC_ABP_C",
+  "movementPassed": true,
+  "inputReady": true,
+  "stateReady": true,
+  "sprintSeen": true,
+  "crouchSeen": true,
+  "jumpSeen": true,
+  "peakHorizontalSpeed": 500.0000000000034,
+  "unfilteredContextPriorities": {
+    "IMC_Default": "None",
+    "IMC_MouseLook": "None",
+    "IMC_Sandbox": "None"
+  },
+  "before": {
+    "failed": 4,
+    "passed": 7
+  },
+  "after": {
+    "failed": 6,
+    "passed": 5
+  },
+  "tests": [
+    {
+      "fullTestPath": "RPG.Combat.DummyWander",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.FirstPersonSteadiness",
+      "state": "Success"
+    },
+    {
+      "fullTestPath": "RPG.Combat.PhysicsReaction",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.StrikeContact",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.StrikeContactFirstPerson",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.TestDummy",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Combat.TestDummyFirstPerson",
+      "state": "Fail"
+    },
+    {
+      "fullTestPath": "RPG.Power.Calibration",
+      "state": "Success"
+    },
+    {
+      "fullTestPath": "RPG.Power.Channels",
+      "state": "Success"
+    },
+    {
+      "fullTestPath": "RPG.Power.DummyLaunch",
+      "state": "Success"
+    },
+    {
+      "fullTestPath": "RPG.Power.Ladder",
+      "state": "Success"
+    }
+  ],
+  "changedOriginalAssets": [
+    "Content\\ThirdPerson\\Blueprints\\BP_ThirdPersonGameMode.uasset"
+  ],
+  "limitations": "No compatible RPG attack/guard/kick/flight clips yet; missing attacks/hits are expected. Hardware controller feel, gameplay/flight checks and animation hooks remain later-stage work."
+}
