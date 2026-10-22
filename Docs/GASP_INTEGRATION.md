@@ -2,7 +2,7 @@
 
 ## Status
 
-Stage 1 is **ready for user review, awaiting approval**. Branch: `gasp-integration`, based on `2a17eec` (handoff documentation; parent `9b9d114` is the approved hover backup). Stage 2 has not started. Do not merge main or switch the RPG player yet.
+Stage 1 is **approved**. Stage 2 is **in progress under the revised GASP-character handoff**. Earlier Manny-retargeting guidance below is historical and superseded by Docs/GASP_HANDOFF.md. Branch: `gasp-integration`, based on `2a17eec` (handoff documentation; parent `9b9d114` is the approved hover backup). Stage 2 player and game-mode changes are saved; reload and movement tests are in progress. Do not merge main.
 
 The user approved the isolated CMC review scene, and the log confirms its map save at 2026-10-21 18:33:09 America/Chicago. The original 711 Content files still match their pre-migration SHA-256 manifest. No existing C++ source, RPG input bindings, combat/flight clips, player AnimBP, player Blueprint, or test dummy has changed.
 
