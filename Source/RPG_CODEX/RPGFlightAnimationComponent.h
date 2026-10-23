@@ -100,6 +100,14 @@ public:
 	 *  is held straight, so it barely wobbles. */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
 	float BraceStiffen = 3.f;
+	/** Wingsuit: in fast, hard corners both arms and both legs spread out from the body (degrees at full spread), by the
+	 *  turn's sideways force times speed: full spread at WingsuitForce (1000 cm/s^2 units) at FastSpeed, fading as you slow. */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float WingsuitArms = 55.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float WingsuitLegs = 18.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0.1"))
+	float WingsuitForce = 2.5f;
 	/** Steering, like a plane's control surfaces (degrees at full effect): the legs swing together to the outside of a
 	 *  turn (rudder) per radian-per-second of turning; climbing swings them forward and under, diving lets them trail
 	 *  back (elevators) per degree of flight-path angle; braking hard spreads the arms and opens the legs (flaps). */

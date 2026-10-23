@@ -197,7 +197,10 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 		return FMath::Min(FlowBrace * Outer + FlowBraceSharp * Outer * Outer, FlowBraceMax)
 			- FMath::Min(0.35f * FlowBrace * Inner, 0.35f * FlowBraceMax) + FlapArms * Brake;
 	};
-	const float BraceL = BraceFor(LeftOuter, RightOuter), BraceR = BraceFor(RightOuter, LeftOuter);
+	// Wingsuit spread (0..1): both sides open in fast, hard corners, fading with speed.
+	const float Spread = FMath::Clamp(FMath::Abs(SideForce) / WingsuitForce * SpeedAlpha, 0.f, 1.f);
+	const float BraceL = FMath::Min(BraceFor(LeftOuter, RightOuter) + WingsuitArms * Spread, FlowBraceMax);
+	const float BraceR = FMath::Min(BraceFor(RightOuter, LeftOuter) + WingsuitArms * Spread, FlowBraceMax);
 	// Small steps so the springs stay stable at any frame rate.
 	const int32 Steps = FMath::Clamp(FMath::CeilToInt(DeltaTime / (1.f / 120.f)), 1, 8);
 	const float Dt = DeltaTime / Steps;
@@ -236,7 +239,7 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 			// climbing, trailing back diving; flaps: open a little when braking.
 			const float Rudder = FMath::Clamp(RudderPerTurn * TurnRateRad, -RudderMax, RudderMax);   // + = toward the left
 			const FVector LeftAxis = FVector::CrossProduct(Dir, FVector(1, 0, 0)).GetSafeNormal();
-			Rest = LeftAxis * FMath::DegreesToRadians(Rudder) + OutAxis * FMath::DegreesToRadians(FlapLegs * Brake)
+			Rest = LeftAxis * FMath::DegreesToRadians(Rudder) + OutAxis * FMath::DegreesToRadians(FlapLegs * Brake + WingsuitLegs * Spread)
 				+ ForwardAxis * FMath::DegreesToRadians(FMath::Clamp(ElevatorPerDegree * PathPitch, -ElevatorMax, ElevatorMax));
 		}
 
