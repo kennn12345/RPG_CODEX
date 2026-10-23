@@ -111,9 +111,15 @@ public:
 	/** Turning at speed, the upper chest rolls so the inside shoulder drops (turning left, the left shoulder): degrees at
 	 *  full turn force (WingsuitForce) at FastSpeed, up to ShoulderDipMax. */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
-	float ShoulderDip = 25.f;
+	float ShoulderDip = 45.f;
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
-	float ShoulderDipMax = 35.f;
+	float ShoulderDipMax = 55.f;
+	/** The lower back bends sideways into the turn (the body curves into it), degrees at full turn force at FastSpeed. */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float TorsoArch = 18.f;
+	/** Wingsuit rudder: legs swing to the outside of the turn by the turn's force at speed (degrees at full force). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float RudderPerForce = 25.f;
 	/** Steering, like a plane's control surfaces (degrees at full effect): the legs swing together to the outside of a
 	 *  turn (rudder) per radian-per-second of turning; climbing swings them forward and under, diving lets them trail
 	 *  back (elevators) per degree of flight-path angle; braking hard spreads the arms and opens the legs (flaps). */

@@ -231,6 +231,12 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 			Rest = OutAxis * FMath::DegreesToRadians(Brace);
 			Stiffen += BraceStiffen * FMath::Clamp(Brace / FMath::Max(FlowBraceMax, 1.f), 0.f, 1.f);   // a braced arm is held firm
 		}
+		if (FCString::Strstr(J.Bone, TEXT("spine_0")) && (J.Bone[7] == TEXT('1') || J.Bone[7] == TEXT('2')))
+		{
+			// Back arch: the lower back bends sideways into the turn, same sense as the shoulder dip.
+			const float Arch = FMath::Clamp(TorsoArch * SideForce / WingsuitForce * SpeedAlpha, -TorsoArch, TorsoArch);
+			Rest = FVector(0.f, FMath::DegreesToRadians(Arch * 0.5f), 0.f);
+		}
 		if (FCString::Strstr(J.Bone, TEXT("spine_0")) && (J.Bone[7] == TEXT('4') || J.Bone[7] == TEXT('5')))
 		{
 			// Shoulder dip: roll the upper chest about its forward axis toward the inside of the turn. A + turn about
@@ -242,7 +248,8 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 		{
 			// Rudder: both legs to the outside of the turn (turning left -> to the right); elevators: forward and under
 			// climbing, trailing back diving; flaps: open a little when braking.
-			const float Rudder = FMath::Clamp(RudderPerTurn * TurnRateRad, -RudderMax, RudderMax);   // + = toward the left
+			// (+ = toward the left; a left turn pulls toward +X, so the legs go right: -.)
+			const float Rudder = FMath::Clamp(RudderPerTurn * TurnRateRad - RudderPerForce * SideForce / WingsuitForce * SpeedAlpha, -RudderMax - RudderPerForce, RudderMax + RudderPerForce);
 			const FVector LeftAxis = FVector::CrossProduct(Dir, FVector(1, 0, 0)).GetSafeNormal();
 			Rest = LeftAxis * FMath::DegreesToRadians(Rudder) + OutAxis * FMath::DegreesToRadians(FlapLegs * Brake + WingsuitLegs * Spread)
 				+ ForwardAxis * FMath::DegreesToRadians(FMath::Clamp(ElevatorPerDegree * PathPitch, -ElevatorMax, ElevatorMax));
