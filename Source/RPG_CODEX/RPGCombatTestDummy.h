@@ -153,6 +153,11 @@ public:
 	TSoftObjectPtr<UAnimSequence> StaggerBackAnimation;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger", meta = (ClampMin = "0"))
 	float StaggerDazedTime = 1.f;
+	/** Staggers step the way the blow pushes (one of GASP's eight stop-step directions, ending on either foot); a push
+	 *  of at least this many cm (the Power System's displacement) takes the bigger running stop instead of the walking
+	 *  one. StaggerBackAnimation is the fallback. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger", meta = (ClampMin = "0"))
+	float StaggerHeavyDisplacement = 45.f;
 	/** Where each clip's first frame lies in its own component space: pelvis X / Y (cm) and the pelvis-to-head direction
 	 *  (degrees about up), measured from the clips. The dummy is turned and placed so that frame lands on the ragdoll. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
@@ -181,6 +186,8 @@ private:
 	bool bStaggering = false;
 
 	void PlayIdle();
+	/** The stop-step clip for a stagger pushed along WorldPush (horizontal), heavy or not. */
+	UAnimSequence* PickStaggerClip(const FVector& WorldPush, bool bHeavy) const;
 	void UpdateWander(float DeltaTime);
 	void PickWanderTarget();
 	/** Keeps the capsule standing on the floor below it (falling off anything higher than a step). */

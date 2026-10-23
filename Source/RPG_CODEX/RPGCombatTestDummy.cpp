@@ -114,6 +114,24 @@ void ARPGCombatTestDummy::BeginPlay()
 	}
 }
 
+UAnimSequence* ARPGCombatTestDummy::PickStaggerClip(const FVector& WorldPush, bool bHeavy) const
+{
+	// Push direction in the dummy's own frame: 0 = straight ahead, +90 = to its right, 180 = straight back.
+	const FVector Local = GetActorTransform().InverseTransformVectorNoScale(FVector(WorldPush.X, WorldPush.Y, 0.f));
+	if (Local.IsNearlyZero()) return nullptr;
+	const float Angle = FMath::RadiansToDegrees(FMath::Atan2(Local.Y, Local.X));
+	static const TCHAR* Sectors[] = { TEXT("F"), TEXT("FR"), TEXT("R"), TEXT("BR"), TEXT("B"), TEXT("BL"), TEXT("L"), TEXT("FL") };
+	const int32 Sector = (FMath::RoundToInt(FMath::Fmod(Angle + 360.f, 360.f) / 45.f)) % 8;
+	const bool bLeftFoot = FMath::RandBool();
+	// GASP names: Stop_<direction>_<foot>; sideways stops are LL / LR and RL / RR (direction letter, then foot).
+	FString Dir = Sectors[Sector];
+	if (Dir == TEXT("L") || Dir == TEXT("R")) Dir += bLeftFoot ? TEXT("L") : TEXT("R");
+	const TCHAR* Gait = bHeavy ? TEXT("Run") : TEXT("Walk");
+	const FString Name = FString::Printf(TEXT("M_Neutral_%s_Stop_%s_%s"), Gait, *Dir, bLeftFoot ? TEXT("Lfoot") : TEXT("Rfoot"));
+	const FString Path = FString::Printf(TEXT("/Game/Characters/UEFN_Mannequin/Animations/%s/%s.%s"), Gait, *Name, *Name);
+	return LoadObject<UAnimSequence>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+}
+
 void ARPGCombatTestDummy::PlayIdle()
 {
 	if (!Mesh) return;
@@ -390,7 +408,13 @@ void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	ShoveVelocity = FVector::ZeroVector;
 	PlayImpactFeel(Hit.Attacker, Result.Reaction);
 	// Stagger: steps back (sliding with the shove) and stands dazed a moment, the body wobbling on weak motors.
-	UAnimSequence* StaggerBack = Result.Reaction == ERPGPowerReaction::Stagger ? StaggerBackAnimation.LoadSynchronous() : nullptr;
+	UAnimSequence* StaggerBack = nullptr;
+	if (Result.Reaction == ERPGPowerReaction::Stagger)
+	{
+		const FVector Push = Hit.StrikeDirection.IsNearlyZero() && Hit.Attacker ? GetActorLocation() - Hit.Attacker->GetActorLocation() : Hit.StrikeDirection;
+		StaggerBack = PickStaggerClip(Push, Result.Displacement >= StaggerHeavyDisplacement);
+		if (!StaggerBack) StaggerBack = StaggerBackAnimation.LoadSynchronous();
+	}
 	if (StaggerBack && PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Limp)
 	{
 		Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
