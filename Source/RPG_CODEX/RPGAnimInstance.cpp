@@ -61,6 +61,8 @@ void FRPGAnimInstanceProxy::PreUpdate(UAnimInstance* InAnimInstance, float Delta
 		GuardSteadyMontage = Instance->GuardSteadyMontage;
 		for (int32 I = 0; I < RPGStrikeContact::NumLimbs; ++I) ContactSets[I] = Instance->ContactSets[I];
 		ContactReleaseTime = Instance->ContactReleaseTime;
+		FlowBones = Instance->FlowBones;
+		FlowRotations = Instance->FlowRotations;
 	}
 }
 
@@ -71,6 +73,7 @@ bool FRPGAnimInstanceProxy::Evaluate_WithRoot(FPoseContext& Output, FAnimNode_Ba
 	EvaluateAnimationNode_WithRoot(Output, InRootNode);
 	ApplyGuardSteady(Output);   // before the aim, which then swings the steadied chest about the eyes
 	ApplySpineAim(Output);
+	ApplyFlow(Output);
 	ApplyStrikeContact(Output);   // last: on the final arm and leg positions
 	return true;
 }
@@ -100,6 +103,28 @@ void FRPGAnimInstanceProxy::ApplyGuardSteady(FPoseContext& Output) const
 	{
 		const FCompactPoseBoneIndex Index = Find(Clavicle);
 		if (Index.IsValid() && Bones.GetParentBoneIndex(Index) == Chest) Pose[Index].AddToTranslation(Local);
+	}
+}
+
+void FRPGAnimInstanceProxy::ApplyFlow(FPoseContext& Output) const
+{
+	// Parents first (the list is in that order): each bone turned in component space about its own pivot.
+	FCompactPose& Pose = Output.Pose;
+	const FBoneContainer& Bones = Pose.GetBoneContainer();
+	for (int32 I = 0; I < FlowBones.Num() && I < FlowRotations.Num(); ++I)
+	{
+		const float Angle = float(FlowRotations[I].Size());
+		if (Angle < 1.e-4f) continue;
+		const int32 MeshIndex = Bones.GetPoseBoneIndexForBoneName(FlowBones[I]);
+		if (MeshIndex == INDEX_NONE) continue;
+		const FCompactPoseBoneIndex Index = Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshIndex));
+		if (!Index.IsValid()) continue;
+		FQuat Parent = FQuat::Identity;
+		for (FCompactPoseBoneIndex Up = Bones.GetParentBoneIndex(Index); Up.IsValid(); Up = Bones.GetParentBoneIndex(Up))
+			Parent = Pose[Up].GetRotation() * Parent;
+		const FQuat Delta(FlowRotations[I] / Angle, Angle);
+		FTransform& Local = Pose[Index];
+		Local.SetRotation((Parent.Inverse() * Delta * Parent * Local.GetRotation()).GetNormalized());
 	}
 }
 

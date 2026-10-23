@@ -27,6 +27,7 @@ private:
 	void ApplySpineAim(FPoseContext& Output) const;
 	void ApplyGuardSteady(FPoseContext& Output) const;
 	void ApplyStrikeContact(FPoseContext& Output);
+	void ApplyFlow(FPoseContext& Output) const;
 
 public:
 	/** Component-space offset the contact moved this limb's hand / foot by in the last pose. */
@@ -45,6 +46,8 @@ private:
 	/** Kept between poses: Applied grows at once (never into the surface), eases off over ContactReleaseTime. */
 	FRPGLimbContactResult ContactResults[RPGStrikeContact::NumLimbs];
 	float ContactReleaseTime = 0.06f;
+	TArray<FName> FlowBones;
+	TArray<FVector> FlowRotations;
 };
 
 /**
@@ -103,6 +106,11 @@ public:
 	 */
 	UPROPERTY(Transient)
 	TWeakObjectPtr<class URPGPrototypeAnimationComponent> MirrorFrom;
+
+	/** Follow-through (URPGFlightAnimationComponent): each bone turned by a rotation vector (component space, radians)
+	 *  on top of the animation - limbs swinging with momentum and springing back. */
+	TArray<FName> FlowBones;
+	TArray<FVector> FlowRotations;
 
 protected:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;

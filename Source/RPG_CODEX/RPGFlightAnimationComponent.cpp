@@ -3,6 +3,7 @@
 #include "RPGCombatStateComponent.h"
 #include "RPGMovementAbilityComponent.h"
 #include "RPGPhysicsReactionComponent.h"
+#include "RPGAnimInstance.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
@@ -28,6 +29,12 @@ void URPGFlightAnimationComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	UAnimInstance* Instance = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
 	if (!Movement || !Instance) return;
 
+	if (DeltaTime > 0.f)
+	{
+		const FVector Accel = (Movement->Velocity - FlowLastVelocity) / DeltaTime;
+		FlowLastVelocity = Movement->Velocity;
+		UpdateLimbFlow(Character->GetMesh(), Instance, Accel, Movement->Velocity, Movement->IsFlying(), DeltaTime);
+	}
 	if (!Movement->IsFlying())
 	{
 		ResetBodyReaction(Character->GetMesh());
@@ -94,7 +101,14 @@ void URPGFlightAnimationComponent::UpdateBodyReaction(USkeletalMeshComponent* Me
 		LastVelocity = Velocity;
 		LastHeading = Velocity.Rotation().Yaw;
 		Pitch = Roll = 0.f;
+		SmoothedYaw = float(Owner->GetActorRotation().Yaw);
 	}
+	// The body turns after the view: a smoothed yaw that catches up with the actor's.
+	const float ActorYaw = float(Owner->GetActorRotation().Yaw);
+	const float YawStep = FMath::FindDeltaAngleDegrees(SmoothedYaw, ActorYaw) * (1.f - FMath::Exp(-TurnFollowSpeed * DeltaTime));
+	SmoothedYaw = FRotator::NormalizeAxis(SmoothedYaw + YawStep);
+	TurnRateRad = FMath::DegreesToRadians(YawStep / DeltaTime);
+	const float YawLag = FMath::FindDeltaAngleDegrees(ActorYaw, SmoothedYaw);
 	const float Horizontal = float(Velocity.Size2D());
 	const float React = FMath::Lerp(HoverReaction, 1.f, FMath::Clamp(Horizontal / FMath::Max(FastSpeed, 1.f), 0.f, 1.f));
 	const FVector Accel = (Velocity - LastVelocity) / DeltaTime;
@@ -115,7 +129,7 @@ void URPGFlightAnimationComponent::UpdateBodyReaction(USkeletalMeshComponent* Me
 	LastHeading = Heading;
 
 	// Turn about the hips, in the actor's frame.
-	const FQuat Lean = FRotator(Pitch, 0.f, Roll).Quaternion();
+	const FQuat Lean = FQuat(FVector::UpVector, FMath::DegreesToRadians(YawLag)) * FRotator(Pitch, 0.f, Roll).Quaternion();
 	const FVector Pivot = RestLocation + FVector(0.f, 0.f, PivotHeight);
 	Mesh->SetRelativeLocationAndRotation(Pivot + Lean.RotateVector(RestLocation - Pivot), Lean * RestRotation);
 }
@@ -124,5 +138,79 @@ void URPGFlightAnimationComponent::ResetBodyReaction(USkeletalMeshComponent* Mes
 {
 	if (!bReacting) return;
 	bReacting = false;
+	TurnRateRad = 0.f;
 	if (Mesh) Mesh->SetRelativeLocationAndRotation(RestLocation, RestRotation);
+}
+
+namespace
+{
+	/** Follow-through joints, parents first: bone, the way the limb hangs from it (mesh space), how much momentum moves
+	 *  it, how stiff it is (lower = lags more, so the motion rolls down the chain), how much the air drags it, and
+	 *  which side it is on (legs: +1 left, -1 right; they swing outward freely but only a little inward, so they never
+	 *  cross into each other). Arms are held actively: half the swing, stiffer, no drag. */
+	struct FFlowJoint { const TCHAR* Bone; FVector Dir; float Gain; float Stiff; float Drag; float LegSide; };
+	const FFlowJoint FlowJoints[] = {
+		{ TEXT("spine_01"), FVector(0, 0, -1), 0.12f, 2.f, 1.f, 0.f },
+		{ TEXT("spine_02"), FVector(0, 0, -1), 0.08f, 2.f, 1.f, 0.f },
+		{ TEXT("thigh_l"), FVector(0, 0, -1), 1.f, 1.f, 1.f, 1.f },
+		{ TEXT("calf_l"), FVector(0, 0, -1), 0.8f, 0.6f, 1.f, 1.f },
+		{ TEXT("thigh_r"), FVector(0, 0, -1), 1.f, 1.f, 1.f, -1.f },
+		{ TEXT("calf_r"), FVector(0, 0, -1), 0.8f, 0.6f, 1.f, -1.f },
+		{ TEXT("upperarm_l"), FVector(0, 0, -1), 0.45f, 1.5f, 0.f, 0.f },
+		{ TEXT("lowerarm_l"), FVector(0, 0, -1), 0.3f, 1.2f, 0.f, 0.f },
+		{ TEXT("upperarm_r"), FVector(0, 0, -1), 0.45f, 1.5f, 0.f, 0.f },
+		{ TEXT("lowerarm_r"), FVector(0, 0, -1), 0.3f, 1.2f, 0.f, 0.f },
+	};
+}
+
+void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, UAnimInstance* Instance, const FVector& Accel, const FVector& Velocity, bool bFlying, float DeltaTime)
+{
+	URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Instance);
+	if (!Mesh || !Anim) return;
+	const int32 N = UE_ARRAY_COUNT(FlowJoints);
+	if (FlowAngle.Num() != N) { FlowAngle.Init(FVector::ZeroVector, N); FlowSpeed.Init(FVector::ZeroVector, N); }
+	FlowWeight = FMath::FInterpConstantTo(FlowWeight, bFlying && bLimbFlow ? 1.f : 0.f, DeltaTime, 3.f);
+	if (FlowWeight <= 0.f)
+	{
+		for (int32 I = 0; I < N; ++I) FlowAngle[I] = FlowSpeed[I] = FVector::ZeroVector;
+		Anim->FlowBones.Reset();
+		Anim->FlowRotations.Reset();
+		return;
+	}
+	// Momentum in the mesh's own frame: limbs swing against the acceleration and are swept back by the air.
+	const FTransform& ToMesh = Mesh->GetComponentTransform();
+	const FVector A = ToMesh.InverseTransformVectorNoScale(Accel.GetClampedToMaxSize(6000.f)) / 1000.f;
+	const FVector V = ToMesh.InverseTransformVectorNoScale(Velocity) / 1000.f;
+	const float SpeedAlpha = FMath::Clamp(float(Velocity.Size()) / FMath::Max(FastSpeed, 1.f), 0.f, 1.f);
+	const float MaxAngle = FMath::DegreesToRadians(FlowMaxAngle);
+	// Small steps so the springs stay stable at any frame rate.
+	const int32 Steps = FMath::Clamp(FMath::CeilToInt(DeltaTime / (1.f / 120.f)), 1, 8);
+	const float Dt = DeltaTime / Steps;
+	Anim->FlowBones.SetNum(N);
+	Anim->FlowRotations.SetNum(N);
+	for (int32 I = 0; I < N; ++I)
+	{
+		const FFlowJoint& J = FlowJoints[I];
+		const float K = FlowStiffness * J.Stiff * FMath::Lerp(1.f, FlowStiffnessAtSpeed, SpeedAlpha);
+		const float C = 2.f * FlowDamping * FMath::Sqrt(K);
+		const FVector Push = J.Gain * (FlowInertia * FVector::CrossProduct(J.Dir, -A) + FlowDrag * J.Drag * SpeedAlpha * FVector::CrossProduct(J.Dir, -V)
+			- FlowTurn * TurnRateRad * FVector::UpVector * 10.f);   // lag behind the body's turn
+		for (int32 S = 0; S < Steps; ++S)
+		{
+			FlowSpeed[I] += (Push - K * FlowAngle[I] - C * FlowSpeed[I]) * Dt;
+			FlowAngle[I] += FlowSpeed[I] * Dt;
+		}
+		if (FlowAngle[I].Size() > MaxAngle) { FlowAngle[I] = FlowAngle[I].GetSafeNormal() * MaxAngle; FlowSpeed[I] *= 0.5f; }
+		if (J.LegSide != 0.f)
+		{
+			// Sideways swing is a turn about the forward axis (+Y, mesh space; +X is the character's left): a positive
+			// turn moves a hanging foot toward -X. Inward = toward the other leg: keep that small.
+			const float Inward = 0.06f;
+			FVector& Ang = FlowAngle[I];
+			if (J.LegSide > 0.f && Ang.Y > Inward) { Ang.Y = Inward; FlowSpeed[I].Y = FMath::Min(FlowSpeed[I].Y, 0.f); }
+			if (J.LegSide < 0.f && Ang.Y < -Inward) { Ang.Y = -Inward; FlowSpeed[I].Y = FMath::Max(FlowSpeed[I].Y, 0.f); }
+		}
+		Anim->FlowBones[I] = FName(J.Bone);
+		Anim->FlowRotations[I] = FlowAngle[I] * FlowWeight;
+	}
 }

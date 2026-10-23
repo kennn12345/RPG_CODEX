@@ -61,6 +61,36 @@ public:
 	/** How quickly the body follows (higher = snappier). */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Body Reaction", meta = (ClampMin = "0.1"))
 	float ReactionSpeed = 6.f;
+	/** Follow-through while flying: arms, legs and lower back are springs pulled back to the animated pose. Momentum
+	 *  swings them off it (they lag when speeding up, swing on when stopping, swing out in turns), drag sweeps them back
+	 *  at speed, and the pull back weakens the faster you fly. Head and upper chest are not moved. */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through")
+	bool bLimbFlow = true;
+	/** Pull back to the pose (higher = stiffer, quicker to return). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "1"))
+	float FlowStiffness = 60.f;
+	/** At FastSpeed the pull back is this fraction of FlowStiffness (harder to hold the pose at speed). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0.05", ClampMax = "1"))
+	float FlowStiffnessAtSpeed = 0.6f;
+	/** Bounce: lower = more overshoot and swinging back and forth, 1 = settles without overshoot. */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0.05", ClampMax = "2"))
+	float FlowDamping = 0.35f;
+	/** How hard momentum swings the limbs (per 1000 cm/s^2 of speeding up, slowing or turning). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
+	float FlowInertia = 16.f;
+	/** How hard the air sweeps them back (per 1000 cm/s, growing with speed). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
+	float FlowDrag = 2.5f;
+	/** Largest swing of any joint, degrees. */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
+	float FlowMaxAngle = 28.f;
+	/** Turning swings the limbs too (they lag behind the body's turn). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
+	float FlowTurn = 0.3f;
+	/** The body turns after the view instead of snapping with it (higher = quicker to catch up). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Body Reaction", meta = (ClampMin = "0.1"))
+	float TurnFollowSpeed = 5.f;
+
 	/** Hips, legs and arms trail the chest and head on physics while flying (URPGPhysicsReactionComponent::SetFlightFollow). */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Body Reaction")
 	bool bFollowThrough = false;   // off: physics follow-through jittered (2026-10-23); an animation-side follow-through replaces it
@@ -72,11 +102,16 @@ private:
 	/** Body reaction: turns the mesh about the hips; restores it when flight ends. */
 	void UpdateBodyReaction(class USkeletalMeshComponent* Mesh, const FVector& Velocity, float DeltaTime);
 	void ResetBodyReaction(class USkeletalMeshComponent* Mesh);
+	void UpdateLimbFlow(class USkeletalMeshComponent* Mesh, class UAnimInstance* Instance, const FVector& Accel, const FVector& Velocity, bool bFlying, float DeltaTime);
+	TArray<FVector> FlowAngle, FlowSpeed;
+	float FlowWeight = 0.f;
+	FVector FlowLastVelocity = FVector::ZeroVector;
 	bool bReacting = false;
 	FVector RestLocation = FVector::ZeroVector;
 	FQuat RestRotation = FQuat::Identity;
 	FVector LastVelocity = FVector::ZeroVector;
 	float LastHeading = 0.f, Pitch = 0.f, Roll = 0.f;
+	float SmoothedYaw = 0.f, TurnRateRad = 0.f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> Playing;
