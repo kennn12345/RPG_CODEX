@@ -106,7 +106,7 @@ public:
 
 	/** Partial physics: bodies simulate under motors toward the animation, the limb holding HitBone yields. */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
-	void EnterPoweredReaction(FName HitBone);
+	void EnterPoweredReaction(FName HitBone, bool bDazed = false);
 
 	/** Full ragdoll for LimpTime seconds (<= 0: until ReturnToAnimated is called), then returns on its own. */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
@@ -164,11 +164,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction")
 	bool bUseDefaultPhysMaterial = true;
 
-	/** Off (the rule): a ragdoll is always the whole body, so only knockdowns / launches (LIMP) go to physics and
-	 *  ordinary hits leave the body on its animation (staggers will be animations). On: the older POWERED reaction,
-	 *  the body above the anchored pelvis reacting on motors. */
+	/** Ordinary hits (flinch / stagger) move the whole body on motors without ragdolling: everything but the pelvis
+	 *  takes the force and is pulled back to the animation, legs included (stiffer, and they don't collide with the
+	 *  floor meanwhile so the feet can't be shoved apart). Off: ordinary hits leave the body on its animation. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered")
-	bool bPartialRagdoll = false;
+	bool bHitReactions = true;
+
+	/** Leg motors are this many times the others, so the legs give a little but keep it standing. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
+	float LegMotorScale = 2.5f;
+
+	/** Stagger (dazed): every motor starts at this fraction of its strength and recovers over StaggerRecoverTime, so the
+	 *  whole body wobbles; the struck part yields for StaggerYieldTime first. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Stagger", meta = (ClampMin = "0", ClampMax = "1"))
+	float StaggerMotorScale = 0.75f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Stagger", meta = (ClampMin = "0"))
+	float StaggerYieldTime = 0.3f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Stagger", meta = (ClampMin = "0"))
+	float StaggerRecoverTime = 1.6f;
 
 	/** Knockdowns / launches: how much of the trunk's starting speed the arms and legs get (0 = they start still and
 	 *  are only dragged along, 1 = the whole body moves as one). The body's total momentum is the same either way. */
@@ -247,11 +260,11 @@ public:
 
 	/** Speed (cm/s) a Flinch gives the struck body: impulse = this * the body's mass. Only how much the limb yields. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Power", meta = (ClampMin = "0"))
-	float FlinchImpulseSpeed = 200.f;
+	float FlinchImpulseSpeed = 120.f;
 
 	/** Same for a Stagger (and the topple push of a Knockdown). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Power", meta = (ClampMin = "0"))
-	float StaggerImpulseSpeed = 450.f;
+	float StaggerImpulseSpeed = 220.f;
 
 	/** TEMPORARY. Impulse multiplier when the hit sends the body LIMP. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Impulse (TEMPORARY)", meta = (ClampMin = "0"))
@@ -281,6 +294,8 @@ private:
 	bool SetUpControls();
 	void SetLimbMotorScale(FName Limb, float Scale);
 	void SetAllMotorScale(float Scale);
+	/** Powered motors at recovery R (0 = just hit, 1 = recovered): all, legs, struck limb. */
+	void ApplyPoweredMotorScales(float R);
 	void SetPhysicsBlend(float Weight);
 	void FinishReturn();
 	void ApplyPendingImpulse();
@@ -297,6 +312,8 @@ private:
 	TMap<FName, FName> BoneLimbs;
 	TMap<FName, TArray<FName>> LimbControls;
 	TArray<FName> AllModifiers;
+	TArray<FName> LegModifiers;
+	float CurrentYieldTime = 0.1f, CurrentRecoverTime = 0.6f, CurrentMotorBase = 1.f;
 	TArray<FName> AllControls;
 
 	FName StruckLimb;

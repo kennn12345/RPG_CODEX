@@ -1,16 +1,33 @@
-"""Builds /Game/RPG/Maps/L_DummyField: a 100 m x 100 m test field. The middle 50 m x 50 m is flat and clear for testing;
+"""Builds /Game/RPG/Maps/L_DummyField (and the root-locked stagger clip the dummies use): a 100 m x 100 m test field. The middle 50 m x 50 m is flat and clear for testing;
 around it are hills and slopes (gentle to steep), a walled corner, low boundary walls, and four wandering GASP dummies.
 Run in the full editor:  UnrealEditor.exe RPG_CODEX.uproject -ExecutePythonScript="<abs path to this file>"
 (it saves the level and closes the editor). Re-running rebuilds it from scratch."""
 import unreal, math
 
 PATH = '/Game/RPG/Maps/L_DummyField'
+
+# The dummy's stagger step-back: GASP's backward walk-to-stop, copied so the dummy can tune it. Its root motion is kept:
+# the dummy moves to where the root ends, so the feet stay planted.
+STAGGER = '/Game/RPG/Combat/GASP/M_Dummy_StaggerBack'
+if not unreal.EditorAssetLibrary.does_asset_exist(STAGGER):
+    unreal.EditorAssetLibrary.duplicate_asset('/Game/Characters/UEFN_Mannequin/Animations/Walk/M_Neutral_Walk_Stop_B_Lfoot', STAGGER)
+clip = unreal.load_asset(STAGGER)
+clip.set_editor_property('force_root_lock', False)
+unreal.EditorAssetLibrary.save_asset(STAGGER)
 les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
 eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-try:
-    les.new_level(PATH, False)
-except TypeError:
-    les.new_level(PATH)
+if unreal.EditorAssetLibrary.does_asset_exist(PATH):
+    # Rebuild in place: open it and clear it (it may be the startup map, already open, where new_level would only
+    # add a second copy of everything).
+    les.load_level(PATH)
+    for a in eas.get_all_level_actors():
+        if not isinstance(a, (unreal.WorldSettings, unreal.Brush)):
+            eas.destroy_actor(a)
+else:
+    try:
+        les.new_level(PATH, False)
+    except TypeError:
+        les.new_level(PATH)
 
 CUBE = unreal.load_asset('/Engine/BasicShapes/Cube')
 
@@ -63,14 +80,30 @@ sky.get_component_by_class(unreal.SkyLightComponent).set_editor_property('real_t
 eas.spawn_actor_from_class(unreal.ExponentialHeightFog, unreal.Vector(0, 0, 0))
 eas.spawn_actor_from_class(unreal.VolumetricCloud, unreal.Vector(0, 0, 0))
 
-# Player start (south of the middle, looking north) and four dummies: two in the flat middle (small wander area) and
-# two near the hills (big wander area, so they walk up and down the slopes).
+# Player start (south of the middle, looking north). The player keeps its average stats (Strength 5, the rest 50).
 eas.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0, -1500, 100), unreal.Rotator(roll=0, pitch=0, yaw=90))
-for i, (x, y, radius) in enumerate([(400, 0, 500), (-500, 600, 500), (2300, 600, 1600), (-2300, -2300, 1600)]):
+
+# Four dummies with different builds (the Power System arena's set, plus a Strength for when they fight back): two in
+# the flat middle (small wander area), two near the hills (big wander area, so they walk the slopes).
+#   label, x, y, wander radius, mass kg, strength, durability, stability, stagger resistance, max health
+DUMMIES = [
+    ('Standard Bandit', 400, 0, 500, 82, 4, 40, 50, 50, 100),
+    ('Light Scout', -500, 600, 500, 55, 3, 35, 40, 40, 70),
+    ('Heavy Brute', 2300, 600, 1600, 164, 8, 70, 70, 60, 250),
+    ('Steady Veteran', -2300, -2300, 1600, 90, 6, 55, 85, 80, 150),
+]
+for label, x, y, radius, mass, strength, durability, stability, stagger, health in DUMMIES:
     d = eas.spawn_actor_from_class(unreal.RPGCombatTestDummy, unreal.Vector(x, y, 92), unreal.Rotator(roll=0, pitch=0, yaw=-90))
-    d.set_actor_label('Dummy_%d' % (i + 1))
+    d.set_actor_label(label.replace(' ', '_'))
+    d.set_editor_property('display_label', label)
     d.set_editor_property('wander', True)
     d.set_editor_property('wander_radius', float(radius))
+    stats = d.get_editor_property('stats')
+    ss = stats.get_editor_property('starting_stats')
+    for k, v in (('mass', mass), ('strength', strength), ('durability', durability), ('stability', stability),
+                 ('stagger_resistance', stagger), ('max_health', health)):
+        ss.set_editor_property(k, float(v))
+    stats.set_editor_property('starting_stats', ss)
 
 les.save_current_level()
 unreal.log('DUMMY FIELD BUILT')

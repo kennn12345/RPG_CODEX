@@ -14,6 +14,7 @@
 #include "HAL/IConsoleManager.h"
 #include "TimerManager.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Animation/BlendSpace.h"
 #include "Engine/World.h"
@@ -65,10 +66,9 @@ ARPGCombatTestDummy::ARPGCombatTestDummy()
 	if (Idle.Succeeded()) IdleAnimation = Idle.Object;
 	static ConstructorHelpers::FObjectFinder<UBlendSpace> Locomotion(TEXT("/Game/RPG/Combat/GASP/BS_GASP_Dummy_IdleWalk.BS_GASP_Dummy_IdleWalk"));
 	if (Locomotion.Succeeded()) LocomotionBlendSpace = Locomotion.Object;
-	static ConstructorHelpers::FObjectFinder<UAnimSequence> GetUpDown(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F.M_ragdoll_getup_stand_F"));
-	if (GetUpDown.Succeeded()) GetUpFaceDown = GetUpDown.Object;
-	static ConstructorHelpers::FObjectFinder<UAnimSequence> GetUpUp(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B.M_ragdoll_getup_stand_B"));
-	if (GetUpUp.Succeeded()) GetUpFaceUp = GetUpUp.Object;
+	GetUpFaceDown = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F.M_ragdoll_getup_stand_F"));
+	GetUpFaceUp = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B.M_ragdoll_getup_stand_B"));
+	StaggerBackAnimation = FSoftObjectPath(TEXT("/Game/RPG/Combat/GASP/M_Dummy_StaggerBack.M_Dummy_StaggerBack"));
 
 	PhysicsReaction = CreateDefaultSubobject<URPGPhysicsReactionComponent>(TEXT("PhysicsReaction"));
 
@@ -118,6 +118,8 @@ void ARPGCombatTestDummy::PlayIdle()
 {
 	if (!Mesh) return;
 	GetUpTimeLeft = 0.f;
+	bStaggering = false;
+	if (UAnimInstance* Anim = Mesh->GetAnimInstance()) Anim->SetRootMotionMode(ERootMotionMode::RootMotionFromMontagesOnly);
 	Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 	// Wandering: the locomotion blend space, driven by speed each frame (0 = its idle). Otherwise the plain idle.
 	bPlayingLocomotion = bWander && LocomotionBlendSpace;
@@ -256,17 +258,44 @@ void ARPGCombatTestDummy::Tick(float DeltaTime)
 	if (GetUpTimeLeft > 0.f)
 	{
 		GetUpTimeLeft -= DeltaTime;
-		if (GetUpTimeLeft > 0.f) return;
-		PlayIdle();
+		if (GetUpTimeLeft <= 0.f)
+		{
+			// The step-back clip moved its root away from the actor: move the actor there as the idle takes over.
+			const FVector RootOffset = bStaggering ? Mesh->GetComponentTransform().TransformVectorNoScale(Mesh->GetSocketTransform(TEXT("root"), RTS_Component).GetLocation()) : FVector::ZeroVector;
+			bStaggering = false;
+			PlayIdle();
+			if (!RootOffset.IsNearlyZero())
+			{
+				const FVector Before = GetActorLocation();
+				SetActorLocation(Before + FVector(RootOffset.X, RootOffset.Y, 0.f), true);
+				ShoveOffset += GetActorLocation() - Before;
+				SnapToFloor(DeltaTime);
+			}
+		}
 	}
+	const bool bBusy = GetUpTimeLeft > 0.f;   // getting up or staggering: no walking
+	if (bStaggering)
+		if (UAnimInstance* Anim = Mesh->GetAnimInstance())
+		{
+			// The step-back clip's own root motion moves the dummy, frame by frame, so the body goes where the feet step.
+			const FRootMotionMovementParams Root = Anim->ConsumeExtractedRootMotion(1.f);
+			if (Root.bHasRootMotion)
+			{
+				const FVector Move = Mesh->ConvertLocalRootMotionToWorld(Root.GetRootMotionTransform()).GetTranslation();
+				const FVector Before = GetActorLocation();
+				SetActorLocation(Before + FVector(Move.X, Move.Y, 0.f), true);
+				ShoveOffset += GetActorLocation() - Before;
+				SnapToFloor(DeltaTime);
+			}
+		}
 
-	if (bWander != bPlayingLocomotion && (bWander ? LocomotionBlendSpace != nullptr : true))
+	if (!bBusy && bWander != bPlayingLocomotion && (bWander ? LocomotionBlendSpace != nullptr : true))
 	{
 		// switched on / off at runtime (e.g. by a test): swap to the matching animation and stop where it stands
 		Speed = 0.f; bHasTarget = false;
 		PlayIdle();
 	}
-	if (bWander) UpdateWander(DeltaTime);
+	if (!bBusy && bWander) UpdateWander(DeltaTime);
 
 	if (!ShoveVelocity.IsNearlyZero())
 	{
@@ -357,9 +386,22 @@ void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 
 	// Reaction and displacement channels -> physics. A ragdoll carries its own velocity; standing, it slides back.
 	PhysicsReaction->HandlePowerHit(Hit, Result);
-	if (PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Limp)   // not ragdolled (flinch / stagger): slide back on its feet
-		ShoveVelocity = FVector(Result.DisplacementVelocity.X, Result.DisplacementVelocity.Y, 0.f);
+	// Standing hits (flinch / stagger) don't slide the dummy: a stagger steps back on its own feet (below).
+	ShoveVelocity = FVector::ZeroVector;
 	PlayImpactFeel(Hit.Attacker, Result.Reaction);
+	// Stagger: steps back (sliding with the shove) and stands dazed a moment, the body wobbling on weak motors.
+	UAnimSequence* StaggerBack = Result.Reaction == ERPGPowerReaction::Stagger ? StaggerBackAnimation.LoadSynchronous() : nullptr;
+	if (StaggerBack && PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Limp)
+	{
+		Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		Mesh->PlayAnimation(StaggerBack, false);
+		if (UAnimInstance* Anim = Mesh->GetAnimInstance()) Anim->SetRootMotionMode(ERootMotionMode::RootMotionFromEverything);
+		bStaggering = true;
+		bPlayingLocomotion = false;
+		Speed = 0.f;
+		bHasTarget = false;
+		GetUpTimeLeft = StaggerBack->GetPlayLength() + StaggerDazedTime;
+	}
 
 	// Readout: everything the Power System worked out for this hit.
 	const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
@@ -389,7 +431,9 @@ void ARPGCombatTestDummy::PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Rea
 	{
 		if (AActor* Previous = HitStopAttacker.Get()) Previous->CustomTimeDilation = 1.f;
 		HitStopAttacker = Attacker;
-		CustomTimeDilation = S->HitStopTimeDilation;
+		// The dummy itself only freezes when it ragdolls: standing on reaction motors, a slowed dummy stops steering
+		// its bodies while physics runs on, and it flops for that moment.
+		if (PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Powered) CustomTimeDilation = S->HitStopTimeDilation;
 		if (Attacker) Attacker->CustomTimeDilation = S->HitStopTimeDilation;
 		GetWorldTimerManager().SetTimer(HitStopTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
 		{
@@ -442,7 +486,7 @@ void ARPGCombatTestDummy::HandleLimpEnding()
 		// clip's first frame lies where the body does; the fade back to animation then blends into that frame.
 		const FVector Left = Mesh->GetBoneLocation(TEXT("thigh_l")) - Mesh->GetBoneLocation(TEXT("thigh_r"));
 		const bool bFaceDown = FVector::CrossProduct(Mesh->GetBoneLocation(TEXT("spine_05")) - Pelvis, Left).Z < 0.f;
-		UAnimSequence* GetUp = bFaceDown ? GetUpFaceDown : GetUpFaceUp;
+		UAnimSequence* GetUp = (bFaceDown ? GetUpFaceDown : GetUpFaceUp).LoadSynchronous();
 		if (GetUp)
 		{
 			const FVector Start = bFaceDown ? GetUpFaceDownStart : GetUpFaceUpStart;

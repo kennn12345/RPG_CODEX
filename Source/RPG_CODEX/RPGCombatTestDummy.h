@@ -141,11 +141,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy")
 	FString DisplayLabel;
 
-	/** Get-up clips (from GASP), played where the body lies after a knockdown: lying face down / face up. */
+	/** Get-up clips (from GASP), played where the body lies after a knockdown: lying face down / face up. Soft references,
+	 *  loaded when first used: GASP clips pull in GASP Blueprints that need plugins not loaded yet at startup. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	TObjectPtr<UAnimSequence> GetUpFaceDown;
+	TSoftObjectPtr<UAnimSequence> GetUpFaceDown;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	TObjectPtr<UAnimSequence> GetUpFaceUp;
+	TSoftObjectPtr<UAnimSequence> GetUpFaceUp;
+	/** Stagger: a step or two back (GASP's backward walk-to-stop; the clip's own root motion carries the body, so the
+	 *  feet stay planted), then it stands dazed for StaggerDazedTime before it walks on. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger")
+	TSoftObjectPtr<UAnimSequence> StaggerBackAnimation;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger", meta = (ClampMin = "0"))
+	float StaggerDazedTime = 1.f;
 	/** Where each clip's first frame lies in its own component space: pelvis X / Y (cm) and the pelvis-to-head direction
 	 *  (degrees about up), measured from the clips. The dummy is turned and placed so that frame lands on the ragdoll. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
@@ -169,8 +176,9 @@ public:
 	void ResetDummy();
 
 private:
-	/** Seconds of get-up clip left (the dummy does nothing else meanwhile). */
+	/** Seconds of get-up or stagger clip left (the dummy does nothing else meanwhile but slide). */
 	float GetUpTimeLeft = 0.f;
+	bool bStaggering = false;
 
 	void PlayIdle();
 	void UpdateWander(float DeltaTime);

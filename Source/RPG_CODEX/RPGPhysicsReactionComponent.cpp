@@ -126,6 +126,7 @@ bool URPGPhysicsReactionComponent::SetUpControls()
 			BoneModifiers.Add(Bone, Modifier);
 			BoneLimbs.Add(Bone, Limb.Key);
 			AllModifiers.Add(Modifier);
+			if (Limb.Key == TEXT("LegLeft") || Limb.Key == TEXT("LegRight")) LegModifiers.Add(Modifier);
 		}
 
 	// Motors: each body driven toward its animated orientation relative to its parent body. Off until a reaction.
@@ -190,6 +191,18 @@ void URPGPhysicsReactionComponent::SetAllMotorScale(float Scale)
 	for (const TPair<FName, TArray<FName>>& Limb : LimbControls) SetLimbMotorScale(Limb.Key, Scale);
 }
 
+void URPGPhysicsReactionComponent::ApplyPoweredMotorScales(float R)
+{
+	const float All = FMath::Lerp(CurrentMotorBase, 1.f, R);
+	for (const TPair<FName, TArray<FName>>& Limb : LimbControls)
+	{
+		float Scale = All;
+		if (Limb.Key == TEXT("LegLeft") || Limb.Key == TEXT("LegRight")) Scale *= LegMotorScale;
+		if (Limb.Key == StruckLimb) Scale *= FMath::Lerp(StruckLimbStrengthScale, 1.f, R);
+		SetLimbMotorScale(Limb.Key, Scale);
+	}
+}
+
 void URPGPhysicsReactionComponent::SetPhysicsBlend(float Weight)
 {
 	PhysicsBlend = Weight;
@@ -209,8 +222,8 @@ void URPGPhysicsReactionComponent::HandleMeleeHit(const FRPGMeleeHitInfo& Hit)
 	if (!Mesh) return;
 
 	const bool bLimp = State == ERPGPhysicsReactionState::Limp || (Hit.bCharged && Hit.ChargePercent >= LimpChargeThreshold);
-	// Ragdoll is all or nothing: no half-ragdoll for ordinary hits (staggers will be animations).
-	if (!bLimp && !bPartialRagdoll) return;
+	// Ragdoll is all or nothing; ordinary hits get the whole-body motor reaction (or none).
+	if (!bLimp && !bHitReactions) return;
 	bWaitForSettle = false;
 	if (bLimp) EnterFullRagdoll(LimpTime);
 	else EnterPoweredReaction(Hit.HitBone);
@@ -263,8 +276,8 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 
 	const bool bLimp = Result.Reaction == ERPGPowerReaction::Knockdown || Result.Reaction == ERPGPowerReaction::Launch
 		|| State == ERPGPhysicsReactionState::Limp;
-	// Ragdoll is all or nothing: flinches and staggers don't ragdoll part of the body (they will be animations).
-	if (!bLimp && !bPartialRagdoll) return;
+	// Ragdoll is all or nothing; flinches and staggers get the whole-body motor reaction (or none).
+	if (!bLimp && !bHitReactions) return;
 
 	if (bLimp)
 	{
@@ -286,7 +299,7 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 	}
 	else
 	{
-		EnterPoweredReaction(Hit.HitBone);
+		EnterPoweredReaction(Hit.HitBone, Result.Reaction == ERPGPowerReaction::Stagger);
 	}
 
 	// The struck part still takes a local push, so the hit reads on the body (and a knockdown topples away from it).
@@ -341,7 +354,7 @@ void URPGPhysicsReactionComponent::ApplyPendingVelocity()
 	}
 }
 
-void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone)
+void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDazed)
 {
 	if (!bSetUp || !PhysicsControl) return;
 	// A hit while already ragdolled keeps it limp.
@@ -352,6 +365,9 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone)
 	StateTime = 0.f;
 	bReturning = false;
 	StruckLimb = GetLimbForBone(HitBone);
+	CurrentYieldTime = bDazed ? StaggerYieldTime : PoweredYieldTime;
+	CurrentRecoverTime = bDazed ? StaggerRecoverTime : PoweredRecoverTime;
+	CurrentMotorBase = bDazed ? StaggerMotorScale : 1.f;
 
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Simulated, true, false);
 	if (const FName* Anchor = BoneModifiers.Find(AnchorBone))
@@ -366,8 +382,8 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone)
 		Data.bEnabled = true;
 		PhysicsControl->SetControlData(Name, Data, true, false);
 	}
-	SetAllMotorScale(1.f);
-	SetLimbMotorScale(StruckLimb, StruckLimbStrengthScale);
+	PhysicsControl->SetBodyModifiersCollisionType(LegModifiers, ECollisionEnabled::QueryOnly);
+	ApplyPoweredMotorScales(0.f);
 	// From the animation the bodies start exactly on the pose, so full weight at once; part-way through a fade back
 	// it blends in quickly instead of popping to the physics pose.
 	if (bFromAnimation) SetPhysicsBlend(1.f);
@@ -389,6 +405,7 @@ void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 	LimpDuration = InLimpTime;
 
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Simulated, true, false);
+	PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
 	PhysicsControl->SetControlsEnabled(AllControls, false);
 	if (bFromAnimation) SetPhysicsBlend(1.f);
 
@@ -481,6 +498,7 @@ void URPGPhysicsReactionComponent::FinishReturn()
 	SetPhysicsBlend(0.f);
 	PhysicsControl->SetControlsEnabled(AllControls, false);
 	SetAllMotorScale(1.f);
+	PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Kinematic, true, false);
 	PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(AllModifiers, EResetToCachedTargetBehavior::ResetDuringUpdateControls, true, false);
 }
@@ -517,9 +535,9 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 			if (State == ERPGPhysicsReactionState::Powered)
 			{
 				// Struck limb: yields, then its motors recover to full strength, then the pose fades back.
-				const float Recover = PoweredRecoverTime > 0.f ? FMath::Clamp((StateTime - PoweredYieldTime) / PoweredRecoverTime, 0.f, 1.f) : 1.f;
-				SetLimbMotorScale(StruckLimb, FMath::Lerp(StruckLimbStrengthScale, 1.f, Recover * Recover));
-				if (StateTime >= PoweredYieldTime + PoweredRecoverTime) ReturnToAnimated(ReturnBlendTime);
+				const float Recover = CurrentRecoverTime > 0.f ? FMath::Clamp((StateTime - CurrentYieldTime) / CurrentRecoverTime, 0.f, 1.f) : 1.f;
+				ApplyPoweredMotorScales(Recover * Recover);
+				if (StateTime >= CurrentYieldTime + CurrentRecoverTime) ReturnToAnimated(ReturnBlendTime);
 			}
 			else if (LimpDuration > 0.f && StateTime >= LimpDuration)
 			{

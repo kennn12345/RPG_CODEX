@@ -73,7 +73,6 @@ namespace
 				Dummy->Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 				Dummy->StopWanderingAtHome();   // the cases place the player relative to a dummy standing where it was placed
 				Dummy->bUsePowerSystem = false; // this test covers the physics mechanics with the fixed charge -> state rule
-				Dummy->PhysicsReaction->bPartialRagdoll = true;   // and the POWERED (part-body) reaction, off by default now
 				StartCase(Player, Controller, Now);
 				return false;
 			}
