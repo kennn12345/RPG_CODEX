@@ -144,22 +144,24 @@ void URPGFlightAnimationComponent::ResetBodyReaction(USkeletalMeshComponent* Mes
 
 namespace
 {
-	/** Follow-through joints, parents first: bone, the way the limb hangs from it (mesh space), how much momentum moves
-	 *  it, how stiff it is (lower = lags more, so the motion rolls down the chain), how much the air drags it, and
-	 *  which side it is on (legs: +1 left, -1 right; they swing outward freely but only a little inward, so they never
-	 *  cross into each other). Arms are held actively: half the swing, stiffer, no drag. */
-	struct FFlowJoint { const TCHAR* Bone; FVector Dir; float Gain; float Stiff; float Drag; float LegSide; };
+	/** Follow-through joints, parents first: bone, the next bone down the limb (its direction is read from the pose each
+	 *  frame, so hanging, along-the-body and horizontal poses all swing the right way), how much momentum moves it, how
+	 *  stiff it is (lower = lags more, so the motion rolls down the chain), how much the air drags it, which side it is
+	 *  on (+1 left, -1 right: it swings outward freely but only a little inward, so legs don't cross and hands don't go
+	 *  into the body), and whether it is an upper arm / thigh (where the steering acts). Arms are held actively: about
+	 *  half the swing, stiffer, no drag. */
+	struct FFlowJoint { const TCHAR* Bone; const TCHAR* Child; float Gain; float Stiff; float Drag; float Side; bool bArm; bool bThigh; };
 	const FFlowJoint FlowJoints[] = {
-		{ TEXT("spine_01"), FVector(0, 0, -1), 0.12f, 2.f, 1.f, 0.f },
-		{ TEXT("spine_02"), FVector(0, 0, -1), 0.08f, 2.f, 1.f, 0.f },
-		{ TEXT("thigh_l"), FVector(0, 0, -1), 1.f, 1.f, 1.f, 1.f },
-		{ TEXT("calf_l"), FVector(0, 0, -1), 0.8f, 0.6f, 1.f, 1.f },
-		{ TEXT("thigh_r"), FVector(0, 0, -1), 1.f, 1.f, 1.f, -1.f },
-		{ TEXT("calf_r"), FVector(0, 0, -1), 0.8f, 0.6f, 1.f, -1.f },
-		{ TEXT("upperarm_l"), FVector(0, 0, -1), 0.45f, 1.5f, 0.f, 0.f },
-		{ TEXT("lowerarm_l"), FVector(0, 0, -1), 0.3f, 1.2f, 0.f, 0.f },
-		{ TEXT("upperarm_r"), FVector(0, 0, -1), 0.45f, 1.5f, 0.f, 0.f },
-		{ TEXT("lowerarm_r"), FVector(0, 0, -1), 0.3f, 1.2f, 0.f, 0.f },
+		{ TEXT("spine_01"), TEXT("spine_02"), 0.12f, 2.f, 1.f, 0.f, false, false },
+		{ TEXT("spine_02"), TEXT("spine_03"), 0.08f, 2.f, 1.f, 0.f, false, false },
+		{ TEXT("thigh_l"), TEXT("calf_l"), 1.f, 1.f, 1.f, 1.f, false, true },
+		{ TEXT("calf_l"), TEXT("foot_l"), 0.8f, 0.6f, 1.f, 1.f, false, false },
+		{ TEXT("thigh_r"), TEXT("calf_r"), 1.f, 1.f, 1.f, -1.f, false, true },
+		{ TEXT("calf_r"), TEXT("foot_r"), 0.8f, 0.6f, 1.f, -1.f, false, false },
+		{ TEXT("upperarm_l"), TEXT("lowerarm_l"), 0.45f, 1.5f, 0.f, 1.f, true, false },
+		{ TEXT("lowerarm_l"), TEXT("hand_l"), 0.3f, 1.2f, 0.f, 1.f, false, false },
+		{ TEXT("upperarm_r"), TEXT("lowerarm_r"), 0.45f, 1.5f, 0.f, -1.f, true, false },
+		{ TEXT("lowerarm_r"), TEXT("hand_r"), 0.3f, 1.2f, 0.f, -1.f, false, false },
 	};
 }
 
@@ -168,7 +170,7 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 	URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Instance);
 	if (!Mesh || !Anim) return;
 	const int32 N = UE_ARRAY_COUNT(FlowJoints);
-	if (FlowAngle.Num() != N) { FlowAngle.Init(FVector::ZeroVector, N); FlowSpeed.Init(FVector::ZeroVector, N); }
+	if (FlowAngle.Num() != N) { FlowAngle.Init(FVector::ZeroVector, N); FlowSpeed.Init(FVector::ZeroVector, N); FlowDir.Init(FVector::ZeroVector, N); }
 	FlowWeight = FMath::FInterpConstantTo(FlowWeight, bFlying && bLimbFlow ? 1.f : 0.f, DeltaTime, 3.f);
 	if (FlowWeight <= 0.f)
 	{
@@ -177,14 +179,25 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 		Anim->FlowRotations.Reset();
 		return;
 	}
-	// Momentum in the mesh's own frame: limbs swing against the acceleration and are swept back by the air.
+	// Momentum in the mesh's own frame (+Y forward, +X the character's left, +Z up): limbs swing against the
+	// acceleration and are swept back by the air.
 	const FTransform& ToMesh = Mesh->GetComponentTransform();
 	const FVector A = ToMesh.InverseTransformVectorNoScale(Accel.GetClampedToMaxSize(6000.f)) / 1000.f;
 	const FVector V = ToMesh.InverseTransformVectorNoScale(Velocity) / 1000.f;
 	const float SpeedAlpha = FMath::Clamp(float(Velocity.Size()) / FMath::Max(FastSpeed, 1.f), 0.f, 1.f);
-	const float MaxAngle = FMath::DegreesToRadians(FlowMaxAngle);
+	const float MaxSwing = FMath::DegreesToRadians(FlowMaxAngle);
 	const float Brake = FMath::Clamp(-A.Y * 1000.f / FlapBrake, 0.f, 1.f);   // slowing along the body's forward (+Y)
 	const float PathPitch = FMath::RadiansToDegrees(FMath::Atan2(float(Velocity.Z), FMath::Max(float(Velocity.Size2D()), 300.f)));
+	// Bracing per side (degrees out from the body), from the turn's sideways force (smoothed): turning right pulls the
+	// body to its right (-X), so the left arm is the outer one. The inner arm tucks a little; both spread braking (flaps).
+	SideForce = FMath::FInterpTo(SideForce, float(A.X), DeltaTime, 6.f);
+	const float LeftOuter = FMath::Max(0.f, -SideForce), RightOuter = FMath::Max(0.f, SideForce);
+	auto BraceFor = [&](float Outer, float Inner)
+	{
+		return FMath::Min(FlowBrace * Outer + FlowBraceSharp * Outer * Outer, FlowBraceMax)
+			- FMath::Min(0.35f * FlowBrace * Inner, 0.35f * FlowBraceMax) + FlapArms * Brake;
+	};
+	const float BraceL = BraceFor(LeftOuter, RightOuter), BraceR = BraceFor(RightOuter, LeftOuter);
 	// Small steps so the springs stay stable at any frame rate.
 	const int32 Steps = FMath::Clamp(FMath::CeilToInt(DeltaTime / (1.f / 120.f)), 1, 8);
 	const float Dt = DeltaTime / Steps;
@@ -193,49 +206,63 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 	for (int32 I = 0; I < N; ++I)
 	{
 		const FFlowJoint& J = FlowJoints[I];
-		const float K = FlowStiffness * J.Stiff * FMath::Lerp(1.f, FlowStiffnessAtSpeed, SpeedAlpha);
-		const float C = 2.f * FlowDamping * FMath::Sqrt(K);
-		const FVector Push = J.Gain * (FlowInertia * FVector::CrossProduct(J.Dir, -A) + FlowDrag * J.Drag * SpeedAlpha * FVector::CrossProduct(J.Dir, -V)
-			- FlowTurn * TurnRateRad * FVector::UpVector * 10.f);   // lag behind the body's turn
-		// Steering: where the spring pulls each limb moves with the flight, like a plane's control surfaces. Sideways is
-		// a turn about the forward axis (+Y): + moves a hanging limb toward -X (the character's right). Forward / back is
-		// a turn about the side axis (+X): + swings it forward. Yaw + is a turn to the right.
+		// The limb's current direction, and the turns that swing its tip outward (away from the body's middle) and
+		// forward: a turn W moves the tip along W x Dir, so the axis for a direction X is Dir x X.
+		// (Read from last frame's pose with this joint's own swing taken back out, and smoothed, so a big swing doesn't
+		// feed back into itself.)
+		FVector Dir = Mesh->GetBoneLocation(FName(J.Child), EBoneSpaces::ComponentSpace) - Mesh->GetBoneLocation(FName(J.Bone), EBoneSpaces::ComponentSpace);
+		const FVector Applied = I < Anim->FlowRotations.Num() ? Anim->FlowRotations[I] : FVector::ZeroVector;
+		if (Applied.Size() > 1.e-4f) Dir = FQuat(Applied.GetSafeNormal(), float(Applied.Size())).Inverse().RotateVector(Dir);
+		Dir = Dir.IsNearlyZero() ? FVector(0, 0, -1) : Dir.GetSafeNormal();
+		FlowDir[I] = FlowDir[I].IsNearlyZero() ? Dir : (FlowDir[I] + (Dir - FlowDir[I]) * FMath::Min(1.f, 6.f * DeltaTime)).GetSafeNormal();
+		Dir = FlowDir[I];
+		const FVector OutAxis = J.Side != 0.f ? FVector::CrossProduct(Dir, FVector(J.Side, 0, 0)).GetSafeNormal() : FVector::ZeroVector;
+		const FVector ForwardAxis = FVector::CrossProduct(Dir, FVector(0, 1, 0)).GetSafeNormal();
+
+		// Steering rest (where the spring pulls), like a plane's control surfaces.
 		FVector Rest = FVector::ZeroVector;
-		const FString BoneName(J.Bone);
-		const bool bRightArm = BoneName == TEXT("upperarm_r"), bLeftArm = BoneName == TEXT("upperarm_l");
-		const bool bThigh = BoneName.StartsWith(TEXT("thigh_"));
-		if (bRightArm || bLeftArm)
+		float Stiffen = 1.f;
+		const float Brace = J.Side > 0.f ? BraceL : BraceR;
+		if (J.bArm)
 		{
-			// Ailerons: the outer arm braces out, the inner one tucks in a little; flaps: both spread when braking.
-			const float Outer = bRightArm ? FMath::Max(0.f, -TurnRateRad) : FMath::Max(0.f, TurnRateRad);
-			const float Inner = bRightArm ? FMath::Max(0.f, TurnRateRad) : FMath::Max(0.f, -TurnRateRad);
-			const float Out = FMath::Min(FlowBrace * Outer, FlowBraceMax) - FMath::Min(0.35f * FlowBrace * Inner, 0.35f * FlowBraceMax) + FlapArms * Brake;
-			Rest.Y = FMath::DegreesToRadians(bRightArm ? Out : -Out);
+			Rest = OutAxis * FMath::DegreesToRadians(Brace);
+			Stiffen += BraceStiffen * FMath::Clamp(Brace / FMath::Max(FlowBraceMax, 1.f), 0.f, 1.f);   // a braced arm is held firm
 		}
-		if (bThigh)
+		else if (J.Side != 0.f && !J.bThigh && FCString::Strstr(J.Bone, TEXT("lowerarm")))
+			Stiffen += BraceStiffen * FMath::Clamp(Brace / FMath::Max(FlowBraceMax, 1.f), 0.f, 1.f);   // and kept straight
+		if (J.bThigh)
 		{
-			// Rudder: both legs to the outside of the turn (turning left -> to the right, +); elevators: forward and under
+			// Rudder: both legs to the outside of the turn (turning left -> to the right); elevators: forward and under
 			// climbing, trailing back diving; flaps: open a little when braking.
-			const float Rudder = FMath::Clamp(-RudderPerTurn * TurnRateRad, -RudderMax, RudderMax);
-			const float Flap = FlapLegs * Brake * (J.LegSide > 0.f ? -1.f : 1.f);
-			Rest.Y = FMath::DegreesToRadians(Rudder + Flap);
-			Rest.X = FMath::DegreesToRadians(FMath::Clamp(ElevatorPerDegree * PathPitch, -ElevatorMax, ElevatorMax));
+			const float Rudder = FMath::Clamp(RudderPerTurn * TurnRateRad, -RudderMax, RudderMax);   // + = toward the left
+			const FVector LeftAxis = FVector::CrossProduct(Dir, FVector(1, 0, 0)).GetSafeNormal();
+			Rest = LeftAxis * FMath::DegreesToRadians(Rudder) + OutAxis * FMath::DegreesToRadians(FlapLegs * Brake)
+				+ ForwardAxis * FMath::DegreesToRadians(FMath::Clamp(ElevatorPerDegree * PathPitch, -ElevatorMax, ElevatorMax));
 		}
+
+		const float K = FlowStiffness * J.Stiff * Stiffen * FMath::Lerp(1.f, FlowStiffnessAtSpeed, SpeedAlpha);
+		const float C = 2.f * FlowDamping * FMath::Sqrt(K);
+		const FVector Push = J.Gain / Stiffen * (FlowInertia * FVector::CrossProduct(Dir, -A) + FlowDrag * J.Drag * SpeedAlpha * FVector::CrossProduct(Dir, -V)
+			- FlowTurn * TurnRateRad * FVector::UpVector * 10.f);   // lag behind the body's turn
 		for (int32 S = 0; S < Steps; ++S)
 		{
 			FlowSpeed[I] += (Push - K * (FlowAngle[I] - Rest) - C * FlowSpeed[I]) * Dt;
 			FlowAngle[I] += FlowSpeed[I] * Dt;
 		}
-		if (FlowAngle[I].Size() > MaxAngle) { FlowAngle[I] = FlowAngle[I].GetSafeNormal() * MaxAngle; FlowSpeed[I] *= 0.5f; }
-		if (J.LegSide != 0.f)
+		// Swing off the steering rest is limited; the rest itself may go further (a full brace).
+		FVector Off = FlowAngle[I] - Rest;
+		if (Off.Size() > MaxSwing) { Off = Off.GetSafeNormal() * MaxSwing; FlowAngle[I] = Rest + Off; FlowSpeed[I] *= 0.5f; }
+		if (J.Side != 0.f)
 		{
-			// Sideways swing is a turn about the forward axis (+Y, mesh space; +X is the character's left): a positive
-			// turn moves a hanging foot toward -X. Inward = toward the other leg: keep that small.
-			// (Measured from the steering rest: when the rudder swings both legs the same way they can't cross.)
-			const float Inward = 0.06f;
-			FVector& Ang = FlowAngle[I];
-			if (J.LegSide > 0.f && Ang.Y - Rest.Y > Inward) { Ang.Y = Rest.Y + Inward; FlowSpeed[I].Y = FMath::Min(FlowSpeed[I].Y, 0.f); }
-			if (J.LegSide < 0.f && Ang.Y - Rest.Y < -Inward) { Ang.Y = Rest.Y - Inward; FlowSpeed[I].Y = FMath::Max(FlowSpeed[I].Y, 0.f); }
+			// Inward (toward the body's middle / the other limb) only a little past the rest.
+			const float Inward = -float(FVector::DotProduct(Off, OutAxis));
+			const float Limit = 0.06f;
+			if (Inward > Limit)
+			{
+				FlowAngle[I] += OutAxis * (Inward - Limit);
+				const float Vin = -float(FVector::DotProduct(FlowSpeed[I], OutAxis));
+				if (Vin > 0.f) FlowSpeed[I] += OutAxis * Vin;
+			}
 		}
 		Anim->FlowBones[I] = FName(J.Bone);
 		Anim->FlowRotations[I] = FlowAngle[I] * FlowWeight;

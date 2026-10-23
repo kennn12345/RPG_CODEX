@@ -87,19 +87,26 @@ public:
 	/** Turning swings the limbs too (they lag behind the body's turn). */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
 	float FlowTurn = 0.3f;
-	/** Sharp turns: the outer arm braces out from the body (turning left, the right arm), this many degrees per
-	 *  radian-per-second of turning, up to FlowBraceMax. */
+	/** Turning at speed: the outer arm braces out from the body (turning left, the right arm), driven by the turn's
+	 *  sideways force (speed x how sharply you turn): this many degrees per 1000 cm/s^2 of it, up to FlowBraceMax. */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
-	float FlowBrace = 18.f;
+	float FlowBrace = 22.f;
+	/** Extra bracing that grows with the square of the sideways force: hard, fast corners brace far more. */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
-	float FlowBraceMax = 35.f;
+	float FlowBraceSharp = 12.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
+	float FlowBraceMax = 80.f;
+	/** A braced arm stiffens: at full brace its pull to the brace is this many times stronger (1 + this), and the forearm
+	 *  is held straight, so it barely wobbles. */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
+	float BraceStiffen = 3.f;
 	/** Steering, like a plane's control surfaces (degrees at full effect): the legs swing together to the outside of a
 	 *  turn (rudder) per radian-per-second of turning; climbing swings them forward and under, diving lets them trail
 	 *  back (elevators) per degree of flight-path angle; braking hard spreads the arms and opens the legs (flaps). */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
-	float RudderPerTurn = 12.f;
+	float RudderPerTurn = 18.f;
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
-	float RudderMax = 22.f;
+	float RudderMax = 30.f;
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
 	float ElevatorPerDegree = 0.35f;
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
@@ -127,7 +134,8 @@ private:
 	void UpdateBodyReaction(class USkeletalMeshComponent* Mesh, const FVector& Velocity, float DeltaTime);
 	void ResetBodyReaction(class USkeletalMeshComponent* Mesh);
 	void UpdateLimbFlow(class USkeletalMeshComponent* Mesh, class UAnimInstance* Instance, const FVector& Accel, const FVector& Velocity, bool bFlying, float DeltaTime);
-	TArray<FVector> FlowAngle, FlowSpeed;
+	TArray<FVector> FlowAngle, FlowSpeed, FlowDir;
+	float SideForce = 0.f;
 	float FlowWeight = 0.f;
 	FVector FlowLastVelocity = FVector::ZeroVector;
 	bool bReacting = false;
