@@ -183,6 +183,8 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 	const FVector V = ToMesh.InverseTransformVectorNoScale(Velocity) / 1000.f;
 	const float SpeedAlpha = FMath::Clamp(float(Velocity.Size()) / FMath::Max(FastSpeed, 1.f), 0.f, 1.f);
 	const float MaxAngle = FMath::DegreesToRadians(FlowMaxAngle);
+	const float Brake = FMath::Clamp(-A.Y * 1000.f / FlapBrake, 0.f, 1.f);   // slowing along the body's forward (+Y)
+	const float PathPitch = FMath::RadiansToDegrees(FMath::Atan2(float(Velocity.Z), FMath::Max(float(Velocity.Size2D()), 300.f)));
 	// Small steps so the springs stay stable at any frame rate.
 	const int32 Steps = FMath::Clamp(FMath::CeilToInt(DeltaTime / (1.f / 120.f)), 1, 8);
 	const float Dt = DeltaTime / Steps;
@@ -195,9 +197,33 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 		const float C = 2.f * FlowDamping * FMath::Sqrt(K);
 		const FVector Push = J.Gain * (FlowInertia * FVector::CrossProduct(J.Dir, -A) + FlowDrag * J.Drag * SpeedAlpha * FVector::CrossProduct(J.Dir, -V)
 			- FlowTurn * TurnRateRad * FVector::UpVector * 10.f);   // lag behind the body's turn
+		// Steering: where the spring pulls each limb moves with the flight, like a plane's control surfaces. Sideways is
+		// a turn about the forward axis (+Y): + moves a hanging limb toward -X (the character's right). Forward / back is
+		// a turn about the side axis (+X): + swings it forward. Yaw + is a turn to the right.
+		FVector Rest = FVector::ZeroVector;
+		const FString BoneName(J.Bone);
+		const bool bRightArm = BoneName == TEXT("upperarm_r"), bLeftArm = BoneName == TEXT("upperarm_l");
+		const bool bThigh = BoneName.StartsWith(TEXT("thigh_"));
+		if (bRightArm || bLeftArm)
+		{
+			// Ailerons: the outer arm braces out, the inner one tucks in a little; flaps: both spread when braking.
+			const float Outer = bRightArm ? FMath::Max(0.f, -TurnRateRad) : FMath::Max(0.f, TurnRateRad);
+			const float Inner = bRightArm ? FMath::Max(0.f, TurnRateRad) : FMath::Max(0.f, -TurnRateRad);
+			const float Out = FMath::Min(FlowBrace * Outer, FlowBraceMax) - FMath::Min(0.35f * FlowBrace * Inner, 0.35f * FlowBraceMax) + FlapArms * Brake;
+			Rest.Y = FMath::DegreesToRadians(bRightArm ? Out : -Out);
+		}
+		if (bThigh)
+		{
+			// Rudder: both legs to the outside of the turn (turning left -> to the right, +); elevators: forward and under
+			// climbing, trailing back diving; flaps: open a little when braking.
+			const float Rudder = FMath::Clamp(-RudderPerTurn * TurnRateRad, -RudderMax, RudderMax);
+			const float Flap = FlapLegs * Brake * (J.LegSide > 0.f ? -1.f : 1.f);
+			Rest.Y = FMath::DegreesToRadians(Rudder + Flap);
+			Rest.X = FMath::DegreesToRadians(FMath::Clamp(ElevatorPerDegree * PathPitch, -ElevatorMax, ElevatorMax));
+		}
 		for (int32 S = 0; S < Steps; ++S)
 		{
-			FlowSpeed[I] += (Push - K * FlowAngle[I] - C * FlowSpeed[I]) * Dt;
+			FlowSpeed[I] += (Push - K * (FlowAngle[I] - Rest) - C * FlowSpeed[I]) * Dt;
 			FlowAngle[I] += FlowSpeed[I] * Dt;
 		}
 		if (FlowAngle[I].Size() > MaxAngle) { FlowAngle[I] = FlowAngle[I].GetSafeNormal() * MaxAngle; FlowSpeed[I] *= 0.5f; }
@@ -205,10 +231,11 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 		{
 			// Sideways swing is a turn about the forward axis (+Y, mesh space; +X is the character's left): a positive
 			// turn moves a hanging foot toward -X. Inward = toward the other leg: keep that small.
+			// (Measured from the steering rest: when the rudder swings both legs the same way they can't cross.)
 			const float Inward = 0.06f;
 			FVector& Ang = FlowAngle[I];
-			if (J.LegSide > 0.f && Ang.Y > Inward) { Ang.Y = Inward; FlowSpeed[I].Y = FMath::Min(FlowSpeed[I].Y, 0.f); }
-			if (J.LegSide < 0.f && Ang.Y < -Inward) { Ang.Y = -Inward; FlowSpeed[I].Y = FMath::Max(FlowSpeed[I].Y, 0.f); }
+			if (J.LegSide > 0.f && Ang.Y - Rest.Y > Inward) { Ang.Y = Rest.Y + Inward; FlowSpeed[I].Y = FMath::Min(FlowSpeed[I].Y, 0.f); }
+			if (J.LegSide < 0.f && Ang.Y - Rest.Y < -Inward) { Ang.Y = Rest.Y - Inward; FlowSpeed[I].Y = FMath::Max(FlowSpeed[I].Y, 0.f); }
 		}
 		Anim->FlowBones[I] = FName(J.Bone);
 		Anim->FlowRotations[I] = FlowAngle[I] * FlowWeight;

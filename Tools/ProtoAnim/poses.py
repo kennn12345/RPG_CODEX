@@ -390,10 +390,10 @@ FLY_FREE = dict(balance=[0], pivot_l=[0], pivot_r=[0], foot_turn_l=[0], foot_tur
 # pointed, arms loose and a little out, hands open and relaxed with the palms toward the ground - like floating in place underwater.
 FLY_HOVER = S(**FLY_FREE, pelvis_off=[0, 0, 6], pelvis_rot=[0, -6, 0], spine_lo=[-6, 1, 0], spine_hi=[-8, 1, 0],
               head_rot=[0, -2, 0],
-              foot_r=[-12, 7, 42], foot_rot_r=[0, -38, 0], knee_pole_r=[-0.2, 1, 0.3],
+              foot_r=[-12, 8, 32], foot_rot_r=[0, -40, 0], knee_pole_r=[-0.2, 1, 0.2],
               foot_l=[10, -4, 16], foot_rot_l=[-10, -45, 0], knee_pole_l=[0.1, 1, 0],
-              hand_l=[26, 4, 98], elbow_pole_l=[0.5, -1, 0], hand_r=[-29, 3, 98], elbow_pole_r=[-0.5, -1, 0],
-              hand_open_l=[1.5], hand_open_r=[1.5], wrist_out_l=[65], wrist_out_r=[35])
+              hand_l=[27, 6, 86], elbow_pole_l=[0.4, -1, 0], hand_r=[-28, 6, 86], elbow_pole_r=[-0.4, -1, 0],
+              hand_open_l=[1.5], hand_open_r=[1.5], wrist_out_l=[15], wrist_out_r=[15])
 # Flight set (2026-10-23), one family: the body angle grows with speed (hover ~6 deg, forward 45, fast 75), the head
 # looks where it is going (head_rot holds the head level in the world, so only a touch of lift), arms lie along the body, legs straight along it (loose: one a little bent), hands open
 # and relaxed. In game the hips, legs and arms also trail the chest on physics (the ribbon follow-through).
@@ -401,14 +401,14 @@ FLY_FORWARD = S(**FLY_FREE, pelvis_off=[0, 4, 4], pelvis_rot=[0, -45, 0], spine_
                 head_rot=[0, 4, 0],
                 foot_r=[-9, -56, 32], foot_rot_r=[0, -60, 0], knee_pole_r=[-0.1, 1, -0.3],
                 foot_l=[9, -50, 38], foot_rot_l=[-6, -55, 0], knee_pole_l=[0.1, 1, -0.3],
-                hand_l=[27, 0, 92], elbow_pole_l=[0.6, -0.4, 0.4], hand_r=[-27, 0, 92], elbow_pole_r=[-0.6, -0.4, 0.4],
-                hand_open_l=[1.3], hand_open_r=[1.3], wrist_out_l=[10], wrist_out_r=[10])
+                hand_l=[30, -4, 86], elbow_pole_l=[0.3, -0.7, 0.7], hand_r=[-30, -4, 86], elbow_pole_r=[-0.3, -0.7, 0.7],
+                hand_open_l=[1.3], hand_open_r=[1.3], wrist_out_l=[0], wrist_out_r=[0])
 # Fast: streamlined, nearly horizontal, chin up looking ahead, legs straight and together, arms back along the sides.
 FLY_FAST = S(**FLY_FREE, pelvis_off=[0, 8, 6], pelvis_rot=[0, -75, 0], spine_lo=[-4, -3, 0], spine_hi=[-6, 4, 0],
              head_rot=[0, 8, 0],
              foot_r=[-6, -82, 74], foot_rot_r=[0, -80, 0], knee_pole_r=[0, 0.3, -1],
              foot_l=[6, -80, 78], foot_rot_l=[0, -80, 0], knee_pole_l=[0, 0.3, -1],
-             hand_l=[18, -24, 100], elbow_pole_l=[0.3, 0, 1], hand_r=[-18, -24, 100], elbow_pole_r=[-0.3, 0, 1],
+             hand_l=[22, -6, 92], elbow_pole_l=[0.3, -0.3, 1], hand_r=[-22, -6, 92], elbow_pole_r=[-0.3, -0.3, 1],
              hand_open_l=[1.2], hand_open_r=[1.2])
 
 def flight_loop(base, bob, sway, T=2.0):

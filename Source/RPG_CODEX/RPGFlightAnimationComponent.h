@@ -87,6 +87,30 @@ public:
 	/** Turning swings the limbs too (they lag behind the body's turn). */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
 	float FlowTurn = 0.3f;
+	/** Sharp turns: the outer arm braces out from the body (turning left, the right arm), this many degrees per
+	 *  radian-per-second of turning, up to FlowBraceMax. */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
+	float FlowBrace = 18.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
+	float FlowBraceMax = 35.f;
+	/** Steering, like a plane's control surfaces (degrees at full effect): the legs swing together to the outside of a
+	 *  turn (rudder) per radian-per-second of turning; climbing swings them forward and under, diving lets them trail
+	 *  back (elevators) per degree of flight-path angle; braking hard spreads the arms and opens the legs (flaps). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float RudderPerTurn = 12.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float RudderMax = 22.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float ElevatorPerDegree = 0.35f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float ElevatorMax = 20.f;
+	/** Full flaps at this much slowing down (cm/s^2). */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "1"))
+	float FlapBrake = 2500.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float FlapArms = 30.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float FlapLegs = 8.f;
 	/** The body turns after the view instead of snapping with it (higher = quicker to catch up). */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Body Reaction", meta = (ClampMin = "0.1"))
 	float TurnFollowSpeed = 5.f;
