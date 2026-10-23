@@ -149,19 +149,19 @@ namespace
 	 *  stiff it is (lower = lags more, so the motion rolls down the chain), how much the air drags it, which side it is
 	 *  on (+1 left, -1 right: it swings outward freely but only a little inward, so legs don't cross and hands don't go
 	 *  into the body), and whether it is an upper arm / thigh (where the steering acts). Arms are held actively: about
-	 *  half the swing, stiffer, no drag. */
+	 *  half the swing, stiffer, no drag. Knees and elbows are left to the animation (springs there made the limbs
+	 *  rubbery and could bend a knee backwards): the whole leg / arm swings from the hip / shoulder. The upper chest
+	 *  (spine_04 / 05) only rolls into turns (the shoulder dip), no momentum swing. */
 	struct FFlowJoint { const TCHAR* Bone; const TCHAR* Child; float Gain; float Stiff; float Drag; float Side; bool bArm; bool bThigh; };
 	const FFlowJoint FlowJoints[] = {
 		{ TEXT("spine_01"), TEXT("spine_02"), 0.12f, 2.f, 1.f, 0.f, false, false },
 		{ TEXT("spine_02"), TEXT("spine_03"), 0.08f, 2.f, 1.f, 0.f, false, false },
-		{ TEXT("thigh_l"), TEXT("calf_l"), 1.f, 1.f, 1.f, 1.f, false, true },
-		{ TEXT("calf_l"), TEXT("foot_l"), 0.8f, 0.6f, 1.f, 1.f, false, false },
-		{ TEXT("thigh_r"), TEXT("calf_r"), 1.f, 1.f, 1.f, -1.f, false, true },
-		{ TEXT("calf_r"), TEXT("foot_r"), 0.8f, 0.6f, 1.f, -1.f, false, false },
+		{ TEXT("spine_04"), TEXT("spine_05"), 0.f, 2.f, 0.f, 0.f, false, false },
+		{ TEXT("spine_05"), TEXT("neck_01"), 0.f, 2.f, 0.f, 0.f, false, false },
+		{ TEXT("thigh_l"), TEXT("calf_l"), 1.f, 1.2f, 1.f, 1.f, false, true },
+		{ TEXT("thigh_r"), TEXT("calf_r"), 1.f, 1.2f, 1.f, -1.f, false, true },
 		{ TEXT("upperarm_l"), TEXT("lowerarm_l"), 0.45f, 1.5f, 0.f, 1.f, true, false },
-		{ TEXT("lowerarm_l"), TEXT("hand_l"), 0.3f, 1.2f, 0.f, 1.f, false, false },
 		{ TEXT("upperarm_r"), TEXT("lowerarm_r"), 0.45f, 1.5f, 0.f, -1.f, true, false },
-		{ TEXT("lowerarm_r"), TEXT("hand_r"), 0.3f, 1.2f, 0.f, -1.f, false, false },
 	};
 }
 
@@ -231,8 +231,13 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 			Rest = OutAxis * FMath::DegreesToRadians(Brace);
 			Stiffen += BraceStiffen * FMath::Clamp(Brace / FMath::Max(FlowBraceMax, 1.f), 0.f, 1.f);   // a braced arm is held firm
 		}
-		else if (J.Side != 0.f && !J.bThigh && FCString::Strstr(J.Bone, TEXT("lowerarm")))
-			Stiffen += BraceStiffen * FMath::Clamp(Brace / FMath::Max(FlowBraceMax, 1.f), 0.f, 1.f);   // and kept straight
+		if (FCString::Strstr(J.Bone, TEXT("spine_0")) && (J.Bone[7] == TEXT('4') || J.Bone[7] == TEXT('5')))
+		{
+			// Shoulder dip: roll the upper chest about its forward axis toward the inside of the turn. A + turn about
+			// +Y tips the top toward +X (the character's left), dropping the left shoulder; a left turn pulls toward +X.
+			const float Dip = FMath::Clamp(ShoulderDip * SideForce / WingsuitForce * SpeedAlpha, -ShoulderDipMax, ShoulderDipMax);
+			Rest = FVector(0.f, FMath::DegreesToRadians(Dip * 0.5f), 0.f);   // half on each of the two bones
+		}
 		if (J.bThigh)
 		{
 			// Rudder: both legs to the outside of the turn (turning left -> to the right); elevators: forward and under
@@ -243,6 +248,10 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 				+ ForwardAxis * FMath::DegreesToRadians(FMath::Clamp(ElevatorPerDegree * PathPitch, -ElevatorMax, ElevatorMax));
 		}
 
+		// The steering rest itself is capped (stacked brace + wingsuit + rudder can't wring a joint).
+		const float RestMax = FMath::DegreesToRadians(J.bArm ? FlowBraceMax : 45.f);
+		if (Rest.Size() > RestMax) Rest = Rest.GetSafeNormal() * RestMax;
+
 		const float K = FlowStiffness * J.Stiff * Stiffen * FMath::Lerp(1.f, FlowStiffnessAtSpeed, SpeedAlpha);
 		const float C = 2.f * FlowDamping * FMath::Sqrt(K);
 		const FVector Push = J.Gain / Stiffen * (FlowInertia * FVector::CrossProduct(Dir, -A) + FlowDrag * J.Drag * SpeedAlpha * FVector::CrossProduct(Dir, -V)
@@ -252,7 +261,7 @@ void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, 
 			FlowSpeed[I] += (Push - K * (FlowAngle[I] - Rest) - C * FlowSpeed[I]) * Dt;
 			FlowAngle[I] += FlowSpeed[I] * Dt;
 		}
-		// Swing off the steering rest is limited; the rest itself may go further (a full brace).
+		// Swing off the steering rest is limited.
 		FVector Off = FlowAngle[I] - Rest;
 		if (Off.Size() > MaxSwing) { Off = Off.GetSafeNormal() * MaxSwing; FlowAngle[I] = Rest + Off; FlowSpeed[I] *= 0.5f; }
 		if (J.Side != 0.f)

@@ -74,7 +74,7 @@ public:
 	float FlowStiffnessAtSpeed = 0.6f;
 	/** Bounce: lower = more overshoot and swinging back and forth, 1 = settles without overshoot. */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0.05", ClampMax = "2"))
-	float FlowDamping = 0.35f;
+	float FlowDamping = 0.55f;
 	/** How hard momentum swings the limbs (per 1000 cm/s^2 of speeding up, slowing or turning). */
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Follow Through", meta = (ClampMin = "0"))
 	float FlowInertia = 16.f;
@@ -108,6 +108,12 @@ public:
 	float WingsuitLegs = 18.f;
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0.1"))
 	float WingsuitForce = 2.5f;
+	/** Turning at speed, the upper chest rolls so the inside shoulder drops (turning left, the left shoulder): degrees at
+	 *  full turn force (WingsuitForce) at FastSpeed, up to ShoulderDipMax. */
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float ShoulderDip = 25.f;
+	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation|Steering", meta = (ClampMin = "0"))
+	float ShoulderDipMax = 35.f;
 	/** Steering, like a plane's control surfaces (degrees at full effect): the legs swing together to the outside of a
 	 *  turn (rudder) per radian-per-second of turning; climbing swings them forward and under, diving lets them trail
 	 *  back (elevators) per degree of flight-path angle; braking hard spreads the arms and opens the legs (flaps). */
