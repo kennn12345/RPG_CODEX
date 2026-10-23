@@ -140,6 +140,14 @@ public:
 	float GetStruckChainDeviation() const;
 
 	/** Debug: a powered hit on the chest from the front / a full ragdoll (Details panel buttons while playing). */
+	/** Flight follow-through ("ribbon"): the chest, neck and head stay on the animation and lead; everything else (hips,
+	 *  legs, arms) is physical without gravity, carried by its own momentum and pulled loosely back toward the pose by
+	 *  motors at FlightMotorScale, so it trails, swings out and catches up when the leader turns, climbs or dives. */
+	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
+	void SetFlightFollow(bool bOn);
+	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
+	bool IsFlightFollowing() const { return bFlightFollow; }
+
 	UFUNCTION(CallInEditor, Category = "RPG|Physics Reaction|Debug")
 	void DebugPoweredHit();
 
@@ -169,6 +177,17 @@ public:
 	 *  floor meanwhile so the feet can't be shoved apart). Off: ordinary hits leave the body on its animation. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered")
 	bool bHitReactions = true;
+
+	/** Flight follow-through: motor strength for the trailing parts (multiple of MotorStrength). High enough that the
+	 *  body keeps its pose and shape; the lag on turns / climbs / dives comes from momentum. Lower = looser and floatier. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Flight", meta = (ClampMin = "0"))
+	float FlightMotorScale = 3.f;
+	/** Extra stiffness for the hips and lower back in flight (the body's structure); the legs and arms flow more. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Flight", meta = (ClampMin = "0"))
+	float FlightSpineScale = 2.f;
+	/** Bones that lead in flight (kinematic, with the head / neck limb). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Flight")
+	TArray<FName> FlightLeaderBones = { TEXT("spine_04"), TEXT("spine_05") };
 
 	/** Leg motors are this many times the others, so the legs give a little but keep it standing. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
@@ -313,6 +332,7 @@ private:
 	TMap<FName, TArray<FName>> LimbControls;
 	TArray<FName> AllModifiers;
 	TArray<FName> LegModifiers;
+	bool bFlightFollow = false;
 	float CurrentYieldTime = 0.1f, CurrentRecoverTime = 0.6f, CurrentMotorBase = 1.f;
 	TArray<FName> AllControls;
 

@@ -357,6 +357,7 @@ void URPGPhysicsReactionComponent::ApplyPendingVelocity()
 void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDazed)
 {
 	if (!bSetUp || !PhysicsControl) return;
+	if (bFlightFollow) SetFlightFollow(false);
 	// A hit while already ragdolled keeps it limp.
 	if (State == ERPGPhysicsReactionState::Limp && !bReturning) return;
 
@@ -397,6 +398,7 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDaz
 void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 {
 	if (!bSetUp || !PhysicsControl) return;
+	if (bFlightFollow) SetFlightFollow(false);
 	const bool bFromAnimation = State == ERPGPhysicsReactionState::Animated;
 	const bool bWasLimp = State == ERPGPhysicsReactionState::Limp;
 	State = ERPGPhysicsReactionState::Limp;
@@ -592,4 +594,42 @@ void URPGPhysicsReactionComponent::DebugFullRagdoll()
 	Hit.ImpactLocation = Mesh->GetBoneLocation(Hit.HitBone) + GetOwner()->GetActorForwardVector() * 12.f;
 	Hit.StrikeDirection = -GetOwner()->GetActorForwardVector();
 	HandleMeleeHit(Hit);
+}
+
+void URPGPhysicsReactionComponent::SetFlightFollow(bool bOn)
+{
+	if (!bSetUp || !PhysicsControl || bOn == bFlightFollow) return;
+	if (bOn && State != ERPGPhysicsReactionState::Animated) return;   // a hit reaction / ragdoll owns the body
+	bFlightFollow = bOn;
+	if (bOn)
+	{
+		TArray<FName> Leaders, Followers;
+		for (const TPair<FName, FName>& Pair : BoneModifiers)
+			(FlightLeaderBones.Contains(Pair.Key) || BoneLimbs.FindRef(Pair.Key) == TEXT("Head") ? Leaders : Followers).Add(Pair.Value);
+		PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryOnly);   // no snagging the capsule or world
+		PhysicsControl->SetBodyModifiersMovementType(Leaders, EPhysicsMovementType::Kinematic, true, false);
+		PhysicsControl->SetBodyModifiersMovementType(Followers, EPhysicsMovementType::Simulated, true, false);
+		PhysicsControl->SetBodyModifiersGravityMultiplier(Followers, 0.f);
+		for (const FName& Name : AllControls)
+		{
+			FPhysicsControlData Data;
+			if (!PhysicsControl->GetControlData(Name, Data)) continue;
+			Data.AngularStrength = MotorStrength * FlightMotorScale;
+			Data.AngularDampingRatio = MotorDampingRatio;
+			Data.bEnabled = true;
+			PhysicsControl->SetControlData(Name, Data, true, false);
+		}
+		SetAllMotorScale(1.f);
+		SetLimbMotorScale(TEXT("Spine"), FlightSpineScale);
+		SetPhysicsBlend(1.f);
+	}
+	else
+	{
+		SetPhysicsBlend(0.f);
+		PhysicsControl->SetControlsEnabled(AllControls, false);
+		PhysicsControl->SetBodyModifiersGravityMultiplier(AllModifiers, 1.f);
+		PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
+		PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Kinematic, true, false);
+		PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(AllModifiers, EResetToCachedTargetBehavior::ResetDuringUpdateControls, true, false);
+	}
 }
