@@ -164,6 +164,26 @@ public:
 	FVector GetUpFaceDownStart = FVector(2.8f, -1.0f, 84.6f);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
 	FVector GetUpFaceUpStart = FVector(0.1f, -35.0f, -92.1f);
+	/** Lying on its left / right side. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
+	TSoftObjectPtr<UAnimSequence> GetUpLeftSide;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
+	TSoftObjectPtr<UAnimSequence> GetUpRightSide;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
+	FVector GetUpLeftSideStart = FVector(-5.9f, -5.5f, -7.0f);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
+	FVector GetUpRightSideStart = FVector(-4.7f, -13.6f, 160.6f);
+	/** Get-up speed: this play rate at full health, down to GetUpHurtRate near 0 (and when knocked out). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up", meta = (ClampMin = "0.1"))
+	float GetUpHealthyRate = 1.15f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up", meta = (ClampMin = "0.1"))
+	float GetUpHurtRate = 0.7f;
+	/** On a slope the body starts tilted to the ground (up to this many degrees) and is upright by this fraction of
+	 *  the get-up. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up", meta = (ClampMin = "0", ClampMax = "60"))
+	float GetUpMaxTilt = 35.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up", meta = (ClampMin = "0.05", ClampMax = "1"))
+	float GetUpUprightAt = 0.55f;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Dummy")
 	int32 HitCount = 0;
@@ -184,6 +204,8 @@ private:
 	/** Seconds of get-up or stagger clip left (the dummy does nothing else meanwhile but slide). */
 	float GetUpTimeLeft = 0.f;
 	bool bStaggering = false;
+	float GetUpDuration = 0.f;
+	FQuat GetUpTilt = FQuat::Identity;
 
 	void PlayIdle();
 	/** The stop-step clip for a stagger pushed along WorldPush (horizontal), heavy or not. */
