@@ -1,0 +1,7 @@
+# Raised third-person shoulder camera
+
+The user's Fallout 4 reference was researched through third-person combat screenshots and shoulder-camera examples, including the authored [Proper 3rd Person Shooter Camera reference](https://www.nexusmods.com/fallout4/mods/21427) and [Bethesda Creations camera customization description](https://creations.bethesda.net/fallout4/details/f438d0f2-1123-4447-a500-21c7c6d834ea/Third_Person_Camera_Changer). The framing goal is a clear center reticle with the player below and to its left. These are visual references; the Unreal offsets are tuned for this character, not copied Fallout engine values.
+
+`RPGCameraModeComponent` adds a base spring-arm socket offset of 25 cm right / 35 cm up. Melee and spell aiming smoothly add another 35 cm right / 25 cm up (60 right / 60 up total, added to the original socket offset). The transition uses a 0.15-second smoothing constant. Previously only melee's AimAlpha activated the shoulder camera; independent spell pose weights now activate it too.
+
+ThirdPersonViewOffset and ThirdPersonCombatOffset are editable component properties. Existing spring-arm collision and distance adjustment remain in use. First-person presentation and flight FOV/distance settings are preserved. Gameplay-camera review uses the real player camera rather than the cinematic review camera, enabled with RPG_SPELL_GAMEPLAY_CAMERA=1 in the spell review harness. No character pose, damage, input mapping or flight animation was changed.

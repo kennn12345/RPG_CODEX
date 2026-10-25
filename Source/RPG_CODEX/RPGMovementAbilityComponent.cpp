@@ -1,4 +1,5 @@
 #include "RPGMovementAbilityComponent.h"
+#include "RPGDirectionalHoverComponent.h"
 
 #include "RPGCombatStateComponent.h"
 #include "Engine/World.h"
@@ -24,6 +25,7 @@ void URPGMovementAbilityComponent::BeginPlay()
 	{
 		// The template character has crouching switched off, so switch it on.
 		Movement->GetNavAgentPropertiesRef().bCanCrouch = true;
+        Movement->MaxFlySpeed *= FMath::Max(NormalFlightSpeedScale,0.1f);
 
 		// Without braking, a flying character drifts forever after you let go of the stick.
 		if (Movement->BrakingDecelerationFlying <= 0.f)
@@ -31,6 +33,12 @@ void URPGMovementAbilityComponent::BeginPlay()
 			Movement->BrakingDecelerationFlying = FlyingBrakingDeceleration;
 		}
 	}
+}
+
+void URPGMovementAbilityComponent::EndPlay(const EEndPlayReason::Type Reason)
+{
+    UpdateFlightAcceleration(GetMovement(),false);
+    Super::EndPlay(Reason);
 }
 
 void URPGMovementAbilityComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -145,6 +153,7 @@ bool URPGMovementAbilityComponent::StartFlight()
 	}
 
 	StopSprint();
+    UpdateFlightAcceleration(Movement,true);
 	Movement->SetMovementMode(MOVE_Flying);
 	Movement->Velocity.Z = 0.f; // Hover in place instead of continuing to rise or fall.
 	return true;
@@ -153,6 +162,7 @@ bool URPGMovementAbilityComponent::StartFlight()
 void URPGMovementAbilityComponent::StopFlight()
 {
 	UCharacterMovementComponent* Movement = GetMovement();
+    RestoreHoverSpeed(Movement);
 	if (Movement && Movement->IsFlying())
 	{
 		Movement->SetMovementMode(MOVE_Falling);
@@ -164,11 +174,13 @@ void URPGMovementAbilityComponent::StopFlight()
 		Movement->MaxFlySpeed = FlySpeedBeforeFastFlight;
 	}
 	bFastFlight = false;
+    UpdateFlightAcceleration(Movement,false);
 }
 
 bool URPGMovementAbilityComponent::ToggleFastFlight()
 {
 	UCharacterMovementComponent* Movement = GetMovement();
+    RestoreHoverSpeed(Movement);
 	if (!Movement || !Movement->IsFlying())
 	{
 		return false;
@@ -188,6 +200,84 @@ bool URPGMovementAbilityComponent::ToggleFastFlight()
 	return bFastFlight;
 }
 
+void URPGMovementAbilityComponent::UpdateFlightAcceleration(UCharacterMovementComponent* Movement, bool bFlying)
+{
+    if (!Movement) return;
+    UpdateHoverSpeed(Movement,bFlying);
+    if (bFlying != bFlightAccelerationOverride) ConfigureFlightTickOrder(Movement,bFlying);
+    if (bFlying)
+    {
+        if (!bFlightAccelerationOverride)
+        {
+            GroundAcceleration = Movement->MaxAcceleration;
+            bFlightAccelerationOverride = true;
+        }
+        Movement->MaxAcceleration = FMath::Max(bFastFlight ? FastFlightAcceleration : FlightAcceleration,1.f);
+    }
+    else if (bFlightAccelerationOverride)
+    {
+        Movement->MaxAcceleration = GroundAcceleration;
+        bFlightAccelerationOverride = false;
+    }
+}
+
+void URPGMovementAbilityComponent::RestoreHoverSpeed(UCharacterMovementComponent* Movement)
+{
+    if (Movement && bHoverSpeedOverride && FMath::IsNearlyEqual(Movement->MaxFlySpeed,HoverAppliedSpeed))
+        Movement->MaxFlySpeed=HoverBaseFlySpeed;
+    bHoverSpeedOverride=false;
+}
+
+void URPGMovementAbilityComponent::UpdateHoverSpeed(UCharacterMovementComponent* Movement,bool bFlying)
+{
+    const auto* Hover=GetOwner()->FindComponentByClass<URPGDirectionalHoverComponent>();
+    if (bHoverSpeedOverride && !FMath::IsNearlyEqual(Movement->MaxFlySpeed,HoverAppliedSpeed))
+        bHoverSpeedOverride=false; // Respect another system's explicit speed change.
+    if (!bFlying || !Hover || !Hover->IsHovering()) { RestoreHoverSpeed(Movement);return; }
+    if (!bHoverSpeedOverride) { HoverBaseFlySpeed=Movement->MaxFlySpeed;bHoverSpeedOverride=true; }
+    HoverAppliedSpeed=FMath::Min(HoverBaseFlySpeed,FMath::Max(Hover->HoverSpeed,50.f));
+    Movement->MaxFlySpeed=HoverAppliedSpeed;
+}
+
+void URPGMovementAbilityComponent::ConfigureFlightTickOrder(UCharacterMovementComponent* Movement, bool bFlying)
+{
+    auto DependsOn=[](const UActorComponent* Component,const UActorComponent* Prerequisite)
+    {
+        for(const FTickPrerequisite& Entry:Component->PrimaryComponentTick.GetPrerequisites())
+            if(Entry.PrerequisiteObject.Get()==Prerequisite)return true;
+        return false;
+    };
+    if(bFlying)
+    {
+        // GASP writes gait/CMC settings in its pre-movement tick. Apply flight's
+        // acceleration afterwards and before physics, only while flight owns it.
+        TInlineComponentArray<UActorComponent*> Components(GetOwner());
+        for(UActorComponent* Component:Components)
+        {
+            if(Component->GetClass()->GetFName()!=TEXT("AC_PreCMCTick_C"))continue;
+            FlightPreMovementTick=Component;
+            if(!DependsOn(this,Component))
+            {
+                AddTickPrerequisiteComponent(Component);
+                bAddedFlightPrePrerequisite=true;
+            }
+            break;
+        }
+        if(!DependsOn(Movement,this))
+        {
+            Movement->AddTickPrerequisiteComponent(this);
+            bAddedFlightMovementPrerequisite=true;
+        }
+    }
+    else
+    {
+        if(bAddedFlightMovementPrerequisite)Movement->RemoveTickPrerequisiteComponent(this);
+        if(bAddedFlightPrePrerequisite && FlightPreMovementTick.IsValid())RemoveTickPrerequisiteComponent(FlightPreMovementTick.Get());
+        bAddedFlightMovementPrerequisite=bAddedFlightPrePrerequisite=false;
+        FlightPreMovementTick.Reset();
+    }
+}
+
 void URPGMovementAbilityComponent::ApplyFlightVerticalInput()
 {
 	ACharacter* Character = GetCharacter();
@@ -199,6 +289,7 @@ void URPGMovementAbilityComponent::ApplyFlightVerticalInput()
 
 	if (!Movement->IsFlying())
 	{
+		UpdateFlightAcceleration(Movement,false);
 		// Flight can also end without StopFlight (e.g. a knockback switches to falling), so tidy up here.
 		if (bFastFlight)
 		{
@@ -209,10 +300,12 @@ void URPGMovementAbilityComponent::ApplyFlightVerticalInput()
 		return;
 	}
 
+	UpdateFlightAcceleration(Movement,!Character->IsPlayingRootMotion());
 	float Vertical = bFlightRiseHeld ? 1.f : 0.f;
 
 	const AController* Controller = Character->GetController();
-	if (bFlightFollowsLookPitch && Controller)
+    const auto* Hover=Character->FindComponentByClass<URPGDirectionalHoverComponent>();
+	if (bFlightFollowsLookPitch && Controller && !(Hover && Hover->IsHovering()))
 	{
 		const FRotator ControlRotation = Controller->GetControlRotation();
 		const float Pitch = FRotator::NormalizeAxis(ControlRotation.Pitch);

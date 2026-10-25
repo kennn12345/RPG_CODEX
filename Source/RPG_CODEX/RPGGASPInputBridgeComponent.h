@@ -30,6 +30,8 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|GASP")
     bool bStateReady = false;
+    /** Camera-facing eight-way ground locomotion, using GASP's existing run databases. */
+    UPROPERTY(EditAnywhere,Category="RPG|GASP") bool bDirectionalGroundMovement = true;
 
 private:
     void ConfigureInput();
@@ -51,4 +53,5 @@ private:
     FBoolProperty* AimProperty = nullptr;
     FBoolProperty* StrafeProperty = nullptr;
     bool bKeyboardConfigured = false;
+    float DirectionalGroundHold = 0.f;
 };

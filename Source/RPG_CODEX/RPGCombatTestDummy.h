@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "RPGMeleeTarget.h"
 #include "RPGPowerTypes.h"
+#include "RPGEnergySpellTypes.h"
 #include "RPGCombatTestDummy.generated.h"
 
 class UCapsuleComponent;
@@ -25,7 +26,7 @@ class URPGCharacterStatsComponent;
  * Place it from the Place Actors panel (search "Combat Test Dummy") or drag BP_CombatTestDummy into the level.
  */
 UCLASS(Blueprintable, meta = (DisplayName = "Combat Test Dummy"))
-class RPG_CODEX_API ARPGCombatTestDummy : public AActor, public IRPGMeleeTarget
+class RPG_CODEX_API ARPGCombatTestDummy : public AActor, public IRPGMeleeTarget, public IRPGEnergySpellTarget
 {
 	GENERATED_BODY()
 
@@ -36,6 +37,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void ReceiveMeleeHit_Implementation(const FRPGMeleeHitInfo& Hit) override;
+    virtual void ReceiveEnergyHit_Implementation(const FRPGEnergyImpact& Impact) override;
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="RPG|Dummy") int32 EnergyHitCount = 0;
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="RPG|Dummy") FRPGEnergyImpact LastEnergyHit;
 	virtual void ReceiveContactPush_Implementation(const FVector& PushVelocity, FName Bone) override;
 
 	/** Blocks the player's movement. Not hit by the melee sweeps (those test the mesh's bodies). */
@@ -153,6 +157,12 @@ public:
 	TSoftObjectPtr<UAnimSequence> StaggerBackAnimation;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger", meta = (ClampMin = "0"))
 	float StaggerDazedTime = 1.f;
+
+    /** A leg blast makes the dummy catch its balance with an authored step, rather than sliding its feet. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger", meta = (ClampMin = "0"))
+    float EnergyTapStepDistance = 22.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger", meta = (ClampMin = "0"))
+    float EnergyChargedStepDistance = 48.f;
 	/** Staggers step the way the blow pushes (one of GASP's eight stop-step directions, ending on either foot); a push
 	 *  of at least this many cm (the Power System's displacement) takes the bigger running stop instead of the walking
 	 *  one. StaggerBackAnimation is the fallback. */
@@ -204,6 +214,7 @@ private:
 	/** Seconds of get-up or stagger clip left (the dummy does nothing else meanwhile but slide). */
 	float GetUpTimeLeft = 0.f;
 	bool bStaggering = false;
+    float StaggerRootMotionScale = 1.f;
 	float GetUpDuration = 0.f;
 	FQuat GetUpTilt = FQuat::Identity;
 

@@ -28,6 +28,7 @@ class RPG_CODEX_API URPGCameraModeComponent : public UActorComponent
 public:
 	URPGCameraModeComponent();
 	virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** Camera height above the capsule center in first person, used only if the mesh has no head bone. */
@@ -57,7 +58,19 @@ public:
 	 * forward, Y right, Z up), so the reticle sits beside the character instead of on its back. Zero to turn off.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera")
-	FVector ThirdPersonCombatOffset = FVector(0.f, 45.f, 20.f);
+    FVector ThirdPersonCombatOffset = FVector(0.f, 35.f, 25.f);
+
+    /** Raised shoulder framing even outside combat. Added to the original boom socket offset. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera")
+    FVector ThirdPersonViewOffset = FVector(0.f,25.f,35.f);
+
+    /** Speed presentation only during third-person flight; restored when flight ends. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera|Flight")
+    bool bFlightSpeedCamera = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera|Flight", meta = (ClampMin = "0", ClampMax = "30"))
+    float FlightBoostFOV = 8.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera|Flight", meta = (ClampMin = "0"))
+    float FlightBoostDistance = 140.f;
 
 	/** Hidden in first person (with everything below it: the head), so it never sits in the camera. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera|First Person")
@@ -90,6 +103,10 @@ public:
 	void ApplyCameraAdjustInput(FVector2D StickInput, float DeltaSeconds);
 
 private:
+    void UpdateFlightPresentation(float DeltaTime);
+    void ClearFlightPresentation();
+    float FlightArmOffset = 0.f, FlightFOVOffset = 0.f;
+    float CombatCameraWeight = 0.f;
 	USpringArmComponent* GetCameraBoom() const;
 	class UCameraComponent* GetCamera() const;
 	/** Where the first-person camera wants to be this frame, relative to the body (actor space). */

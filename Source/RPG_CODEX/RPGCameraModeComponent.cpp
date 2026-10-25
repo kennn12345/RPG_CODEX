@@ -1,4 +1,5 @@
 #include "RPGCameraModeComponent.h"
+#include "RPGFlightAnimationComponent.h"
 
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -9,6 +10,7 @@
 #include "RPGPrototypeAnimationComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGCombatAimComponent.h"
+#include "RPGEnergySpellComponent.h"
 
 URPGCameraModeComponent::URPGCameraModeComponent()
 {
@@ -28,6 +30,33 @@ void URPGCameraModeComponent::BeginPlay()
 	}
 }
 
+void URPGCameraModeComponent::ClearFlightPresentation()
+{
+    if (USpringArmComponent* Boom=GetCameraBoom()) Boom->TargetArmLength-=FlightArmOffset;
+    if (UCameraComponent* Camera=GetCamera()) Camera->SetFieldOfView(Camera->FieldOfView-FlightFOVOffset);
+    FlightArmOffset=FlightFOVOffset=0.f;
+}
+
+void URPGCameraModeComponent::EndPlay(const EEndPlayReason::Type Reason)
+{
+    ClearFlightPresentation();
+    Super::EndPlay(Reason);
+}
+
+void URPGCameraModeComponent::UpdateFlightPresentation(float DeltaTime)
+{
+    const URPGFlightAnimationComponent* Flight=GetOwner()->FindComponentByClass<URPGFlightAnimationComponent>();
+    const float Boost=bFlightSpeedCamera && Flight ? float(Flight->PoseBlend.Y)*Flight->FlightWeight : 0.f;
+    const float Alpha=1.f-FMath::Exp(-FMath::Min(DeltaTime,0.1f)/0.35f);
+    float Arm=FMath::Lerp(FlightArmOffset,FlightBoostDistance*Boost,Alpha);
+    float FOV=FMath::Lerp(FlightFOVOffset,FlightBoostFOV*Boost,Alpha);
+    if(Boost==0.f && Arm<0.005f) Arm=0.f;
+    if(Boost==0.f && FOV<0.0005f) FOV=0.f;
+    if(USpringArmComponent* Boom=GetCameraBoom()) Boom->TargetArmLength+=Arm-FlightArmOffset;
+    if(UCameraComponent* Camera=GetCamera()) Camera->SetFieldOfView(Camera->FieldOfView+FOV-FlightFOVOffset);
+    FlightArmOffset=Arm;FlightFOVOffset=FOV;
+}
+
 void URPGCameraModeComponent::TogglePerspective()
 {
 	USpringArmComponent* Boom = GetCameraBoom();
@@ -44,6 +73,7 @@ void URPGCameraModeComponent::TogglePerspective()
 	{
 		// Save third-person settings, then pull the camera into the head. (The socket offset was saved at Begin Play:
 		// the current one may include the combat shoulder offset.)
+		ClearFlightPresentation();
 		SavedArmLength = Boom->TargetArmLength;
 		bSavedUseControllerRotationYaw = Character->bUseControllerRotationYaw;
 		bSavedOrientRotationToMovement = Movement && Movement->bOrientRotationToMovement;
@@ -107,8 +137,8 @@ void URPGCameraModeComponent::ApplyCameraAdjustInput(FVector2D StickInput, float
 	}
 
 	// Stick up = camera closer, stick down = camera further away.
-	const float NewLength = Boom->TargetArmLength - StickInput.Y * CameraDistanceAdjustSpeed * DeltaSeconds;
-	Boom->TargetArmLength = FMath::Clamp(NewLength, MinCameraDistance, MaxCameraDistance);
+	const float NewLength = Boom->TargetArmLength - FlightArmOffset - StickInput.Y * CameraDistanceAdjustSpeed * DeltaSeconds;
+	Boom->TargetArmLength = FMath::Clamp(NewLength, MinCameraDistance, MaxCameraDistance) + FlightArmOffset;
 
 	// StickInput.X is reserved for camera orbit / shoulder adjustment later.
 }
@@ -195,13 +225,19 @@ void URPGCameraModeComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	UCameraComponent* Camera = GetCamera();
 	if (!bIsFirstPerson)
 	{
-		// Third person: over the shoulder while fighting, eased in / out with the combat aim.
+        UpdateFlightPresentation(DeltaTime);
+        // Raised shoulder view: keep the player below/left of the reticle, including spell aiming.
 		const URPGCombatAimComponent* Aim = GetOwner()->FindComponentByClass<URPGCombatAimComponent>();
 		USpringArmComponent* Boom = GetCameraBoom();
 		if (Boom && !bIsAdjustingCamera)
 		{
-			const float Alpha = Aim ? FMath::SmoothStep(0.f, 1.f, Aim->AimAlpha) : 0.f;
-			Boom->SocketOffset = SavedSocketOffset + ThirdPersonCombatOffset * Alpha;
+            const URPGEnergySpellComponent* Spells=GetOwner()->FindComponentByClass<URPGEnergySpellComponent>();
+            const float SpellWeight=Spells?FMath::Max(Spells->Left.PoseWeight,Spells->Right.PoseWeight):0.f;
+            const float Desired=FMath::Max(Aim?Aim->AimAlpha:0.f,SpellWeight);
+            CombatCameraWeight=FMath::Lerp(CombatCameraWeight,Desired,1.f-FMath::Exp(-DeltaTime/0.15f));
+            if(Desired==0.f && CombatCameraWeight<0.001f)CombatCameraWeight=0.f;
+            const float Alpha=FMath::SmoothStep(0.f,1.f,CombatCameraWeight);
+            Boom->SocketOffset = SavedSocketOffset + ThirdPersonViewOffset + ThirdPersonCombatOffset * Alpha;
 		}
 		return;
 	}

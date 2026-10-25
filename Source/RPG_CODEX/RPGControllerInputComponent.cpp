@@ -4,6 +4,8 @@
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatAimComponent.h"
 #include "RPGFlightAnimationComponent.h"
+#include "RPGEnergySpellComponent.h"
+#include "RPGDirectionalHoverComponent.h"
 #include "RPGHUD.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGInteractable.h"
@@ -90,6 +92,8 @@ void URPGControllerInputComponent::EnsureHelperComponents()
 	FindOrCreateComponent<URPGCombatAimComponent>(Owner, TEXT("RPGCombatAim"));
 	FindOrCreateComponent<URPGCharacterStatsComponent>(Owner, TEXT("RPGStats"));	// Player defaults: Strength 5
 	FindOrCreateComponent<URPGFlightAnimationComponent>(Owner, TEXT("RPGFlightAnimation"));
+    FindOrCreateComponent<URPGEnergySpellComponent>(Owner, TEXT("RPGEnergySpells"));
+    FindOrCreateComponent<URPGDirectionalHoverComponent>(Owner, TEXT("RPGDirectionalHover"));
 }
 
 UInputAction* URPGControllerInputComponent::CreateInputAction(const TCHAR* Name, EInputActionValueType ValueType)
@@ -164,6 +168,11 @@ void URPGControllerInputComponent::BindInputActions()
 	Input->BindAction(RightSpellAction,		ETriggerEvent::Completed,	this, &URPGControllerInputComponent::OnRightSpellReleased);
 	Input->BindAction(LeftSpellAction,		ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnLeftSpellPressed);
 	Input->BindAction(LeftSpellAction,		ETriggerEvent::Completed,	this, &URPGControllerInputComponent::OnLeftSpellReleased);
+    if (URPGEnergySpellComponent* Spells = GetOwner()->FindComponentByClass<URPGEnergySpellComponent>())
+    {
+        Input->BindAction(LeftSpellAction,ETriggerEvent::Canceled,Spells,&URPGEnergySpellComponent::CancelAll);
+        Input->BindAction(RightSpellAction,ETriggerEvent::Canceled,Spells,&URPGEnergySpellComponent::CancelAll);
+    }
 	Input->BindAction(KickAction,			ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnKickPressed);
 	Input->BindAction(KickAction,			ETriggerEvent::Completed,	this, &URPGControllerInputComponent::OnKickReleased);
 	Input->BindAction(DodgeAction,			ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnDodgePressed);

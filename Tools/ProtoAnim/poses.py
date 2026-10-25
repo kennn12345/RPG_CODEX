@@ -378,98 +378,184 @@ def living_loop(base, T=2.0, scale=1.0):
 COMBAT_STANCE = living_loop(STANCE)
 UNARMED_GUARD = living_loop(GUARD, scale=0.8)   # a held guard is tighter: a little less of everything
 
-# ---- 7. Flight (2026-10-21): hover, forward and fast loops, 2.0 s each ----
-# Arms relaxed and loose in hover and normal flight (the user's choice: a calm, floating look), streamlined in fast
-# flight. Feet are free (no planted pivot, no balance solver). The head holds level in the world by itself, so as the
-# body tilts forward the eyes stay on where it is flying. The game picks the loop from the flight speed and tilts the
-# whole body further into climbs and dives on top of these.
-FLY_FREE = dict(balance=[0], pivot_l=[0], pivot_r=[0], foot_turn_l=[0], foot_turn_r=[0],
+# ---- Flight: one coordinated family, with a shared four-second phase. ----
+# Targets are rotated WITH the pelvis, rather than left fixed in world space. This keeps
+# elbows long and knees natural as the body streams into horizontal flight.
+FLY_FREE = dict(balance=[0], pivot_l=[0], pivot_r=[0], foot_turn_l=[0], foot_turn_r=[20],
                 guard_follow_l=[0], guard_follow_r=[0], guard_raise_l=[0], guard_raise_r=[0],
-                hand_rel_l=[0], hand_rel_r=[0], fist_roll_l=[0], fist_roll_r=[0], clav_l=[0, 0, 0], clav_r=[0, 0, 0])
-# Hover: nearly upright with a slight lean, right knee raised and bent (foot pointed), left leg hanging with the toes
-# pointed, arms loose and a little out, hands open and relaxed with the palms toward the ground - like floating in place underwater.
-FLY_HOVER = S(**FLY_FREE, pelvis_off=[0, 0, 6], pelvis_rot=[0, -6, 0], spine_lo=[0, 1, 0], spine_hi=[0, 1, 0],
-              head_rot=[0, -2, 0],
-              foot_r=[-12, 8, 32], foot_rot_r=[0, -40, 0], knee_pole_r=[-0.2, 1, 0.2],
-              foot_l=[10, -4, 16], foot_rot_l=[-10, -45, 0], knee_pole_l=[0.1, 1, 0],
-              hand_l=[27, 6, 86], elbow_pole_l=[0.4, -1, 0], hand_r=[-28, 6, 86], elbow_pole_r=[-0.4, -1, 0],
-              hand_open_l=[1.5], hand_open_r=[1.5], wrist_out_l=[15], wrist_out_r=[15])
-# Flight set (2026-10-23), one family: the body angle grows with speed (hover ~6 deg, forward 45, fast 75), the head
-# looks where it is going (head_rot holds the head level in the world, so only a touch of lift), arms lie along the body, legs straight along it (loose: one a little bent), hands open
-# and relaxed. In game the hips, legs and arms also trail the chest on physics (the ribbon follow-through).
-FLY_FORWARD = S(**FLY_FREE, pelvis_off=[0, 4, 4], pelvis_rot=[0, -55, 0], spine_lo=[0, -3, 0], spine_hi=[0, 2, 0],
-                head_rot=[0, 4, 0],
-                foot_r=[-9, -56, 32], foot_rot_r=[0, -60, 0], knee_pole_r=[-0.1, 1, -0.3],
-                foot_l=[9, -50, 38], foot_rot_l=[-6, -55, 0], knee_pole_l=[0.1, 1, -0.3],
-                hand_l=[30, -4, 86], elbow_pole_l=[0.3, -0.7, 0.7], hand_r=[-30, -4, 86], elbow_pole_r=[-0.3, -0.7, 0.7],
-                hand_open_l=[1.3], hand_open_r=[1.3], wrist_out_l=[0], wrist_out_r=[0])
-# Fast: streamlined, nearly horizontal, chin up looking ahead, legs straight and together, arms back along the sides.
-FLY_FAST = S(**FLY_FREE, pelvis_off=[0, 8, 6], pelvis_rot=[0, -85, 0], spine_lo=[0, -3, 0], spine_hi=[0, 4, 0],
-             head_rot=[0, 8, 0],
-             foot_r=[-6, -82, 74], foot_rot_r=[0, -80, 0], knee_pole_r=[0, 0.3, -1],
-             foot_l=[6, -80, 78], foot_rot_l=[0, -80, 0], knee_pole_l=[0, 0.3, -1],
-             hand_l=[22, -6, 92], elbow_pole_l=[0.3, -0.3, 1], hand_r=[-22, -6, 92], elbow_pole_r=[-0.3, -0.3, 1],
-             hand_open_l=[1.2], hand_open_r=[1.2])
+                hand_rel_l=[0], hand_rel_r=[0], fist_roll_l=[0], fist_roll_r=[0],
+                clav_l=[0, 0, -2], clav_r=[0, 0, 2], reach_l=[0.985], reach_r=[0.985],
+                wrist_out_l=[4], wrist_out_r=[4], hand_open_l=[1.0], hand_open_r=[1.0])
 
-def flight_loop(base, bob, sway, T=2.0):
-    """A floating loop: the living stance's breath and hand drift, plus a slow bob of the whole body and a little
-    swing in the free legs (whole cycles, so it wraps seamlessly)."""
-    keys = living_loop(base, T, scale=0.6)
-    out = []
-    for t, d, ease, lags in keys:
-        u = 2 * math.pi * t / T
-        d = dict(d)
-        d['pelvis_off'] = [d['pelvis_off'][0], d['pelvis_off'][1], d['pelvis_off'][2] + bob * math.sin(u)]
-        d['foot_l'] = [d['foot_l'][0], d['foot_l'][1] + sway * math.sin(u + 0.6), d['foot_l'][2] + bob * math.sin(u) + 0.5 * sway * math.sin(2 * u)]
-        d['foot_r'] = [d['foot_r'][0], d['foot_r'][1] + sway * math.sin(u + 2.2), d['foot_r'][2] + bob * math.sin(u) + 0.5 * sway * math.sin(2 * u + 1)]
-        out.append((t, d, ease, lags))
+def flight_pose(tilt, hands, feet, knees, offset=(0, 0, 5), head=2):
+    # Author in Manny's coordinates; protoanim maps the finished targets to UEFN.
+    pivot = [0, 0, 91]
+    rot = _pa.qeuler(0, -tilt, 0)
+    def point(v):
+        return _pa.add(_pa.add(pivot, _pa.qrot(rot, _pa.sub(v, pivot))), list(offset))
+    pose = S(**FLY_FREE, pelvis_off=list(offset), pelvis_rot=[0, -tilt, 0],
+             spine_lo=[0, -1, 0], spine_hi=[0, 3, 0], head_rot=[0, head, 0],
+             hand_l=point(hands[0]), hand_r=point(hands[1]),
+             elbow_pole_l=[0.65, -0.75, -0.1], elbow_pole_r=[-0.65, -0.75, -0.1],
+             foot_l=point(feet[0]), foot_r=point(feet[1]),
+             foot_rot_l=[0, -tilt-20, 0], foot_rot_r=[0, -tilt-20, 0],
+             knee_pole_l=knees[0], knee_pole_r=knees[1])
+    # At forward/boost angles, anchor targets to the actual rotated hip/shoulder.
+    # Static retarget offsets around the idle stance otherwise shorten the legs in flight.
+    if tilt > 20:
+        cs=_pa.to_cs(_pa.build_pose(pose))
+        for side,sgn in [('l',1),('r',-1)]:
+            leg=sum(_pa.length(_pa.IDLE[b+'_'+side][1]) for b in ['calf','foot'])
+            arm=sum(_pa.length(_pa.IDLE[b+'_'+side][1]) for b in ['lowerarm','hand'])
+            legvec=[sgn*(2 if tilt>80 else 4), -1, -leg*(1.025 if side=='l' else 1.005)]
+            armvec=[sgn*(9 if tilt>80 else 19), -5, -arm*0.96]
+            ft=_pa.add(cs['thigh_'+side][1],_pa.qrot(rot,legvec))
+            ht=_pa.add(cs['upperarm_'+side][1],_pa.qrot(rot,armvec))
+            if _pa._MAP:
+                m=_pa._MAP[side]
+                ft=_pa.add(m['hip_m'],_pa.mul(_pa.sub(ft,m['hip']),1/_pa.LEG_K))
+                ht=_pa.add(m['sh_m'],_pa.mul(_pa.sub(ht,m['sh']),1/_pa.ARM_K))
+            pose['foot_'+side]=ft;pose['hand_'+side]=ht
+    # Cancel the idle stance's toe-out BEFORE pitching the feet with the body.
+    # Boost toes trail along the shin rather than forming a right-angle air brake.
+    for side in ['l','r']:
+        toe=_pa.sub(_pa.IDLE_CS['ball_'+side][1],_pa.IDLE_CS['foot_'+side][1])
+        toe_yaw=math.degrees(math.atan2(-toe[0],toe[1]))
+        pose['foot_turn_'+side]=[-toe_yaw-_pa.FOOT_BASE_TURN[side]]
+        pose['foot_rot_'+side]=[0,-tilt-(60 if tilt>20 else 30),0]
+    return pose
+
+# Flight starts horizontal, with a level shoulder line and paired limbs.
+FLY_HOVER = flight_pose(89, ([49, 4, 102], [-48, 3, 104]),
+                       ([12, -3, 13], [-12, 8, 28]), ([0.15, 1, 0], [-0.15, 1, 0]))
+# The chest leads, arms sweep back with room for the shoulder/turn reactions.
+FLY_FORWARD = flight_pose(89, ([36, -5, 91], [-35, -6, 93]),
+                         ([11, -4, 11], [-10, -1, 16]), ([0.12, 0.6, -0.8], [-0.12, 0.6, -0.8]), head=5)
+# Narrow boost silhouette with relaxed trailing knees; both sides stay paired.
+FLY_FAST = flight_pose(89, ([27, -7, 87], [-27, -7, 89]),
+                      ([7, -3, 9], [-7, -1, 12]), ([0.1, 0.15, -1], [-0.1, 0.15, -1]), head=8)
+# Air brake / return to hover: broad arms, feet come under the hips before settling.
+FLY_BRAKE = flight_pose(62, ([55, 14, 110], [-55, 14, 110]),
+                       ([17, 14, 25], [-16, 10, 33]), ([0.2, 1, 0], [-0.2, 1, 0]), head=-2)
+
+def hover_loop(base, T=4.0, keys_n=64, amp=1.0, legs=(2.5, 1.8)):
+    """Periodic breathing and drag: the hips lead, hands/feet follow with different phases.
+    All clips share a phase. No running/kicking cycle is added to forward flight."""
+    out=[]
+    for i in range(keys_n+1):
+        t=T*i/keys_n; u=2*math.pi*t/T
+        d={k:list(v) for k,v in base.items()}
+        rise=1.6*amp*math.sin(u)
+        sway=0.8*amp*math.sin(u+0.6)
+        d['pelvis_off'][0] += 0.45*amp*math.sin(2*u)
+        d['pelvis_off'][1] += sway
+        d['pelvis_off'][2] += rise
+        d['pelvis_rot'][1] += 1.0*amp*math.sin(u-0.3)
+        d['pelvis_rot'][2] += 0.65*amp*math.sin(2*u+0.4)
+        d['spine_hi'][1] += 0.65*amp*math.sin(u-0.55)
+        for side,sgn,ph,leg in [('l',1,0.0,legs[0]),('r',-1,1.1,legs[1])]:
+            h=d['hand_'+side]; f=d['foot_'+side]
+            h[0] += sgn*0.7*amp*math.sin(u-0.8+ph)
+            h[1] += sway-0.8*amp*math.sin(u-0.7+ph)
+            h[2] += rise+0.6*amp*math.sin(2*u+ph)
+            f[0] += sgn*0.4*amp*math.sin(u-1.0+ph)
+            f[1] += sway-leg*math.sin(u-1.0+ph)
+            f[2] += rise+0.5*amp*math.sin(2*u+ph)
+            d['hand_open_'+side][0] += 0.06*amp*math.sin(u+ph)
+        out.append((t,d,'flow',{}))
     return out
-def hover_loop(base, T=4.0, keys_n=64, amp=1.0, legs=(4.5, 2.5)):
-    """Natural floating (2026-10-21): several gentle motions at different rhythms instead of one bob, and the free
-    parts lagging behind the body. All whole cycles of T, so the loop wraps seamlessly.
-      float     rise and sink 2.5 cm, once per loop
-      sway      the body drifts forward / back 3 cm and the torso tips +-3 deg with it (a quarter cycle after the float)
-      roll      a slight side-to-side lean, twice per loop, so it never reads as a simple pendulum
-      legs      swing after the body (dragged, hanging): opposite to the sway and later in phase, the dangling leg more
-      arms      drift after the shoulders a beat late (follow-through)
-    plus the living stance's breath, and (2026-10-23) each hand and foot drifting on its own slow rhythm and the fingers
-    opening and closing a touch, so nothing is ever still. amp scales it all (forward / fast flight use the same loop,
-    smaller and tighter)."""
-    breath = living_loop(base, T, scale=0.5)
-    out = []
-    for i in range(keys_n + 1):
-        t = T * i / keys_n
-        u = 2 * math.pi * t / T
-        d = dict(sample(breath, t, GROUPS))
-        rise = 3.0 * amp * math.sin(u)
-        fwd = 3.0 * amp * math.sin(u + math.pi / 2)
-        tip = 3.0 * amp * math.sin(u + math.pi / 2 - 0.35)          # the torso tips a touch after the drift starts
-        roll = 1.2 * amp * math.sin(2 * u + 0.8)
-        po, pr = d['pelvis_off'], d['pelvis_rot']
-        d['pelvis_off'] = [po[0] + 0.8 * amp * math.sin(2 * u + 0.8), po[1] + fwd, po[2] + rise]
-        d['pelvis_rot'] = [pr[0], pr[1] - tip, pr[2] + roll]
-        sh = d['spine_hi']
-        d['spine_hi'] = [sh[0], sh[1] - 0.5 * tip, sh[2] - 0.6 * roll]   # the chest settles back a little over the hips
-        # legs: dragged behind the body's drift (opposite and late), the hanging left leg swinging more
-        lag = u + math.pi / 2 - 1.1
-        for side, amt, ph in (('l', legs[0], 1.4), ('r', legs[1], 0.3)):
-            f = d['foot_' + side]
-            d['foot_' + side] = [f[0] - 0.4 * roll + 0.7 * amp * math.sin(3 * u + ph), f[1] - amt * math.sin(lag),
-                                 f[2] + rise + 0.8 * amp * math.sin(2 * u + ph) + 0.5 * amp * math.sin(3 * u + 2 * ph)]
-        # arms: follow the shoulders a beat late
-        alag = u + math.pi / 2 - 0.7
-        for side, s in (('l', 1), ('r', -1)):
-            h = d['hand_' + side]
-            ph = 0.0 if side == 'l' else 2.1
-            d['hand_' + side] = [h[0] + s * amp * (0.8 * math.sin(2 * u + 1.9) + 0.6 * math.sin(3 * u + ph)), h[1] - 2.0 * amp * math.sin(alag) + 0.6 * amp * math.sin(3 * u + ph + 1),
-                                 h[2] + rise + amp * (1.2 * math.sin(alag + 0.5) + 0.5 * math.sin(3 * u + ph + 2))]
-            if 'hand_open_' + side in d:   # fingers ease open and closed a touch
-                d['hand_open_' + side] = [d['hand_open_' + side][0] + 0.15 * amp * math.sin(2 * u + ph)]
-        out.append((t, d, 'smooth' if i in (0, keys_n) else 'flow', {}))
-    return out
-FLIGHT_HOVER = hover_loop(FLY_HOVER)
-FLIGHT_FORWARD = hover_loop(FLY_FORWARD, T=3.0, keys_n=48, amp=0.6, legs=(3.0, 3.5))
-FLIGHT_FAST = hover_loop(FLY_FAST, T=2.0, keys_n=32, amp=0.3, legs=(1.5, 1.5))
+FLIGHT_HOVER=hover_loop(FLY_HOVER)
+FLIGHT_FORWARD=hover_loop(FLY_FORWARD,amp=0.4,legs=(0.8,1.0))
+FLIGHT_FAST=hover_loop(FLY_FAST,amp=0.18,legs=(0.35,0.45))
+FLIGHT_BRAKE=hover_loop(FLY_BRAKE,amp=0.45,legs=(1.0,1.2))
+
+# ---- Second pass: authored turns and one-shot flight transitions. ----
+def flight_target(pose, side, hand=None, foot=None):
+    """Targets relative to the actual rotated shoulder/hip, with inverse authoring mapping."""
+    cs=_pa.build_pose(pose,return_cs=True)
+    rot=_pa.qeuler(*pose['pelvis_rot'])
+    for channel,offset,bone,scale,key in [('hand',hand,'upperarm',_pa.ARM_K,'sh'),('foot',foot,'thigh',_pa.LEG_K,'hip')]:
+        if offset is None:continue
+        target=_pa.add(cs[bone+'_'+side][1],_pa.qrot(rot,offset))
+        if _pa._MAP:
+            m=_pa._MAP[side];target=_pa.add(m[key+'_m'],_pa.mul(_pa.sub(target,m[key]),1/scale))
+        pose[channel+'_'+side]=target
+    return pose
+
+# These targets are relative to the shoulders/hips, so neither side inherits
+# the standing idle's arm/leg stagger. The final bake removes its torso twist.
+for base,spread,extension in [(FLY_HOVER,0.43,0.86),(FLY_FORWARD,0.33,0.91),(FLY_FAST,0.18,0.98)]:
+    # Boost keeps a soft knee but streams the feet closer to the body line.
+    # This also supplies matching keys to boost entry and flight release.
+    leg_extension,leg_lift=(0.96,0.08) if base is FLY_FAST else (0.97,0.02)
+    for side,sign in [('l',1),('r',-1)]:
+        arm=sum(_pa.length(_pa.IDLE[b+'_'+side][1]) for b in ['lowerarm','hand'])
+        leg=sum(_pa.length(_pa.IDLE[b+'_'+side][1]) for b in ['calf','foot'])
+        flight_target(base,side,[sign*arm*spread,arm*0.04,-arm*extension],
+                      [sign*leg*0.07,-leg*leg_lift,-leg*leg_extension])
+        base['knee_pole_'+side]=_pa.qrot(_pa.qeuler(*base['pelvis_rot']),[sign*0.12,1,0])
+FLIGHT_HOVER=hover_loop(FLY_HOVER,amp=0.45,legs=(0.7,0.7))
+FLIGHT_FORWARD=hover_loop(FLY_FORWARD,amp=0.25,legs=(0.4,0.4))
+FLIGHT_FAST=hover_loop(FLY_FAST,amp=0.12,legs=(0.2,0.2))
+
+# Both directions sample the same canonical loop, then the baked right turn is
+# reflected through the skeleton for the left turn. They cannot drift apart.
+FLIGHT_BANK_L=FLIGHT_BANK_R=hover_loop(FLY_FORWARD,amp=0.20,legs=(0.3,0.3))
+FLIGHT_BANK_FAST_L=FLIGHT_BANK_FAST_R=hover_loop(FLY_FAST,amp=0.12,legs=(0.2,0.2))
+
+# The global entry blend still comes from locomotion, but every authored flight
+# entry key is flat. Acceleration changes limb extension rather than rolling a shoulder.
+F_LIFT_LOAD=with_(FLY_HOVER,pelvis_off=[0,0,3])
+F_LIFT_PRESS=with_(FLY_HOVER,pelvis_off=[0,0,7],spine_hi=[0,4,0])
+FLIGHT_TAKEOFF=[(0,F_LIFT_LOAD,'smooth',{}),(0.32,F_LIFT_PRESS,'flow',{}),
+                (0.65,FLY_HOVER,'flow',{}),(1.0,FLY_HOVER,'smooth',{})]
+F_DRIVE_READY=with_(FLY_HOVER,spine_hi=[0,2,0])
+F_DRIVE_OVER=with_(FLY_FORWARD)
+FLIGHT_ACCELERATE=[(0,FLY_HOVER,'smooth',{}),(0.14,F_DRIVE_READY,'flow',{}),
+                  (0.48,F_DRIVE_OVER,'flow',{'leg_l':0.05,'leg_r':0.05,'arm_l':0.035,'arm_r':0.035}),
+                  (0.90,FLY_FORWARD,'smooth',{})]
+F_BOOST_LOAD=with_(FLY_FORWARD)
+F_BOOST_OVER=with_(FLY_FAST)
+FLIGHT_BOOST=[(0,FLY_FORWARD,'smooth',{}),(0.18,F_BOOST_LOAD,'flow',{}),
+              (0.48,F_BOOST_OVER,'flow',{'arm_l':0.035,'arm_r':0.035,'leg_l':0.07,'leg_r':0.07}),
+              (0.90,FLY_FAST,'smooth',{})]
+F_RELEASE_CATCH=flight_pose(65,([40,-3,93],[-39,-3,94]),([12,-2,18],[-12,0,23]),([0.15,0.4,-0.8],[-0.15,0.4,-0.8]),head=4)
+for side,sgn in [('l',1),('r',-1)]:
+    leg=sum(_pa.length(_pa.IDLE[b+'_'+side][1]) for b in ['calf','foot'])
+    arm=sum(_pa.length(_pa.IDLE[b+'_'+side][1]) for b in ['lowerarm','hand'])
+    flight_target(F_RELEASE_CATCH,side,[sgn*arm*0.55,arm*0.1,-arm*0.55],[sgn*8,leg*0.12,-leg*0.83])
+F_RELEASE_GATHER=flight_pose(18,([48,17,115],[-47,14,114]),([16,19,32],[-16,8,40]),([0.2,1,0],[-0.2,1,0]),head=0)
+F_RELEASE_STRIDE=with_(FLY_HOVER,pelvis_rot=[0,-9,0],spine_lo=[0,-3,0],spine_hi=[0,-2,0],
+                       hand_l=[48,8,108],hand_r=[-30,0,96],elbow_pole_l=[1,-0.25,0],elbow_pole_r=[-0.6,-0.7,0],
+                       foot_l=[13,18,39],foot_r=[-12,-18,18],foot_rot_l=[0,-28,0],foot_rot_r=[0,-46,0])
+# The stride is upright; do not inherit the horizontal hover's knee guides.
+for side,sign in [('l',1),('r',-1)]:
+    F_RELEASE_STRIDE['knee_pole_'+side]=_pa.qrot(_pa.qeuler(*F_RELEASE_STRIDE['pelvis_rot']),[sign*0.12,1,0])
+FLIGHT_RELEASE=[(0,FLY_FAST,'smooth',{}),(0.22,F_RELEASE_CATCH,'flow',{'leg_l':0.05,'leg_r':0.07}),
+                (0.48,F_RELEASE_GATHER,'flow',{'leg_l':0.04,'leg_r':0.06}),
+                (0.75,F_RELEASE_STRIDE,'smooth',{'leg_l':0,'leg_r':0})]
+
+# Stationary hover and the momentum catch are separate from the approved prone
+# flight family above. Build these after its action keys so Forward/Fast/banks,
+# Boost and Release retain exactly the same authored transforms.
+FLY_HOVER_IDLE=flight_pose(2,([42,6,104],[-42,6,104]),
+                          ([12,0,16],[-12,0,16]),([0.12,1,0],[-0.12,1,0]),head=0)
+FLY_STOP_BRACE=flight_pose(-10,([48,24,118],[-48,24,118]),
+                          ([14,22,32],[-14,22,32]),([0.12,1,0],[-0.12,1,0]),head=0)
+for base,hand_offset,foot_offset in [
+        (FLY_HOVER_IDLE,(0.32,0.04,-0.89),(0.08,0.02,-0.94)),
+        (FLY_STOP_BRACE,(0.55,0.35,-0.38),(0.10,0.28,-0.80))]:
+    for side,sign in [('l',1),('r',-1)]:
+        arm=sum(_pa.length(_pa.IDLE[b+'_'+side][1]) for b in ['lowerarm','hand'])
+        leg=sum(_pa.length(_pa.IDLE[b+'_'+side][1]) for b in ['calf','foot'])
+        flight_target(base,side,[sign*arm*hand_offset[0],arm*hand_offset[1],arm*hand_offset[2]],
+                      [sign*leg*foot_offset[0],leg*foot_offset[1],leg*foot_offset[2]])
+        base['knee_pole_'+side]=_pa.qrot(_pa.qeuler(*base['pelvis_rot']),[sign*0.12,1,0])
+FLIGHT_HOVER=hover_loop(FLY_HOVER_IDLE,amp=0.65,legs=(0.65,0.65))
+FLIGHT_BRAKE=hover_loop(FLY_STOP_BRACE,amp=0.35,legs=(0.5,0.5))
+FLIGHT_TAKEOFF=[(0,with_(FLY_HOVER_IDLE,pelvis_off=[0,0,3]),'smooth',{}),
+                (0.32,with_(FLY_HOVER_IDLE,pelvis_off=[0,0,7]),'flow',{}),
+                (0.65,FLY_HOVER_IDLE,'flow',{}),(1.0,FLY_HOVER_IDLE,'smooth',{})]
 
 # Both punches play 10% faster than their authored timing (key times and lags scale together).
 PUNCH_SPEED = 1.1
@@ -659,12 +745,51 @@ SPECS = {
     'RPG_Proto_FlyHover': (FLIGHT_HOVER, None, None, ()),
     'RPG_Proto_FlyForward': (FLIGHT_FORWARD, None, None, ()),
     'RPG_Proto_FlyFast': (FLIGHT_FAST, None, None, ()),
+    'RPG_Proto_FlyBrake': (FLIGHT_BRAKE, None, None, ()),
+    'RPG_Proto_FlyBankL': (FLIGHT_BANK_L,None,None,()),
+    'RPG_Proto_FlyBankR': (FLIGHT_BANK_R,None,None,()),
+    'RPG_Proto_FlyBankFastL': (FLIGHT_BANK_FAST_L,None,None,()),
+    'RPG_Proto_FlyBankFastR': (FLIGHT_BANK_FAST_R,None,None,()),
+    'RPG_Proto_FlyTakeoff': (FLIGHT_TAKEOFF,None,None,()),
+    'RPG_Proto_FlyAccelerate': (FLIGHT_ACCELERATE,None,None,()),
+    'RPG_Proto_FlyBoost': (FLIGHT_BOOST,None,None,()),
+    'RPG_Proto_FlyRelease': (FLIGHT_RELEASE,None,None,()),
 }
 CLIPS = [(name, spec[0], spec[1]) for name, spec in SPECS.items()]
 
 def bake_spec(name):
     keys, impact, springs, pins = SPECS[name]
-    clip = bake(name, keys, GROUPS, springs, pins); clip['impact'] = impact
+    if name.startswith('RPG_Proto_Fly') and name not in {'RPG_Proto_FlyTakeoff','RPG_Proto_FlyAccelerate','RPG_Proto_FlyBoost','RPG_Proto_FlyRelease'}:
+        # Sample using neighbours across the seam, so velocity is continuous too.
+        T=keys[-1][0]
+        periodic=(keys[:-1] + [(k[0]+T,*k[1:]) for k in keys]
+                  + [(k[0]+2*T,*k[1:]) for k in keys[1:]])
+        frames=[_pa.build_pose(sample(periodic,T+i/FPS,GROUPS)) for i in range(round(T*FPS)+1)]
+        clip=dict(name=name,fps=FPS,frames=len(frames),bones=_pa.BONES,poses=frames)
+    else:
+        clip = bake(name, keys, GROUPS, springs, pins)
+    if name.startswith('RPG_Proto_Fly'):
+        from flight_symmetry import level_pose, release_stride_pose, flatten_pose, action_curve, bank_pose as balanced_bank
+        # Remove the idle's pre-existing chest twist in every flight frame.
+        clip['poses']=[level_pose(frame) for frame in clip['poses']]
+        actions={'RPG_Proto_FlyTakeoff','RPG_Proto_FlyAccelerate','RPG_Proto_FlyBoost','RPG_Proto_FlyRelease'}
+        if name in actions:
+            # Interpolate the solved anatomical poses, rather than crossing an IK
+            # straight-leg singularity between nearly identical flat targets.
+            solved=[]
+            for i,key in enumerate(keys):
+                frame=_pa.build_pose(key[1])
+                # The final release key is a running stride, not a neutral loop.
+                balance=release_stride_pose if name=='RPG_Proto_FlyRelease' and i==len(keys)-1 else level_pose
+                solved.append((key[0],balance(frame)))
+            curve=action_curve(solved)
+            clip['poses']=[curve(i/FPS) for i in range(clip['frames'])]
+        if name not in {'RPG_Proto_FlyHover','RPG_Proto_FlyTakeoff','RPG_Proto_FlyBrake','RPG_Proto_FlyRelease'}:
+            clip['poses']=[flatten_pose(frame) for frame in clip['poses']]
+        if 'FlyBank' in name:
+            turn=-1 if name.endswith('L') else 1
+            clip['poses']=[balanced_bank(frame,turn) for frame in clip['poses']]
+    clip['impact'] = impact
     clip['keys'] = [k[0] for k in keys]
     return clip
 

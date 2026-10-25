@@ -197,7 +197,9 @@ void URPGPhysicsReactionComponent::ApplyPoweredMotorScales(float R)
 	for (const TPair<FName, TArray<FName>>& Limb : LimbControls)
 	{
 		float Scale = All;
-		if (Limb.Key == TEXT("LegLeft") || Limb.Key == TEXT("LegRight")) Scale *= LegMotorScale;
+		if (Limb.Key == TEXT("LegLeft") || Limb.Key == TEXT("LegRight"))
+            Scale *= bEnergyLegReaction && Limb.Key == StruckLimb
+                ? FMath::Lerp(EnergyLegMotorScale,LegMotorScale,R) : LegMotorScale;
 		if (Limb.Key == StruckLimb) Scale *= FMath::Lerp(StruckLimbStrengthScale, 1.f, R);
 		SetLimbMotorScale(Limb.Key, Scale);
 	}
@@ -366,6 +368,7 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDaz
 	StateTime = 0.f;
 	bReturning = false;
 	StruckLimb = GetLimbForBone(HitBone);
+    bEnergyLegReaction = false;
 	CurrentYieldTime = bDazed ? StaggerYieldTime : PoweredYieldTime;
 	CurrentRecoverTime = bDazed ? StaggerRecoverTime : PoweredRecoverTime;
 	CurrentMotorBase = bDazed ? StaggerMotorScale : 1.f;
@@ -417,6 +420,29 @@ void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 		LastReaction.Limb = NAME_None;
 	}
 	LastReaction.State = State;
+}
+
+void URPGPhysicsReactionComponent::HandleEnergyHit(const FRPGEnergyImpact& Impact)
+{
+    USkeletalMeshComponent* Mesh = GetMesh();
+    if (!bReactionsEnabled || !bSetUp || !Mesh) return;
+    const bool bLimp = State == ERPGPhysicsReactionState::Limp;
+    const FName Bone = FindImpulseBody(Impact.Hit.BoneName,bLimp);
+    if (Bone == NAME_None) return;
+    if (!bLimp)
+    {
+        EnterPoweredReaction(Bone,Impact.Charge >= 0.4f);
+        bEnergyLegReaction = StruckLimb == TEXT("LegLeft") || StruckLimb == TEXT("LegRight");
+        if (bEnergyLegReaction) ApplyPoweredMotorScales(0.f);
+    }
+    LastReaction.HitBone = Impact.Hit.BoneName;
+    LastReaction.Limb = GetLimbForBone(Bone);
+    LastReaction.AttackName = TEXT("Energy Blast");
+    LastReaction.Strength = 1.f+Impact.Charge*2.f;
+    // Small limb bodies cannot receive an unbounded velocity change.
+    const FBodyInstance* Body = Mesh->GetBodyInstance(Bone);
+    const float Mass = Body ? FMath::Max(0.5f,Body->GetBodyMass()) : 5.f;
+    ApplyReactionImpulse(Bone,Impact.Hit.ImpactPoint,Impact.Direction,FMath::Min(Impact.Impulse,Mass*FMath::Lerp(180.f,450.f,Impact.Charge)));
 }
 
 void URPGPhysicsReactionComponent::ApplyReactionImpulse(FName HitBone, FVector ImpactPoint, FVector Direction, float Magnitude)
@@ -495,6 +521,7 @@ void URPGPhysicsReactionComponent::FinishReturn()
 	State = ERPGPhysicsReactionState::Animated;
 	bReturning = false;
 	StruckLimb = NAME_None;
+    bEnergyLegReaction = false;
 	bImpulsePending = false;
 	if (!PhysicsControl) return;
 	SetPhysicsBlend(0.f);

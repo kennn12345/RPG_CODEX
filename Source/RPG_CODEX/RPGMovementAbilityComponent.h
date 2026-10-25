@@ -22,6 +22,7 @@ public:
 	URPGMovementAbilityComponent();
 
 	virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	// ---------------- Tuning ----------------
@@ -41,6 +42,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight")
 	float FlyingBrakingDeceleration = 1500.f;
 
+    /** Flight-only steering authority. The ground acceleration is restored on exit. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight", meta = (ClampMin = "1"))
+    float FlightAcceleration = 2000.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight", meta = (ClampMin = "1"))
+    float FastFlightAcceleration = 3600.f;
+
 	/** Fly where you look: pushing forward climbs when looking up and dives when looking down. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight")
 	bool bFlightFollowsLookPitch = true;
@@ -53,9 +60,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight", meta = (ClampMin = "10", ClampMax = "85"))
 	float FlightMaxPitch = 80.f;
 
-	/** Flight speed with L3 fast flight on. Normal flight uses the movement component's Max Fly Speed. */
+    /** Applied once to the character's normal Max Fly Speed at BeginPlay. Hover keeps its own speed. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight", meta = (ClampMin = "0.1"))
+    float NormalFlightSpeedScale = 1.1f;
+	/** Flight speed with L3 fast flight on. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight")
-	float FastFlightSpeed = 1600.f;
+	float FastFlightSpeed = 2000.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dodge")
 	float DodgeSpeed = 1400.f;
@@ -91,6 +101,7 @@ public:
 	/** While true and flying, the character rises straight up (hold A). */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Flight")
 	void SetFlightRiseHeld(bool bHeld) { bFlightRiseHeld = bHeld; }
+    bool IsFlightRiseHeld() const { return bFlightRiseHeld; }
 
 	/** L3 while flying. Returns true if fast flight is now on. */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Flight")
@@ -118,6 +129,17 @@ private:
 
 	/** Adds the climb/dive and hold-A rise on top of the Left Stick input while flying. */
 	void ApplyFlightVerticalInput();
+    void UpdateFlightAcceleration(UCharacterMovementComponent* Movement, bool bFlying);
+    void ConfigureFlightTickOrder(UCharacterMovementComponent* Movement, bool bFlying);
+    void UpdateHoverSpeed(UCharacterMovementComponent* Movement, bool bFlying);
+    void RestoreHoverSpeed(UCharacterMovementComponent* Movement);
+    bool bHoverSpeedOverride = false;
+    float HoverBaseFlySpeed = 0.f, HoverAppliedSpeed = 0.f;
+    TWeakObjectPtr<UActorComponent> FlightPreMovementTick;
+    bool bAddedFlightPrePrerequisite = false;
+    bool bAddedFlightMovementPrerequisite = false;
+    bool bFlightAccelerationOverride = false;
+    float GroundAcceleration = 0.f;
 
 	bool bSprinting = false;
 	float WalkSpeedBeforeSprint = 0.f;

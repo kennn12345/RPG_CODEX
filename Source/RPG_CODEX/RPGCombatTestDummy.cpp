@@ -139,6 +139,7 @@ void ARPGCombatTestDummy::PlayIdle()
 	if (!Mesh) return;
 	GetUpTimeLeft = 0.f;
 	bStaggering = false;
+    StaggerRootMotionScale = 1.f;
 	if (!GetUpTilt.IsIdentity()) Mesh->SetRelativeRotation(MeshRestRotation);   // a slope get-up cut short
 	GetUpTilt = FQuat::Identity;
 	Mesh->SetPlayRate(1.f);
@@ -292,7 +293,7 @@ void ARPGCombatTestDummy::Tick(float DeltaTime)
 		if (GetUpTimeLeft <= 0.f)
 		{
 			// The step-back clip moved its root away from the actor: move the actor there as the idle takes over.
-			const FVector RootOffset = bStaggering ? Mesh->GetComponentTransform().TransformVectorNoScale(Mesh->GetSocketTransform(TEXT("root"), RTS_Component).GetLocation()) : FVector::ZeroVector;
+			const FVector RootOffset = bStaggering ? Mesh->GetComponentTransform().TransformVectorNoScale(Mesh->GetSocketTransform(TEXT("root"), RTS_Component).GetLocation()) * StaggerRootMotionScale : FVector::ZeroVector;
 			bStaggering = false;
 			PlayIdle();
 			if (!RootOffset.IsNearlyZero())
@@ -312,7 +313,7 @@ void ARPGCombatTestDummy::Tick(float DeltaTime)
 			const FRootMotionMovementParams Root = Anim->ConsumeExtractedRootMotion(1.f);
 			if (Root.bHasRootMotion)
 			{
-				const FVector Move = Mesh->ConvertLocalRootMotionToWorld(Root.GetRootMotionTransform()).GetTranslation();
+				const FVector Move = Mesh->ConvertLocalRootMotionToWorld(Root.GetRootMotionTransform()).GetTranslation() * StaggerRootMotionScale;
 				const FVector Before = GetActorLocation();
 				SetActorLocation(Before + FVector(Move.X, Move.Y, 0.f), true);
 				ShoveOffset += GetActorLocation() - Before;
@@ -395,6 +396,50 @@ void ARPGCombatTestDummy::ReceiveMeleeHit_Implementation(const FRPGMeleeHitInfo&
 	FlinchElapsed = 0.f;
 }
 
+void ARPGCombatTestDummy::ReceiveEnergyHit_Implementation(const FRPGEnergyImpact& Impact)
+{
+    ++EnergyHitCount; ++HitCount; LastEnergyHit = Impact;
+    Speed = 0.f; PauseLeft = FMath::Max(PauseLeft,HitPause+Impact.Charge);
+    ShoveVelocity = FVector::ZeroVector;
+    float Health = 100.f;
+    if (Stats && Stats->GetStatByName(TEXT("Health"),Health))
+    {
+        Stats->SetStatBaseByName(TEXT("Health"),FMath::Max(0.f,Health-Impact.Damage));
+        if (Health <= Impact.Damage) bKnockedOut = true;
+    }
+    if (PhysicsReaction && PhysicsReaction->bReactionsEnabled)
+    {
+        if (bKnockedOut) PhysicsReaction->EnterFullRagdoll(2.f);
+        PhysicsReaction->HandleEnergyHit(Impact);
+        const FName Limb = PhysicsReaction->GetLimbForBone(Impact.Hit.BoneName);
+        if (!bStaggering && !bKnockedOut && GetUpTimeLeft <= 0.f
+            && (Limb == TEXT("LegLeft") || Limb == TEXT("LegRight"))
+            && PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Limp)
+        {
+            FVector Push = FVector(Impact.Direction.X,Impact.Direction.Y,0.f).GetSafeNormal();
+            if (Push.IsNearlyZero()) Push = -GetActorForwardVector();
+            UAnimSequence* Step = PickStaggerClip(Push,Impact.Charge >= 0.4f);
+            if (!Step) Step = StaggerBackAnimation.LoadSynchronous();
+            if (Step)
+            {
+                const float Travel = Step->ExtractRootMotionFromRange(0.,Step->GetPlayLength(),FAnimExtractContext(0.,false)).GetTranslation().Size2D();
+                const float CatchDistance = FMath::Lerp(EnergyTapStepDistance,EnergyChargedStepDistance,FMath::Clamp(Impact.Charge,0.f,1.f));
+                StaggerRootMotionScale = Travel > 1.f ? FMath::Min(1.f,CatchDistance/Travel) : 1.f;
+                Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+                Mesh->PlayAnimation(Step,false);
+                if (UAnimInstance* Anim = Mesh->GetAnimInstance()) Anim->SetRootMotionMode(ERootMotionMode::RootMotionFromEverything);
+                bStaggering = true; bPlayingLocomotion = false; bHasTarget = false;
+                GetUpTimeLeft = Step->GetPlayLength() + FMath::Lerp(0.25f,StaggerDazedTime,Impact.Charge);
+            }
+        }
+    }
+    else if (bFlinchOnHit)
+    {
+        FlinchAxis = FVector::CrossProduct(FVector::UpVector,Impact.Direction).GetSafeNormal();
+        FlinchElapsed = 0.f;
+    }
+}
+
 void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 {
 	const FRPGPowerInput Input = URPGPowerSystem::MakeMeleeInput(Hit);
@@ -430,6 +475,7 @@ void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	}
 	if (StaggerBack && PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Limp)
 	{
+        StaggerRootMotionScale = 1.f;
 		Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 		Mesh->PlayAnimation(StaggerBack, false);
 		if (UAnimInstance* Anim = Mesh->GetAnimInstance()) Anim->SetRootMotionMode(ERootMotionMode::RootMotionFromEverything);
@@ -596,6 +642,7 @@ void ARPGCombatTestDummy::ReceiveContactPush_Implementation(const FVector& PushV
 
 void ARPGCombatTestDummy::ResetDummy()
 {
+    EnergyHitCount = 0; LastEnergyHit = FRPGEnergyImpact();
 	HitCount = 0;
 	LastHit = FRPGMeleeHitInfo();
 	FlinchElapsed = -1.f;

@@ -4,6 +4,9 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimInstanceProxy.h"
 #include "RPGStrikeContactComponent.h"
+#include "RPGEnergySpellTypes.h"
+#include "RPGDirectionalMovementTypes.h"
+#include "RPGFlightAnimationTypes.h"
 #include "RPGAnimInstance.generated.h"
 
 /**
@@ -27,7 +30,11 @@ private:
 	void ApplySpineAim(FPoseContext& Output) const;
 	void ApplyGuardSteady(FPoseContext& Output) const;
 	void ApplyStrikeContact(FPoseContext& Output);
+	void ApplyFlight(FPoseContext& Output) const;
 	void ApplyFlow(FPoseContext& Output) const;
+    void ApplyRearSway(FPoseContext& Output) const;
+    void ApplySpellPose(FPoseContext& Output) const;
+    void ApplyDirectionalHover(FPoseContext& Output) const;
 
 public:
 	/** Component-space offset the contact moved this limb's hand / foot by in the last pose. */
@@ -46,8 +53,17 @@ private:
 	/** Kept between poses: Applied grows at once (never into the surface), eases off over ContactReleaseTime. */
 	FRPGLimbContactResult ContactResults[RPGStrikeContact::NumLimbs];
 	float ContactReleaseTime = 0.06f;
+	TArray<class UAnimSequence*> FlightClips;
+	float FlightWeight = 0.f, FlightPhase = 0.f;
+    float FlightTurn = 0.f, FlightActionTime = 0.f, FlightActionWeight = 0.f;
+    int32 FlightActionIndex = INDEX_NONE;
+	FVector FlightBlend = FVector::ZeroVector;
+
 	TArray<FName> FlowBones;
 	TArray<FVector> FlowRotations;
+    FRPGFlightRearSway RearSway;
+    FRPGEnergyPose SpellPose[2];
+    FRPGDirectionalHoverPose DirectionalHover;
 };
 
 /**
@@ -111,6 +127,18 @@ public:
 	 *  on top of the animation - limbs swinging with momentum and springing back. */
 	TArray<FName> FlowBones;
 	TArray<FVector> FlowRotations;
+    FRPGFlightRearSway RearSway;
+    FRPGEnergyPose SpellPose[2];
+    FRPGDirectionalHoverPose DirectionalHover;
+
+    /** Flight-only blend, copied to the worker-thread proxy in PreUpdate. */
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<class UAnimSequence>> FlightClips;
+    float FlightWeight = 0.f;
+    float FlightPhase = 0.f;
+    float FlightTurn = 0.f, FlightActionTime = 0.f, FlightActionWeight = 0.f;
+    int32 FlightActionIndex = INDEX_NONE;
+    FVector FlightBlend = FVector::ZeroVector; // forward, boost, brake
 
 protected:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;

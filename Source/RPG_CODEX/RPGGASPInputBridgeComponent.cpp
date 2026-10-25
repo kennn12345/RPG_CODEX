@@ -3,8 +3,11 @@
 #include "RPGCameraModeComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGControllerInputComponent.h"
+#include "RPGDirectionalHoverComponent.h"
+#include "RPGMovementAbilityComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -127,15 +130,28 @@ void URPGGASPInputBridgeComponent::SynchronizeLocomotion()
 {
     ACharacter* Character = Cast<ACharacter>(GetOwner());
     if (!bStateReady || !Character || !Character->IsLocallyControlled()) return;
-    const URPGCombatStateComponent* Combat = Character->FindComponentByClass<URPGCombatStateComponent>();
+    URPGCombatStateComponent* Combat = Character->FindComponentByClass<URPGCombatStateComponent>();
     const URPGCameraModeComponent* Camera = Character->FindComponentByClass<URPGCameraModeComponent>();
     if (!Combat) return;
+    auto* Hover=Character->FindComponentByClass<URPGDirectionalHoverComponent>();
+    if(Hover)Hover->UpdateIntent();
+    const auto* Move=Character->GetCharacterMovement();
+    FVector Input=Character->GetPendingMovementInputVector();
+    if(Input.IsNearlyZero())Input=Character->GetLastMovementInputVector();
+    const bool bGround=Move->IsMovingOnGround() && !Character->IsPlayingRootMotion();
+    if(bGround && (Input.Size2D()>0.05f || Move->Velocity.Size2D()>10.f))DirectionalGroundHold=0.25f;
+    else DirectionalGroundHold=FMath::Max(0.f,DirectionalGroundHold-GetWorld()->GetDeltaSeconds());
+    const bool bDirectional=bDirectionalGroundMovement && bGround && DirectionalGroundHold>0.f;
+    if(bDirectional && Combat->bIsSprinting && Character->GetController()
+        && FVector::DotProduct(Input.GetSafeNormal2D(),FRotator(0,Character->GetController()->GetControlRotation().Yaw,0).Vector())<0.65f)
+        if(auto* Ability=Character->FindComponentByClass<URPGMovementAbilityComponent>())Ability->StopSprint();
 
     void* State = InputStateProperty->ContainerPtrToValuePtr<void>(Character);
     SprintProperty->SetPropertyValue_InContainer(State, Combat->bIsSprinting);
     CrouchProperty->SetPropertyValue_InContainer(State, Character->GetCharacterMovement()->bWantsToCrouch);
     AimProperty->SetPropertyValue_InContainer(State, Combat->bIsAiming);
-    StrafeProperty->SetPropertyValue_InContainer(State, Combat->bIsBlocking || Combat->bIsAiming || (Camera && Camera->bIsFirstPerson));
+    StrafeProperty->SetPropertyValue_InContainer(State, bDirectional || (Hover && Hover->WantsHoverFacing())
+        || Combat->bIsBlocking || Combat->bIsAiming || (Camera && Camera->bIsFirstPerson));
 }
 
 void URPGGASPInputBridgeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

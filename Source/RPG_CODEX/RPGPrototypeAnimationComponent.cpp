@@ -1,6 +1,7 @@
 #include "RPGPrototypeAnimationComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGAnimInstance.h"
+#include "RPGFlightAnimationComponent.h"
 #include "RPGStrikeContactComponent.h"
 #include "RPG_CODEX.h"
 #include "Animation/AnimInstance.h"
@@ -712,7 +713,11 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
         bChargeStart = true;
         break;
     case ERPGPlayerAction::FlyingAttack: Clip = FlyingAttack; break;
-    case ERPGPlayerAction::FlightStarted: Clip = FlightStart; break;
+    case ERPGPlayerAction::FlightStarted:
+        // The flight component owns the takeoff blend on RPG instances; do not start
+        // a second, unrelated takeoff montage underneath the continuous pose.
+        if (Cast<URPGAnimInstance>(Instance) && Character->FindComponentByClass<URPGFlightAnimationComponent>()) return;
+        Clip = FlightStart; break;
     default: return;
     }
 

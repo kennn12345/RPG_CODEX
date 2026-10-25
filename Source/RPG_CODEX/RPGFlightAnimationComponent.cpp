@@ -1,92 +1,268 @@
 #include "RPGFlightAnimationComponent.h"
 
 #include "RPGCombatStateComponent.h"
-#include "RPGMovementAbilityComponent.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "RPGAnimInstance.h"
+#include "RPGDirectionalHoverComponent.h"
 #include "Animation/AnimInstance.h"
-#include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/Skeleton.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 URPGFlightAnimationComponent::URPGFlightAnimationComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+    BankL=FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyBankL.RPG_Proto_FlyBankL"));
+    BankR=FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyBankR.RPG_Proto_FlyBankR"));
+    BankFastL=FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyBankFastL.RPG_Proto_FlyBankFastL"));
+    BankFastR=FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyBankFastR.RPG_Proto_FlyBankFastR"));
+    Takeoff=FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyTakeoff.RPG_Proto_FlyTakeoff"));
+    Accelerate=FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyAccelerate.RPG_Proto_FlyAccelerate"));
+    BoostClip=FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyBoost.RPG_Proto_FlyBoost"));
+    Release=FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyRelease.RPG_Proto_FlyRelease"));
 	Hover = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyHover.RPG_Proto_FlyHover"));
 	Forward = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyForward.RPG_Proto_FlyForward"));
+	Brake = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyBrake.RPG_Proto_FlyBrake"));
 	Fast = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FlyFast.RPG_Proto_FlyFast"));
+}
+
+void URPGFlightAnimationComponent::BeginPlay()
+{
+    Super::BeginPlay();
+    if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
+    {
+        if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement()) AddTickPrerequisiteComponent(Movement);
+        if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+        {
+            Mesh->AddTickPrerequisiteComponent(this);
+            ResolveFlightClips(Mesh->GetAnimInstance());
+        }
+    }
+}
+
+void URPGFlightAnimationComponent::EndPlay(const EEndPlayReason::Type Reason)
+{
+    if (ACharacter* Character = Cast<ACharacter>(GetOwner()); Character && Character->GetMesh())
+    {
+        ResetBodyReaction(Character->GetMesh());
+        if (URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Character->GetMesh()->GetAnimInstance()))
+        {
+            Anim->FlightWeight = 0.f;
+            Anim->FlowBones.Reset(); Anim->FlowRotations.Reset();
+            Anim->RearSway=FRPGFlightRearSway();
+        }
+    }
+    Super::EndPlay(Reason);
+}
+
+void URPGFlightAnimationComponent::ResolveFlightClips(UAnimInstance* Instance)
+{
+    if (!Instance || !Instance->CurrentSkeleton) return;
+    if (ResolvedSkeleton == Instance->CurrentSkeleton && ResolvedClips.Num() == RPGFlight::NumClips) return;
+    ResolvedSkeleton = Instance->CurrentSkeleton;
+    ResolvedClips.Reset();
+    for (const TSoftObjectPtr<UAnimSequence>& Requested : {Hover, Forward, Fast, Brake, BankL, BankR, BankFastL, BankFastR, Takeoff, Accelerate, BoostClip, Release})
+    {
+        UAnimSequence* Clip = Requested.LoadSynchronous();
+        if (!Clip || Clip->GetSkeleton() != ResolvedSkeleton)
+        {
+            const FString Name = Requested.GetAssetName();
+            Clip = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/RPG/Animations/%s/%s.%s"),
+                *ResolvedSkeleton->GetName(), *Name, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+        }
+        ResolvedClips.Add(Clip && Clip->GetSkeleton() == ResolvedSkeleton ? Clip : nullptr);
+    }
 }
 
 void URPGFlightAnimationComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    ACharacter* Character = Cast<ACharacter>(GetOwner());
+    UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
+    USkeletalMeshComponent* Mesh = Character ? Character->GetMesh() : nullptr;
+    URPGAnimInstance* Anim = Mesh ? Cast<URPGAnimInstance>(Mesh->GetAnimInstance()) : nullptr;
+    if (!Movement || !Anim || DeltaTime <= 0.f) return;
+    const bool bFlying = Movement->IsFlying();
+    const bool bGrounded = Movement->IsMovingOnGround();
+    if (bFlying || FlightWeight > 0.f) ResolveFlightClips(Anim);
+    const float Dt = FMath::Min(DeltaTime, 0.1f); // stalls must not explode springs or acceleration
+    const FVector Velocity = Movement->Velocity;
+    const FVector Accel = bVelocityInitialized && bFlying == bWasFlying
+        ? ((Velocity - FlowLastVelocity) / FMath::Max(DeltaTime, 0.001f)).GetClampedToMaxSize(6000.f) : FVector::ZeroVector;
+    bVelocityInitialized = true;
+    FlowLastVelocity = Velocity;
+    FilteredAcceleration = FMath::Lerp(FilteredAcceleration, Accel, 1.f - FMath::Exp(-Dt / 0.12f));
+    const URPGCombatStateComponent* State = GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
+    const bool bCombat = State && (State->AttackPhase != ERPGAttackPhase::None || State->bIsChargingAttack || State->bIsBlocking);
+    // GASP traversal can temporarily use MOVE_Flying too. Its root-motion montage
+    // must own the pose and mesh while vaulting/mantling, rather than being painted over.
+    const bool bTraversal = Character->IsPlayingRootMotion();
+    const bool bYield = bCombat || bTraversal;
+    bool bReady = ResolvedClips.Num() == RPGFlight::NumClips;
+    for (const UAnimSequence* Clip : ResolvedClips) bReady &= Clip != nullptr;
+    if (ActionIndex != INDEX_NONE)
+    {
+        if (ActionIndex == RPGFlight::Release && bReleaseReentry && bFlying)
+        {
+            // Keep the interrupted pose while it fades back into the flying base.
+            ReleaseReentryBlend = FMath::FInterpConstantTo(ReleaseReentryBlend,0.f,Dt,1.f/FMath::Max(BlendTime,0.05f));
+            if (ReleaseReentryBlend <= 0.f) { ActionIndex=INDEX_NONE; bReleaseReentry=false; }
+        }
+        else
+        {
+            ActionTime += Dt;
+            ReleaseReentryBlend = FMath::FInterpConstantTo(ReleaseReentryBlend,1.f,Dt,1.f/FMath::Max(BlendTime,0.05f));
+        }
+        const UAnimSequence* Clip = ResolvedClips.IsValidIndex(ActionIndex) ? ResolvedClips[ActionIndex].Get() : nullptr;
+        if (!Clip || (ActionTime >= Clip->GetPlayLength() && (ActionIndex != RPGFlight::Release || FlightWeight <= 0.f)))
+        { ActionIndex=INDEX_NONE; bReleaseReentry=false; ReleaseReentryBlend=1.f; }
+        else if (ActionIndex == RPGFlight::Release) ActionTime = FMath::Min(ActionTime,Clip->GetPlayLength());
+    }
+    if (!bWasFlying && bFlying)
+    {
+        const bool bResumeRelease=ActionIndex==RPGFlight::Release && FlightWeight>0.05f && ReleaseTravel>0.05f;
+        if(bResumeRelease)bReleaseReentry=true;
+        else StartFlightAction(RPGFlight::Takeoff);
+        bAccelerationArmed = bBoostArmed = true;
+        if(!bResumeRelease)
+        {
+            TurnPose = FilteredTurnRate = TurnRateRad = 0.f;
+            bTravelHeadingValid = false;
+            bVerticalFacingActive = false;
+        }
+        FilteredAcceleration = FVector::ZeroVector;
+    }
+    if (bWasFlying && !bFlying && !bYield && FlightWeight > 0.1f)
+    {
+        if(ActionIndex==RPGFlight::Release && bReleaseReentry)bReleaseReentry=false;
+        else
+        {
+            ReleaseTravel = float(PoseBlend.X);
+            StartFlightAction(RPGFlight::Release);
+        }
+    }
+    const float TargetWeight = bFlying && !bYield && bReady ? 1.f : 0.f;
+    const float Duration = TargetWeight > FlightWeight ? BlendTime
+        : (bYield ? ActionBlendOutTime : (bGrounded ? GroundBlendOutTime : ExitBlendTime));
+    const bool bReleaseHold = !bFlying && !bGrounded && !bYield && ActionIndex == RPGFlight::Release
+        && ActionTime < ReleasePoseHoldTime * ReleaseTravel;
+    const float PreviousFlightWeight = FlightWeight;
+    FlightWeight = FMath::FInterpConstantTo(FlightWeight, TargetWeight, bReleaseHold ? 0.f : Dt, 1.f / FMath::Max(Duration, 0.05f));
+    const float Speed = float(Velocity.Size());
+    auto SmoothRange = [](float Value, float Low, float High)
+    {
+        const float T = FMath::Clamp((Value - Low) / FMath::Max(High - Low, 1.f), 0.f, 1.f);
+        return T*T*(3.f-2.f*T);
+    };
+    const float Travel = SmoothRange(Speed, ForwardSpeed * 0.6f, ForwardFullSpeed);
+    const float Boost = SmoothRange(Speed, FastSpeed * 0.8f, FMath::Max(FastSpeed * 1.45f, ForwardFullSpeed + 1.f));
+    const float Deceleration = Speed > 40.f ? -float(FVector::DotProduct(FilteredAcceleration, Velocity.GetSafeNormal())) : 0.f;
+    const float Braking = SmoothRange(Deceleration, 250.f, FMath::Max(FlapBrake, 251.f)) * SmoothRange(Speed, 60.f, 350.f);
+    // Releasing movement should visibly catch momentum even when ordinary
+    // flight's deceleration never reaches the old full-brake threshold. Retain
+    // the catch briefly after stopping, then settle into the upright hover.
+    const bool bStopping = bFlying && !bYield && Speed > 100.f
+        && Movement->GetCurrentAcceleration().IsNearlyZero(10.f) && Deceleration > 250.f;
+    if (bStopping) StopBraceHold = 0.24f;
+    else StopBraceHold = FMath::Max(0.f,StopBraceHold-Dt);
+    if (!bFlying || bYield || !Movement->GetCurrentAcceleration().IsNearlyZero(10.f)) StopBraceHold = 0.f;
+    const float StopBrace = bStopping || StopBraceHold > 0.f ? 0.95f : 0.f;
+    // Catch the deceleration quickly, then let the broad braking silhouette settle
+    // after velocity reaches zero, instead of disappearing on the final stopping frame.
+    const float BrakeTarget = bFlying && !bYield ? FMath::Max(Braking * 0.85f, StopBrace) : 0.f;
+    BrakePoseWeight = FMath::Lerp(BrakePoseWeight, BrakeTarget,
+        1.f - FMath::Exp(-Dt / FMath::Max(BrakeTarget > BrakePoseWeight ? BrakeBlendInTime : BrakeBlendOutTime,0.01f)));
+    const FVector TargetBlend(Travel, Boost, BrakePoseWeight);
+    // Entering flight with existing momentum must not briefly select upright
+    // hover. The global flight weight still blends in from the falling graph.
+    if (!bWasFlying && bFlying && !bReleaseReentry && Speed >= ForwardSpeed)
+        PoseBlend = FVector(1.f,Boost,0.f);
+    if (Travel < 0.03f) bAccelerationArmed = true;
+    if (Boost < 0.03f) bBoostArmed = true;
+    if (bFlying && !bYield && ActionIndex == INDEX_NONE)
+    {
+        if (bBoostArmed && Boost > 0.12f && Boost < 0.85f)
+        {
+            StartFlightAction(RPGFlight::Boost); bBoostArmed = false;
+        }
+        else if (bAccelerationArmed && Travel > 0.1f && Travel < 0.85f && Boost < 0.12f)
+        {
+            StartFlightAction(RPGFlight::Accelerate); bAccelerationArmed = false;
+        }
+    }
+    if (Boost >= 0.85f) bBoostArmed = false;
+    // Takeoff can already carry forward momentum. Do not defer a hover-to-cruise
+    // action until takeoff ends after the character has reached cruise speed.
+    if (Travel >= 0.85f) bAccelerationArmed = false;
+    if (bFlying)
+    {
+        PoseBlend = FMath::Lerp(PoseBlend, TargetBlend, 1.f - FMath::Exp(-Dt / FMath::Max(PoseResponseTime, 0.05f)));
+        PoseBlend.Z = BrakePoseWeight;
+    }
+    else if (FlightWeight > 0.f && ActionIndex != RPGFlight::Release)
+        PoseBlend = FMath::Lerp(PoseBlend, FVector(0,0,0.35f), 1.f - FMath::Exp(-Dt / 0.23f));
+    else if (FlightWeight <= 0.f) PoseBlend = FVector::ZeroVector;
+    if (!bWasFlying && bFlying && !bReleaseReentry) Phase = 0.f;
+    Phase = FMath::Fmod(Phase + Dt / 4.f, 1.f);
+    Anim->FlightClips = ResolvedClips;
+    Anim->FlightWeight = FlightWeight * FlightWeight * (3.f - 2.f * FlightWeight);
+    Anim->FlightBlend = PoseBlend;
+    Anim->FlightPhase = Phase;
+    // Combat/traversal owns the whole mesh once the flight pose is released.
+    // Use that same eased release, rather than leaving lean behind and then
+    // reapplying stale Pitch/Roll when a short interruption resumes.
+    const float PreviousPoseWeight = PreviousFlightWeight * PreviousFlightWeight * (3.f - 2.f * PreviousFlightWeight);
+    const float PoseReleaseAlpha = bYield ? (PreviousPoseWeight > 1.e-6f
+        ? FMath::Clamp(1.f - Anim->FlightWeight / PreviousPoseWeight, 0.f, 1.f) : 1.f) : -1.f;
+    const auto* Directional=Character->FindComponentByClass<URPGDirectionalHoverComponent>();
+    if (bFlying && !bYield && !(Directional && Directional->IsHovering())) UpdateBodyReaction(Mesh, Velocity, Dt);
+    else ResetBodyReaction(Mesh, Dt, bGrounded, PoseReleaseAlpha);
+    const float TargetTurn = bFlying && !bYield ? FMath::Clamp(
+        (0.65f * FMath::RadiansToDegrees(TurnRateRad) + 0.35f * FilteredTurnRate) / FMath::Max(FullTurnPoseRate,1.f),-1.f,1.f)
+        * FMath::Clamp(float(Velocity.Size2D()) / FMath::Max(ForwardFullSpeed,1.f),0.f,1.f) : 0.f;
+    TurnPose = FMath::Lerp(TurnPose,TargetTurn,1.f-FMath::Exp(-Dt/0.16f));
+    Anim->FlightTurn = TurnPose;
+    Anim->FlightActionIndex = ActionIndex;
+    Anim->FlightActionTime = ActionTime;
+    float ActionWeight = 0.f;
+    if (ActionIndex != INDEX_NONE && ResolvedClips.IsValidIndex(ActionIndex) && ResolvedClips[ActionIndex])
+    {
+        const float Length = ResolvedClips[ActionIndex]->GetPlayLength();
+        const float InDuration = ActionIndex == RPGFlight::Accelerate ? FMath::Max(BlendTime,0.14f) : 0.14f;
+        const float In = ActionIndex == RPGFlight::Takeoff ? 1.f : FMath::Clamp(ActionTime/InDuration,0.f,1.f);
+        const float Out = ActionIndex == RPGFlight::Release ? 1.f : FMath::Clamp((Length-ActionTime)/0.20f,0.f,1.f);
+        ActionWeight = In*In*(3.f-2.f*In)*Out*Out*(3.f-2.f*Out);
+        // Upright takeoff belongs to hover. Let the existing travel blend own
+        // the lean into flight as soon as movement starts.
+        if (ActionIndex == RPGFlight::Takeoff)
+            ActionWeight *= FMath::Square(1.f-FMath::Clamp(float(PoseBlend.X),0.f,1.f));
+        // A hover release uses the existing falling graph; the authored release carries forward momentum.
+        if (ActionIndex == RPGFlight::Release)
+            ActionWeight *= ReleaseTravel * ReleaseReentryBlend * ReleaseReentryBlend * (3.f - 2.f * ReleaseReentryBlend);
+        // Strong turns keep their authored bracing even if acceleration/boost overlaps.
+        if (ActionIndex == RPGFlight::Accelerate || ActionIndex == RPGFlight::Boost)
+            ActionWeight *= 1.f-0.75f*FMath::Abs(TurnPose);
+        // A pickup from hover can reach boost while its ordinary acceleration
+        // action is still playing. Let the fast pose take over progressively.
+        if (ActionIndex == RPGFlight::Accelerate)
+            ActionWeight *= 1.f-FMath::Clamp(float(PoseBlend.Y),0.f,1.f);
+    }
+    Anim->FlightActionWeight = ActionWeight;
+    UpdateLimbFlow(Mesh, Anim, FilteredAcceleration, Velocity, bFlying && !bYield && bReady, Dt);
+    if (URPGPhysicsReactionComponent* Physics = GetOwner()->FindComponentByClass<URPGPhysicsReactionComponent>())
+        Physics->SetFlightFollow(false); // intentionally never enable the rejected physics implementation
+    bWasFlying = bFlying;
+}
 
-	const ACharacter* Character = Cast<ACharacter>(GetOwner());
-	const UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
-	UAnimInstance* Instance = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
-	if (!Movement || !Instance) return;
-
-	if (DeltaTime > 0.f)
-	{
-		const FVector Accel = (Movement->Velocity - FlowLastVelocity) / DeltaTime;
-		FlowLastVelocity = Movement->Velocity;
-		UpdateLimbFlow(Character->GetMesh(), Instance, Accel, Movement->Velocity, Movement->IsFlying(), DeltaTime);
-	}
-	if (!Movement->IsFlying())
-	{
-		ResetBodyReaction(Character->GetMesh());
-		if (URPGPhysicsReactionComponent* Physics = GetOwner()->FindComponentByClass<URPGPhysicsReactionComponent>()) Physics->SetFlightFollow(false);
-		if (Playing && Instance->Montage_IsPlaying(Playing)) Instance->Montage_Stop(0.25f, Playing);
-		Playing = nullptr;
-		PlayingClip = nullptr;
-		return;
-	}
-
-	UpdateBodyReaction(Character->GetMesh(), Movement->Velocity, DeltaTime);
-	// Follow-through: the chest and head lead (the animation and lean above), the rest trails on physics.
-	URPGPhysicsReactionComponent* Physics = GetOwner()->FindComponentByClass<URPGPhysicsReactionComponent>();
-	if (!Physics && bFollowThrough)
-	{
-		Physics = NewObject<URPGPhysicsReactionComponent>(GetOwner(), TEXT("RPGFlightPhysics"));
-		Physics->bHitReactions = false;
-		Physics->RegisterComponent();
-	}
-	if (Physics) Physics->SetFlightFollow(bFollowThrough);
-
-	// Which pose: fast flight (L3) or high speed -> fast; moving -> forward; otherwise hover.
-	const URPGMovementAbilityComponent* Abilities = GetOwner()->FindComponentByClass<URPGMovementAbilityComponent>();
-	const float Speed = float(Movement->Velocity.Size2D());
-	TSoftObjectPtr<UAnimSequence> Want = Hover;
-	const TCHAR* Name = TEXT("RPG_Proto_FlyHover");
-	if ((Abilities && Abilities->IsFastFlight() && Speed > ForwardSpeed) || Speed >= FastSpeed) { Want = Fast; Name = TEXT("RPG_Proto_FlyFast"); }
-	else if (Speed >= ForwardSpeed) { Want = Forward; Name = TEXT("RPG_Proto_FlyForward"); }
-	// The clip for this character's skeleton: the set one if it fits, else the generator's copy for that skeleton
-	// (/Game/RPG/Animations/<skeleton>/, e.g. the GASP player's SK_UEFN_Mannequin).
-	UAnimSequence* Clip = Want.LoadSynchronous();
-	if (!Clip || Clip->GetSkeleton() != Instance->CurrentSkeleton)
-	{
-		Clip = Instance->CurrentSkeleton ? LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/RPG/Animations/%s/%s.%s"),
-			*Instance->CurrentSkeleton->GetName(), Name, Name), nullptr, LOAD_NoWarn | LOAD_Quiet) : nullptr;
-		if (Clip && Clip->GetSkeleton() != Instance->CurrentSkeleton) Clip = nullptr;
-	}
-	if (!Clip) return;
-
-	// While an attack, charge or block is running it owns the body: wait, then come back. (The combat stance loop is not
-	// an attack: flight replaces it.) Otherwise switch pose when it changes.
-	const URPGCombatStateComponent* State = GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
-	if (State && (State->AttackPhase != ERPGAttackPhase::None || State->bIsChargingAttack || State->bIsBlocking))
-	{
-		Playing = nullptr; PlayingClip = nullptr;
-		return;
-	}
-	const bool bOurs = Playing && Instance->Montage_IsPlaying(Playing);
-	if (bOurs && PlayingClip == Clip) return;
-
-	Playing = Instance->PlaySlotAnimationAsDynamicMontage(Clip, TEXT("DefaultSlot"), BlendTime, BlendTime, 1.f, 100000);
-	PlayingClip = Playing ? Clip : nullptr;
+void URPGFlightAnimationComponent::StartFlightAction(int32 ClipIndex)
+{
+    bReleaseReentry = false;
+    ReleaseReentryBlend = 1.f;
+    ActionIndex = ClipIndex;
+    ActionTime = 0.f;
 }
 
 void URPGFlightAnimationComponent::UpdateBodyReaction(USkeletalMeshComponent* Mesh, const FVector& Velocity, float DeltaTime)
@@ -98,192 +274,196 @@ void URPGFlightAnimationComponent::UpdateBodyReaction(USkeletalMeshComponent* Me
 		bReacting = true;
 		RestLocation = Mesh->GetRelativeLocation();
 		RestRotation = Mesh->GetRelativeRotation().Quaternion();
-		LastVelocity = Velocity;
 		LastHeading = Velocity.Rotation().Yaw;
 		Pitch = Roll = 0.f;
 		SmoothedYaw = float(Owner->GetActorRotation().Yaw);
 	}
 	// The body turns after the view: a smoothed yaw that catches up with the actor's.
 	const float ActorYaw = float(Owner->GetActorRotation().Yaw);
-	const float YawStep = FMath::FindDeltaAngleDegrees(SmoothedYaw, ActorYaw) * (1.f - FMath::Exp(-TurnFollowSpeed * DeltaTime));
+    const float Horizontal = float(Velocity.Size2D());
+    const ACharacter* Character = Cast<ACharacter>(Owner);
+    const AController* Controller = Character ? Character->GetController() : nullptr;
+    // GASP's movement-facing yaw falls back to zero for a purely vertical input.
+    // Retain look-facing through the following hover too: reaching zero vertical
+    // speed must not turn the visible body back to that fallback heading.
+    if (Horizontal >= 50.f) bVerticalFacingActive = false;
+    else if (FMath::Abs(Velocity.Z)>1.f && Controller) bVerticalFacingActive = true;
+    const float FacingYaw = bVerticalFacingActive && Controller
+        ? float(Controller->GetControlRotation().Yaw) : ActorYaw;
+	const float YawStep = FMath::FindDeltaAngleDegrees(SmoothedYaw, FacingYaw) * (1.f - FMath::Exp(-TurnFollowSpeed * DeltaTime));
 	SmoothedYaw = FRotator::NormalizeAxis(SmoothedYaw + YawStep);
-	TurnRateRad = FMath::DegreesToRadians(YawStep / DeltaTime);
+	TurnRateRad = FMath::Clamp(FMath::DegreesToRadians(YawStep / DeltaTime), -3.5f, 3.5f);
 	const float YawLag = FMath::FindDeltaAngleDegrees(ActorYaw, SmoothedYaw);
-	const float Horizontal = float(Velocity.Size2D());
 	const float React = FMath::Lerp(HoverReaction, 1.f, FMath::Clamp(Horizontal / FMath::Max(FastSpeed, 1.f), 0.f, 1.f));
-	const FVector Accel = (Velocity - LastVelocity) / DeltaTime;
+	const FVector Accel = FilteredAcceleration;
 	const float AccelForward = float(FVector::DotProduct(Accel, Owner->GetActorForwardVector()));
-	const float Side = float(FVector::DotProduct(Accel, Owner->GetActorRightVector()));
 	// Climb / dive along the flight path, plus leaning into speeding up (nose down) and back when slowing.
-	float WantPitch = FMath::RadiansToDegrees(FMath::Atan2(float(Velocity.Z), FMath::Max(Horizontal, 300.f))) * ClimbPitch;
+	float WantPitch = FMath::RadiansToDegrees(FMath::Atan2(float(Velocity.Z), FMath::Max(Horizontal, 100.f))) * ClimbPitch * float(PoseBlend.X) * FMath::Lerp(CruisePathPitchScale,1.f,float(PoseBlend.Y));
 	WantPitch -= FMath::Clamp(AccelForward / 1000.f * AccelLean, -15.f, 15.f);
 	WantPitch = FMath::Clamp(WantPitch, -MaxPitch, MaxPitch);
-	// Bank into turns (how fast the travel direction swings, more at speed) and lean into sideways pushes.
+    // The brake clip gathers the body toward upright. Let it replace the path
+    // lean, otherwise a dive can cancel its lift and hide the braking transition.
+    const float PathReaction = 1.f - FMath::Clamp(BrakePoseWeight, 0.f, 1.f);
+    WantPitch *= PathReaction;
+	// Bank into turns (how fast the travel direction swings, more at speed).
 	const float Heading = Horizontal > 50.f ? float(Velocity.Rotation().Yaw) : LastHeading;
-	const float TurnRate = FMath::FindDeltaAngleDegrees(LastHeading, Heading) / DeltaTime;
-	float WantRoll = TurnRate * BankPerTurn * FMath::Clamp(Horizontal / FMath::Max(FastSpeed, 1.f), 0.f, 1.f) + FMath::Clamp(Side / 1000.f * AccelLean, -15.f, 15.f);
+    // A heading is undefined while hovering or travelling vertically. The first
+    // horizontal sample seeds it; it is not a turn from the old/zero heading.
+	const float RawTurnRate = Horizontal > 50.f && bTravelHeadingValid
+        ? FMath::Clamp(FMath::FindDeltaAngleDegrees(LastHeading, Heading) / DeltaTime, -240.f, 240.f) : 0.f;
+    bTravelHeadingValid = Horizontal > 50.f;
+    FilteredTurnRate = FMath::Lerp(FilteredTurnRate, RawTurnRate, 1.f - FMath::Exp(-DeltaTime / 0.16f));
+    // The same signed demand drives the whole-body bank and the authored turn.
+    // Independent side-force/shoulder layers used to stack different tilts.
+    const float TurnRate = 0.65f * FMath::RadiansToDegrees(TurnRateRad) + 0.35f * FilteredTurnRate;
+	float WantRoll = TurnRate * BankPerTurn * FMath::Clamp(Horizontal / FMath::Max(FastSpeed, 1.f), 0.f, 1.f);
 	WantRoll = FMath::Clamp(WantRoll, -MaxBank, MaxBank);
-	Pitch = FMath::FInterpTo(Pitch, WantPitch * React, DeltaTime, ReactionSpeed);
-	Roll = FMath::FInterpTo(Roll, WantRoll * React, DeltaTime, ReactionSpeed);
-	LastVelocity = Velocity;
+    WantRoll *= PathReaction;
+	Pitch = FMath::Lerp(Pitch, WantPitch * React, 1.f - FMath::Exp(-ReactionSpeed * DeltaTime));
+	Roll = FMath::Lerp(Roll, WantRoll * React, 1.f - FMath::Exp(-ReactionSpeed * DeltaTime));
 	LastHeading = Heading;
 
 	// Turn about the hips, in the actor's frame.
 	const FQuat Lean = FQuat(FVector::UpVector, FMath::DegreesToRadians(YawLag)) * FRotator(Pitch, 0.f, Roll).Quaternion();
 	const FVector Pivot = RestLocation + FVector(0.f, 0.f, PivotHeight);
-	Mesh->SetRelativeLocationAndRotation(Pivot + Lean.RotateVector(RestLocation - Pivot), Lean * RestRotation);
+    // A partially restored mesh can be slightly off this pivot arc. Carry that
+    // residual position into reentry and settle it, instead of snapping it away.
+    const FQuat PreviousLean=Mesh->GetRelativeRotation().Quaternion()*RestRotation.Inverse();
+    const FVector RestoreOffset=Mesh->GetRelativeLocation()-(Pivot+PreviousLean.RotateVector(RestLocation-Pivot));
+	Mesh->SetRelativeLocationAndRotation(Pivot + Lean.RotateVector(RestLocation - Pivot)
+        + RestoreOffset*FMath::Exp(-ReactionSpeed*DeltaTime), Lean * RestRotation);
 }
 
-void URPGFlightAnimationComponent::ResetBodyReaction(USkeletalMeshComponent* Mesh)
+void URPGFlightAnimationComponent::ResetBodyReaction(USkeletalMeshComponent* Mesh, float DeltaTime, bool bGrounded, float PoseReleaseAlpha)
 {
-	if (!bReacting) return;
-	bReacting = false;
-	TurnRateRad = 0.f;
-	if (Mesh) Mesh->SetRelativeLocationAndRotation(RestLocation, RestRotation);
+    bTravelHeadingValid = false;
+    bVerticalFacingActive = false;
+    if (!bReacting || !Mesh) return;
+    TurnRateRad = FilteredTurnRate = 0.f;
+    const float RestoreTime = bGrounded ? GroundBlendOutTime * 0.45f : ExitBlendTime * 0.25f;
+    const float Alpha = PoseReleaseAlpha >= 0.f ? FMath::Clamp(PoseReleaseAlpha, 0.f, 1.f)
+        : (DeltaTime > 0.f ? 1.f - FMath::Exp(-DeltaTime / FMath::Max(RestoreTime, 0.025f)) : 1.f);
+    const FVector Location = FMath::Lerp(Mesh->GetRelativeLocation(), RestLocation, Alpha);
+    const FQuat Rotation = FQuat::Slerp(Mesh->GetRelativeRotation().Quaternion(), RestRotation, Alpha).GetNormalized();
+    Mesh->SetRelativeLocationAndRotation(Location, Rotation);
+    // Restoration may be interrupted by reentry before it reaches rest. Resume
+    // from the applied lean, rather than the stale pre-interruption state.
+    const FRotator RestoredLean = (Rotation * RestRotation.Inverse()).Rotator();
+    Pitch = float(RestoredLean.Pitch);
+    Roll = float(RestoredLean.Roll);
+    SmoothedYaw = FRotator::NormalizeAxis(float(GetOwner()->GetActorRotation().Yaw) + float(RestoredLean.Yaw));
+    if (Alpha == 1.f || (Location.Equals(RestLocation, 0.01f) && Rotation.Equals(RestRotation, 0.0001f)))
+    {
+        Mesh->SetRelativeLocationAndRotation(RestLocation, RestRotation);
+        bReacting = false;
+    }
 }
 
 namespace
 {
-	/** Follow-through joints, parents first: bone, the next bone down the limb (its direction is read from the pose each
-	 *  frame, so hanging, along-the-body and horizontal poses all swing the right way), how much momentum moves it, how
-	 *  stiff it is (lower = lags more, so the motion rolls down the chain), how much the air drags it, which side it is
-	 *  on (+1 left, -1 right: it swings outward freely but only a little inward, so legs don't cross and hands don't go
-	 *  into the body), and whether it is an upper arm / thigh (where the steering acts). Arms are held actively: about
-	 *  half the swing, stiffer, no drag. Knees and elbows are left to the animation (springs there made the limbs
-	 *  rubbery and could bend a knee backwards): the whole leg / arm swings from the hip / shoulder. The upper chest
-	 *  (spine_04 / 05) only rolls into turns (the shoulder dip), no momentum swing. */
-	struct FFlowJoint { const TCHAR* Bone; const TCHAR* Child; float Gain; float Stiff; float Drag; float Side; bool bArm; bool bThigh; };
-	const FFlowJoint FlowJoints[] = {
-		{ TEXT("spine_01"), TEXT("spine_02"), 0.12f, 2.f, 1.f, 0.f, false, false },
-		{ TEXT("spine_02"), TEXT("spine_03"), 0.08f, 2.f, 1.f, 0.f, false, false },
-		{ TEXT("spine_04"), TEXT("spine_05"), 0.f, 2.f, 0.f, 0.f, false, false },
-		{ TEXT("spine_05"), TEXT("neck_01"), 0.f, 2.f, 0.f, 0.f, false, false },
-		{ TEXT("thigh_l"), TEXT("calf_l"), 1.f, 1.2f, 1.f, 1.f, false, true },
-		{ TEXT("thigh_r"), TEXT("calf_r"), 1.f, 1.2f, 1.f, -1.f, false, true },
-		{ TEXT("upperarm_l"), TEXT("lowerarm_l"), 0.45f, 1.5f, 0.f, 1.f, true, false },
-		{ TEXT("upperarm_r"), TEXT("lowerarm_r"), 0.45f, 1.5f, 0.f, -1.f, true, false },
-	};
+    // The bank clips own the shoulders, elbows and torso. Only small inertial
+    // swings remain on the four limbs, so no second steering layer can shrug a shoulder.
+    struct FFlowJoint { const TCHAR* Bone; const TCHAR* Child; float Gain; float Stiffness; float Side; };
+    const FFlowJoint FlowJoints[] = {
+        { TEXT("thigh_l"), TEXT("calf_l"), 1.5f, 0.85f, 1.f },
+        { TEXT("thigh_r"), TEXT("calf_r"), 1.5f, 0.85f, -1.f },
+        { TEXT("upperarm_l"), TEXT("lowerarm_l"), 0.45f, 1.5f, 1.f },
+        { TEXT("upperarm_r"), TEXT("lowerarm_r"), 0.45f, 1.5f, -1.f },
+    };
 }
 
 void URPGFlightAnimationComponent::UpdateLimbFlow(USkeletalMeshComponent* Mesh, UAnimInstance* Instance, const FVector& Accel, const FVector& Velocity, bool bFlying, float DeltaTime)
 {
-	URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Instance);
-	if (!Mesh || !Anim) return;
-	const int32 N = UE_ARRAY_COUNT(FlowJoints);
-	if (FlowAngle.Num() != N) { FlowAngle.Init(FVector::ZeroVector, N); FlowSpeed.Init(FVector::ZeroVector, N); FlowDir.Init(FVector::ZeroVector, N); }
-	FlowWeight = FMath::FInterpConstantTo(FlowWeight, bFlying && bLimbFlow ? 1.f : 0.f, DeltaTime, 3.f);
-	if (FlowWeight <= 0.f)
-	{
-		for (int32 I = 0; I < N; ++I) FlowAngle[I] = FlowSpeed[I] = FVector::ZeroVector;
-		Anim->FlowBones.Reset();
-		Anim->FlowRotations.Reset();
-		return;
-	}
-	// Momentum in the mesh's own frame (+Y forward, +X the character's left, +Z up): limbs swing against the
-	// acceleration and are swept back by the air.
-	const FTransform& ToMesh = Mesh->GetComponentTransform();
-	const FVector A = ToMesh.InverseTransformVectorNoScale(Accel.GetClampedToMaxSize(6000.f)) / 1000.f;
-	const FVector V = ToMesh.InverseTransformVectorNoScale(Velocity) / 1000.f;
-	const float SpeedAlpha = FMath::Clamp(float(Velocity.Size()) / FMath::Max(FastSpeed, 1.f), 0.f, 1.f);
-	const float MaxSwing = FMath::DegreesToRadians(FlowMaxAngle);
-	const float Brake = FMath::Clamp(-A.Y * 1000.f / FlapBrake, 0.f, 1.f);   // slowing along the body's forward (+Y)
-	const float PathPitch = FMath::RadiansToDegrees(FMath::Atan2(float(Velocity.Z), FMath::Max(float(Velocity.Size2D()), 300.f)));
-	// Bracing per side (degrees out from the body), from the turn's sideways force (smoothed): turning right pulls the
-	// body to its right (-X), so the left arm is the outer one. The inner arm tucks a little; both spread braking (flaps).
-	SideForce = FMath::FInterpTo(SideForce, float(A.X), DeltaTime, 6.f);
-	const float LeftOuter = FMath::Max(0.f, -SideForce), RightOuter = FMath::Max(0.f, SideForce);
-	auto BraceFor = [&](float Outer, float Inner)
-	{
-		return FMath::Min(FlowBrace * Outer + FlowBraceSharp * Outer * Outer, FlowBraceMax)
-			- FMath::Min(0.35f * FlowBrace * Inner, 0.35f * FlowBraceMax) + FlapArms * Brake;
-	};
-	// Wingsuit spread (0..1): both sides open in fast, hard corners, fading with speed.
-	const float Spread = FMath::Clamp(FMath::Abs(SideForce) / WingsuitForce * SpeedAlpha, 0.f, 1.f);
-	const float BraceL = FMath::Min(BraceFor(LeftOuter, RightOuter) + WingsuitArms * Spread, FlowBraceMax);
-	const float BraceR = FMath::Min(BraceFor(RightOuter, LeftOuter) + WingsuitArms * Spread, FlowBraceMax);
-	// Small steps so the springs stay stable at any frame rate.
-	const int32 Steps = FMath::Clamp(FMath::CeilToInt(DeltaTime / (1.f / 120.f)), 1, 8);
-	const float Dt = DeltaTime / Steps;
-	Anim->FlowBones.SetNum(N);
-	Anim->FlowRotations.SetNum(N);
-	for (int32 I = 0; I < N; ++I)
-	{
-		const FFlowJoint& J = FlowJoints[I];
-		// The limb's current direction, and the turns that swing its tip outward (away from the body's middle) and
-		// forward: a turn W moves the tip along W x Dir, so the axis for a direction X is Dir x X.
-		// (Read from last frame's pose with this joint's own swing taken back out, and smoothed, so a big swing doesn't
-		// feed back into itself.)
-		FVector Dir = Mesh->GetBoneLocation(FName(J.Child), EBoneSpaces::ComponentSpace) - Mesh->GetBoneLocation(FName(J.Bone), EBoneSpaces::ComponentSpace);
-		const FVector Applied = I < Anim->FlowRotations.Num() ? Anim->FlowRotations[I] : FVector::ZeroVector;
-		if (Applied.Size() > 1.e-4f) Dir = FQuat(Applied.GetSafeNormal(), float(Applied.Size())).Inverse().RotateVector(Dir);
-		Dir = Dir.IsNearlyZero() ? FVector(0, 0, -1) : Dir.GetSafeNormal();
-		FlowDir[I] = FlowDir[I].IsNearlyZero() ? Dir : (FlowDir[I] + (Dir - FlowDir[I]) * FMath::Min(1.f, 6.f * DeltaTime)).GetSafeNormal();
-		Dir = FlowDir[I];
-		const FVector OutAxis = J.Side != 0.f ? FVector::CrossProduct(Dir, FVector(J.Side, 0, 0)).GetSafeNormal() : FVector::ZeroVector;
-		const FVector ForwardAxis = FVector::CrossProduct(Dir, FVector(0, 1, 0)).GetSafeNormal();
-
-		// Steering rest (where the spring pulls), like a plane's control surfaces.
-		FVector Rest = FVector::ZeroVector;
-		float Stiffen = 1.f;
-		const float Brace = J.Side > 0.f ? BraceL : BraceR;
-		if (J.bArm)
-		{
-			Rest = OutAxis * FMath::DegreesToRadians(Brace);
-			Stiffen += BraceStiffen * FMath::Clamp(Brace / FMath::Max(FlowBraceMax, 1.f), 0.f, 1.f);   // a braced arm is held firm
-		}
-		if (FCString::Strstr(J.Bone, TEXT("spine_0")) && (J.Bone[7] == TEXT('1') || J.Bone[7] == TEXT('2')))
-		{
-			// Back arch: the lower back bends sideways into the turn, same sense as the shoulder dip.
-			const float Arch = FMath::Clamp(TorsoArch * SideForce / WingsuitForce * SpeedAlpha, -TorsoArch, TorsoArch);
-			Rest = FVector(0.f, FMath::DegreesToRadians(Arch * 0.5f), 0.f);
-		}
-		if (FCString::Strstr(J.Bone, TEXT("spine_0")) && (J.Bone[7] == TEXT('4') || J.Bone[7] == TEXT('5')))
-		{
-			// Shoulder dip: roll the upper chest about its forward axis toward the inside of the turn. A + turn about
-			// +Y tips the top toward +X (the character's left), dropping the left shoulder; a left turn pulls toward +X.
-			const float Dip = FMath::Clamp(ShoulderDip * SideForce / WingsuitForce * SpeedAlpha, -ShoulderDipMax, ShoulderDipMax);
-			Rest = FVector(0.f, FMath::DegreesToRadians(Dip * 0.5f), 0.f);   // half on each of the two bones
-		}
-		if (J.bThigh)
-		{
-			// Rudder: both legs to the outside of the turn (turning left -> to the right); elevators: forward and under
-			// climbing, trailing back diving; flaps: open a little when braking.
-			// (+ = toward the left; a left turn pulls toward +X, so the legs go right: -.)
-			const float Rudder = FMath::Clamp(RudderPerTurn * TurnRateRad - RudderPerForce * SideForce / WingsuitForce * SpeedAlpha, -RudderMax - RudderPerForce, RudderMax + RudderPerForce);
-			const FVector LeftAxis = FVector::CrossProduct(Dir, FVector(1, 0, 0)).GetSafeNormal();
-			Rest = LeftAxis * FMath::DegreesToRadians(Rudder) + OutAxis * FMath::DegreesToRadians(FlapLegs * Brake + WingsuitLegs * Spread)
-				+ ForwardAxis * FMath::DegreesToRadians(FMath::Clamp(ElevatorPerDegree * PathPitch, -ElevatorMax, ElevatorMax));
-		}
-
-		// The steering rest itself is capped (stacked brace + wingsuit + rudder can't wring a joint).
-		const float RestMax = FMath::DegreesToRadians(J.bArm ? FlowBraceMax : 45.f);
-		if (Rest.Size() > RestMax) Rest = Rest.GetSafeNormal() * RestMax;
-
-		const float K = FlowStiffness * J.Stiff * Stiffen * FMath::Lerp(1.f, FlowStiffnessAtSpeed, SpeedAlpha);
-		const float C = 2.f * FlowDamping * FMath::Sqrt(K);
-		const FVector Push = J.Gain / Stiffen * (FlowInertia * FVector::CrossProduct(Dir, -A) + FlowDrag * J.Drag * SpeedAlpha * FVector::CrossProduct(Dir, -V)
-			- FlowTurn * TurnRateRad * FVector::UpVector * 10.f);   // lag behind the body's turn
-		for (int32 S = 0; S < Steps; ++S)
-		{
-			FlowSpeed[I] += (Push - K * (FlowAngle[I] - Rest) - C * FlowSpeed[I]) * Dt;
-			FlowAngle[I] += FlowSpeed[I] * Dt;
-		}
-		// Swing off the steering rest is limited.
-		FVector Off = FlowAngle[I] - Rest;
-		if (Off.Size() > MaxSwing) { Off = Off.GetSafeNormal() * MaxSwing; FlowAngle[I] = Rest + Off; FlowSpeed[I] *= 0.5f; }
-		if (J.Side != 0.f)
-		{
-			// Inward (toward the body's middle / the other limb) only a little past the rest.
-			const float Inward = -float(FVector::DotProduct(Off, OutAxis));
-			const float Limit = 0.06f;
-			if (Inward > Limit)
-			{
-				FlowAngle[I] += OutAxis * (Inward - Limit);
-				const float Vin = -float(FVector::DotProduct(FlowSpeed[I], OutAxis));
-				if (Vin > 0.f) FlowSpeed[I] += OutAxis * Vin;
-			}
-		}
-		Anim->FlowBones[I] = FName(J.Bone);
-		Anim->FlowRotations[I] = FlowAngle[I] * FlowWeight;
-	}
+    URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Instance);
+    if (!Mesh || !Anim) return;
+    const int32 Count = UE_ARRAY_COUNT(FlowJoints);
+    if (FlowAngle.Num() != Count)
+    {
+        FlowAngle.Init(FVector::ZeroVector,Count);
+        FlowSpeed.Init(FVector::ZeroVector,Count);
+        FlowDir.Init(FVector::ZeroVector,Count);
+    }
+    FlowWeight = FMath::FInterpConstantTo(FlowWeight,bFlying && bLimbFlow ? Anim->FlightWeight : 0.f,DeltaTime,5.f);
+    if (FlowWeight <= 0.f)
+    {
+        for (int32 I=0; I<Count; ++I) FlowAngle[I]=FlowSpeed[I]=FlowDir[I]=FVector::ZeroVector;
+        Anim->FlowBones.Reset(); Anim->FlowRotations.Reset();
+        RearAngle=RearVelocity=FVector2D::ZeroVector;RearKneeAngle=RearKneeVelocity=0.f;
+        Anim->RearSway=FRPGFlightRearSway();
+        return;
+    }
+    const FTransform& ToMesh = Mesh->GetComponentTransform();
+    const FVector A = ToMesh.InverseTransformVectorNoScale(Accel.GetClampedToMaxSize(6000.f))/1000.f;
+    const FVector V = ToMesh.InverseTransformVectorNoScale(Velocity)/1000.f;
+    const float Speed = FMath::Clamp(float(Velocity.Size())/FMath::Max(FastSpeed,1.f),0.f,1.f);
+    const int32 Steps = FMath::Clamp(FMath::CeilToInt(DeltaTime/(1.f/120.f)),1,8);
+    const float Dt = DeltaTime/Steps;
+    const auto* Directional=GetOwner()->FindComponentByClass<URPGDirectionalHoverComponent>();
+    const bool bTravel=bFlying && !(Directional && Directional->IsHovering());
+    const float RearLimit=FMath::DegreesToRadians(FMath::Clamp(RearSwayMaxAngle,0.f,15.f));
+    const FVector CurveWS=FVector::CrossProduct(Velocity,Accel)/FMath::Max(Velocity.SizeSquared(),40000.);
+    const float PitchRate=float(FVector::DotProduct(CurveWS,GetOwner()->GetActorRightVector()));
+    const FVector2D WantRear=bTravel?FVector2D(
+        FMath::Clamp(-TurnRateRad*RearTurnLag,-RearLimit,RearLimit),
+        FMath::Clamp(-PitchRate*RearTurnLag*.6f,-RearLimit*.65f,RearLimit*.65f)):FVector2D::ZeroVector;
+    const float RearK=FMath::Max(RearSwayStiffness,1.f),RearC=2.f*RearSwayDamping*FMath::Sqrt(RearK);
+    const float KneeTarget=bTravel?FMath::DegreesToRadians(RearKneeFlex)*FMath::Clamp(float(FMath::Abs(RearAngle.X))/FMath::Max(RearLimit,.001f),0.f,1.f):0.f;
+    for(int32 S=0;S<Steps;++S)
+    {
+        RearVelocity+=((WantRear-RearAngle)*RearK-RearVelocity*RearC)*Dt;
+        RearAngle+=RearVelocity*Dt;
+        // A slower hinge response lets the shins catch up after the hips begin a turn.
+        RearKneeVelocity+=((KneeTarget-RearKneeAngle)*36.f-RearKneeVelocity*10.2f)*Dt;
+        RearKneeAngle+=RearKneeVelocity*Dt;
+    }
+    RearAngle.X=FMath::Clamp(RearAngle.X,-RearLimit,RearLimit);
+    RearAngle.Y=FMath::Clamp(RearAngle.Y,-RearLimit*.65f,RearLimit*.65f);
+    const bool bEntryOrRelease=Anim->FlightActionIndex==RPGFlight::Takeoff || Anim->FlightActionIndex==RPGFlight::Release;
+    const float RearWeight=FlowWeight*float(Anim->FlightBlend.X)*(1.f-float(Anim->FlightBlend.Z))*(bEntryOrRelease?1.f-Anim->FlightActionWeight:1.f);
+    Anim->RearSway.WaistRotationCS=(ToMesh.InverseTransformVectorNoScale(FVector::UpVector)*RearAngle.X
+        +ToMesh.InverseTransformVectorNoScale(GetOwner()->GetActorRightVector())*RearAngle.Y)*RearWeight;
+    Anim->RearSway.KneeFlexion=FMath::Clamp(RearKneeAngle,0.f,FMath::DegreesToRadians(RearKneeFlex))*RearWeight;
+    // Read last frame's applied rotation below. Newly allocated entries must be
+    // zero, including the first frame after flight has released these arrays.
+    const TArray<FVector> PreviousRotations=Anim->FlowRotations;
+    Anim->FlowBones.SetNum(Count); Anim->FlowRotations.SetNumZeroed(Count);
+    for (int32 I=0; I<Count; ++I)
+    {
+        const FFlowJoint& Joint = FlowJoints[I];
+        FVector Direction = Mesh->GetBoneLocation(FName(Joint.Child),EBoneSpaces::ComponentSpace)
+            - Mesh->GetBoneLocation(FName(Joint.Bone),EBoneSpaces::ComponentSpace);
+        const FVector Applied = PreviousRotations.IsValidIndex(I)?PreviousRotations[I]:FVector::ZeroVector;
+        if (!Applied.IsNearlyZero()) Direction=FQuat(Applied.GetSafeNormal(),float(Applied.Size())).UnrotateVector(Direction);
+        Direction=Direction.GetSafeNormal(SMALL_NUMBER,FVector(0,0,-1));
+        const float Alpha=1.f-FMath::Exp(-DeltaTime/0.12f);
+        FlowDir[I]=FlowDir[I].IsNearlyZero() ? Direction : FMath::Lerp(FlowDir[I],Direction,Alpha).GetSafeNormal();
+        Direction=FlowDir[I];
+        const float K=FlowStiffness*Joint.Stiffness*FMath::Lerp(1.f,FlowStiffnessAtSpeed,Speed);
+        const bool bLeg=I<2;
+        const float C=2.f*FlowDamping*(bLeg?.85f:1.f)*FMath::Sqrt(K);
+        const float Limit=FMath::DegreesToRadians(bLeg?FMath::Clamp(LegFlowMaxAngle,0.f,12.f):FMath::Min(FlowMaxAngle,8.f));
+        const FVector Push=Joint.Gain*(FlowInertia*FVector::CrossProduct(Direction,-A)
+            + FlowDrag*Speed*FVector::CrossProduct(Direction,-V)
+            - FlowTurn*TurnRateRad*FVector::UpVector*10.f);
+        for (int32 S=0; S<Steps; ++S)
+        {
+            FlowSpeed[I]+=(Push-K*FlowAngle[I]-C*FlowSpeed[I])*Dt;
+            FlowAngle[I]+=FlowSpeed[I]*Dt;
+        }
+        if (FlowAngle[I].Size()>Limit)
+        {
+            FlowAngle[I]=FlowAngle[I].GetSafeNormal()*Limit;
+            FlowSpeed[I]*=0.5f;
+        }
+        const FVector OutAxis=FVector::CrossProduct(Direction,FVector(Joint.Side,0,0)).GetSafeNormal();
+        const float Inward=-float(FVector::DotProduct(FlowAngle[I],OutAxis));
+        if (Inward>0.03f)
+        {
+            FlowAngle[I]+=OutAxis*(Inward-0.03f);
+            const float InwardSpeed=-float(FVector::DotProduct(FlowSpeed[I],OutAxis));
+            if (InwardSpeed>0.f) FlowSpeed[I]+=OutAxis*InwardSpeed;
+        }
+        Anim->FlowBones[I]=FName(Joint.Bone);
+        Anim->FlowRotations[I]=FlowAngle[I]*FlowWeight;
+    }
 }

@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "RPGPlayerTypes.h"
 #include "RPGPowerTypes.h"
+#include "RPGEnergySpellTypes.h"
 #include "RPGPhysicsReactionComponent.generated.h"
 
 class UPhysicsControlComponent;
@@ -99,6 +100,8 @@ public:
 	 * DisplacementVelocity, staying limp for the flight plus LimpTime.
 	 */
 	void HandlePowerHit(const FRPGMeleeHitInfo& Hit, const FRPGPowerResult& Result);
+    /** Local energy flinch / stagger. Leg hits yield their support while the owner takes a recovery step. */
+    void HandleEnergyHit(const FRPGEnergyImpact& Impact);
 
 	/** Fires once when a LIMP reaction starts fading back to the animation, while the pose is still the ragdoll's. The
 	 *  owner can move itself to where the body ended up first (the dummy stands up where it landed). */
@@ -192,6 +195,10 @@ public:
 	/** Leg motors are this many times the others, so the legs give a little but keep it standing. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
 	float LegMotorScale = 2.5f;
+
+    /** Energy hits only: the struck leg yields instead of retaining the usual extra standing stiffness. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Stagger", meta = (ClampMin = "0.1"))
+    float EnergyLegMotorScale = 0.9f;
 
 	/** Stagger (dazed): every motor starts at this fraction of its strength and recovers over StaggerRecoverTime, so the
 	 *  whole body wobbles; the struck part yields for StaggerYieldTime first. */
@@ -337,6 +344,7 @@ private:
 	TArray<FName> AllControls;
 
 	FName StruckLimb;
+    bool bEnergyLegReaction = false;
 	float StateTime = 0.f;
 	/** <= 0: stays LIMP until told otherwise. */
 	float LimpDuration = 0.f;
