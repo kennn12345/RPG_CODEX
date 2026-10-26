@@ -60,6 +60,7 @@ public:
 	FName LastGetUpClip;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Get Up")
 	FName LastGetUpStyle;
+	bool IsGetUpAligning() const { return bGetUpAwaitingPhysics; }
 
 	/** Stand Character up where its ragdoll lies: picks a compatible custom get-up by pose and intent,
 	 *  using one best start frame per clip and avoiding repeated recovery styles among safe near-equal matches,
@@ -78,4 +79,9 @@ private:
 	bool bOwnLimpHandler = false;
 	float GettingUpUntil = 0.f;
 	float LastImpactTime = -10.f;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> HeldGetUp;
+	float GetUpTargetRate = 1.f;
+	float GetUpResumeTime = 0.f;
+	bool bGetUpAwaitingPhysics = false;
 };

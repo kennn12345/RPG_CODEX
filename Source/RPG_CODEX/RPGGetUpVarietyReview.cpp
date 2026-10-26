@@ -4,6 +4,8 @@
 #include "RPGBodyImpactComponent.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "RPG_CODEX.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -60,6 +62,38 @@ namespace
 				return false;
 			}
 			const float Now=W->GetTimeSeconds(),T=Now-Start;
+			if (Npc->BodyImpact->IsGetUpAligning())
+			{
+				UAnimInstance* Anim=Npc->GetMesh()->GetAnimInstance();UAnimMontage* Montage=Anim?Anim->GetCurrentActiveMontage():nullptr;
+				if (Montage)
+				{
+					const float Position=Anim->Montage_GetPosition(Montage);
+					if (!bWasAligning) AlignPosition=Position;
+					if (FMath::Abs(Position-AlignPosition)>.001f && !bReportedMovingAlign)
+					{
+						Test->AddError(TEXT("Get-up target moved while the ragdoll pose was still fading"));bReportedMovingAlign=true;
+					}
+					bSawAligning=true;
+				}
+				if (!bInterrupted && FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_INTERRUPT"))==TEXT("1") && Now-EpisodeStart>2.f)
+				{
+					Npc->BodyImpact->KnockDown(FVector(0,-220,80),Npc->GetMesh()->GetBoneLocation(TEXT("spine_05")));
+					bInterrupted=true;
+				}
+			}
+			bWasAligning=Npc->BodyImpact->IsGetUpAligning();
+			if (FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_ARM_TRACE"))==TEXT("1"))
+			{
+				if (PoseRows.IsEmpty()) PoseRows=TEXT("time,episode,state,returning,montage_time,clip,bone,x,y,z,qx,qy,qz,qw\n");
+				USkeletalMeshComponent* M=Npc->GetMesh();UAnimInstance* Anim=M->GetAnimInstance();
+				UAnimMontage* Montage=Anim?Anim->GetCurrentActiveMontage():nullptr;
+				const float MontageTime=Montage?Anim->Montage_GetPosition(Montage):-1.f;
+				for (const FName Bone:{FName(TEXT("pelvis")),FName(TEXT("spine_05")),FName(TEXT("head")),FName(TEXT("upperarm_l")),FName(TEXT("lowerarm_l")),FName(TEXT("hand_l")),FName(TEXT("upperarm_r")),FName(TEXT("lowerarm_r")),FName(TEXT("hand_r"))})
+				{
+					const FTransform P=M->GetSocketTransform(Bone,RTS_Component);const FVector V=P.GetLocation();const FQuat Q=P.GetRotation();
+					PoseRows+=FString::Printf(TEXT("%.5f,%d,%d,%d,%.5f,%s,%s,%.6f,%.6f,%.6f,%.9f,%.9f,%.9f,%.9f\n"),T,Episode,int32(Npc->PhysicsReaction->GetReactionState()),Npc->PhysicsReaction->IsReturning(),MontageTime,*Npc->BodyImpact->LastGetUpClip.ToString(),*Bone.ToString(),V.X,V.Y,V.Z,Q.X,Q.Y,Q.Z,Q.W);
+				}
+			}
 			if (Camera)
 			{
 				const FVector Look(Npc->GetActorLocation().X,Npc->GetActorLocation().Y,65.f),Eye=Look+FVector(280,360,110);
@@ -90,6 +124,9 @@ namespace
 					++Episode;bWaiting=true;EpisodeStart=Now;
 					if (Episode==4)
 					{
+						if (FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_INTERRUPT"))==TEXT("1"))
+							Test->TestTrue(TEXT("A new knockdown interrupted the held get-up"),bInterrupted);
+						Test->TestTrue(TEXT("Actual get-ups aligned before authored motion resumed"),bSawAligning);
 						Test->TestTrue(TEXT("Repeated real falls exercise more than one recovery style"),Styles.Num()>=2);
 						Test->TestTrue(TEXT("Repeated real falls play more than one clip"),Clips.Num()>=2);
 						Save();return true;
@@ -100,15 +137,15 @@ namespace
 			return false;
 		}
 	private:
-		void Save(){FFileHelper::SaveStringToFile(Rows,*(Dir/TEXT("selections.csv")));FFileHelper::SaveStringToFile(Captures,*(Dir/TEXT("captures.csv")));}
+		void Save(){FFileHelper::SaveStringToFile(Rows,*(Dir/TEXT("selections.csv")));FFileHelper::SaveStringToFile(Captures,*(Dir/TEXT("captures.csv")));if(!PoseRows.IsEmpty())FFileHelper::SaveStringToFile(PoseRows,*(Dir/TEXT("arms.csv")));}
 		FAutomationTestBase* Test;
-		bool bVisual=false,bWaiting=true,bSawLimp=false;
+		bool bVisual=false,bWaiting=true,bSawLimp=false,bWasAligning=false,bSawAligning=false,bReportedMovingAlign=false,bInterrupted=false;
 		TWeakObjectPtr<ARPGNpcCharacter> Npc;
 		ACameraActor* Camera=nullptr;
 		TSet<FName> Clips,Styles;
 		int32 Wait=0,Episode=0,Shot=0;
-		float Start=0,EpisodeStart=0,LastShot=-1;
-		FString Dir,Rows,Captures;
+		float Start=0,EpisodeStart=0,LastShot=-1,AlignPosition=0;
+		FString Dir,Rows,Captures,PoseRows;
 	};
 }
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGGetUpRepeatTest,"RPG.Npc.GetUpRepeat",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)

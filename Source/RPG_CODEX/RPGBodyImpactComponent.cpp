@@ -252,6 +252,27 @@ void URPGBodyImpactComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	ACharacter* Character = Cast<ACharacter>(GetOwner());
 	if (!Character) return;
 	LastVelocity = Character->GetVelocity();
+	if (HeldGetUp)
+	{
+		UAnimInstance* Anim=Character->GetMesh()?Character->GetMesh()->GetAnimInstance():nullptr;
+		URPGPhysicsReactionComponent* Reaction=GetReaction(false);
+		if (!Anim || !Anim->Montage_IsActive(HeldGetUp))
+		{
+			HeldGetUp=nullptr;bGetUpAwaitingPhysics=false;
+		}
+		else if (Reaction && Reaction->GetReactionState()==ERPGPhysicsReactionState::Limp && !Reaction->IsReturning())
+		{
+			// Interrupted by a new knockdown: never resume the previous get-up later.
+			Anim->Montage_Stop(.1f,HeldGetUp);HeldGetUp=nullptr;bGetUpAwaitingPhysics=false;
+		}
+		else if (!Reaction || Reaction->GetReactionState()==ERPGPhysicsReactionState::Animated)
+		{
+			bGetUpAwaitingPhysics=false;GetUpResumeTime+=DeltaTime;
+			const float Alpha=FMath::SmoothStep(0.f,1.f,FMath::Clamp(GetUpResumeTime/.14f,0.f,1.f));
+			Anim->Montage_SetPlayRate(HeldGetUp,GetUpTargetRate*Alpha);
+			if (Alpha>=1.f) HeldGetUp=nullptr;
+		}
+	}
 	// Down (and not an NPC, which keeps its capsule where it fell): the capsule follows the body, so the camera does.
 	if (bDown && bOwnLimpHandler)
 	{
@@ -375,6 +396,17 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	if (!Montage) return nullptr;
 	if (History) { History->LastGetUpClip=Pick.Clip->GetFName(); History->LastGetUpStyle=FName(Pick.GetUp->Style); }
 	OutDuration = (Pick.Clip->GetPlayLength() - Pick.Time) / FMath::Max(Rate, 0.1f);
+	if (History)
+		if (URPGPhysicsReactionComponent* Reaction=Character->FindComponentByClass<URPGPhysicsReactionComponent>(); Reaction && Reaction->GetReactionState()==ERPGPhysicsReactionState::Limp)
+		{
+			// The old physics pose is pinned while fading. Moving the target torso beneath those
+			// pinned arms can bend a shoulder backwards even when both endpoints are anatomical.
+			// Align with the matched, stationary start first, then ease into its authored motion.
+			Anim->Montage_SetPlayRate(Montage,0.f);
+			History->HeldGetUp=Montage;History->GetUpTargetRate=Rate;
+			History->GetUpResumeTime=0.f;History->bGetUpAwaitingPhysics=true;
+			OutDuration+=FMath::Max(0.f,Reaction->NextReturnBlendTime)+.14f;
+		}
 	UE_LOG(LogRPGInput, Log, TEXT("%s gets up with %s from %.2fs (pose match %.0f cm, largest limb turn %.0f deg (%s)%s, %d close clips, style %s) at %.2fx"),
 		*Character->GetActorNameOrLabel(), *Pick.Clip->GetName(), Pick.Time, FMath::Sqrt(PoseError(Now, Pick.Features) / (NumFeatures + 2)), Turn, SegmentNames[TurnSegment],
 		bAnyFadeable ? TEXT("") : TEXT(", none closer"), CloseCount, Pick.GetUp->Style, Rate);

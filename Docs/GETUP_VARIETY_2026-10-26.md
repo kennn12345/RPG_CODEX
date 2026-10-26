@@ -38,4 +38,6 @@ Remaining inherited limitations: unmatched ragdoll poses when joints land beyond
 
 ## Resume
 
+Latest follow-up: user reported backward arms **during get-ups**. See `Docs/GETUP_ARMS_2026-10-26.md` for the reproduced moving-torso/pinned-arms fade defect, stationary matched-pose alignment fix, interruption handling and actual rendered/regression evidence. Preserve this correction alongside all 29 clips; no rebake was needed.
+
 Preserve this accepted implementation and all originals. Check current Git status and latest user feedback before further work. `Docs/GETUP_HANDOFF.md` remains the user's pre-existing untracked file and must stay untouched. Any scheduled continuation should read this document as well as REACTIVE_PHYSICS_PHASE1.md; the latest authorized scope includes authored get-up variety, not procedural active balance. Do not rebake approved flight or repeatedly film passing cases without a concrete reason.
