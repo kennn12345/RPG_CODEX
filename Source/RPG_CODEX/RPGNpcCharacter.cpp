@@ -2,6 +2,7 @@
 
 #include "RPGAttributeSet.h"
 #include "RPGBodyMass.h"
+#include "RPGHitReactionComponent.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGHitCameraShake.h"
@@ -44,6 +45,9 @@ ARPGNpcCharacter::ARPGNpcCharacter()
 
 	Stats = CreateDefaultSubobject<URPGCharacterStatsComponent>(TEXT("Stats"));
 	PhysicsReaction = CreateDefaultSubobject<URPGPhysicsReactionComponent>(TEXT("PhysicsReaction"));
+	HitReaction = CreateDefaultSubobject<URPGHitReactionComponent>(TEXT("HitReaction"));
+	// Physics bodies only for knockdowns / knockouts (whole-body ragdoll); ordinary hits use HitReaction.
+	PhysicsReaction->bHitReactions = false;
 	// Realistic give, not flailing: legs stay on the animation (leg hits step instead), firm muscles, the struck part
 	// only half as weak, physics never more than half the pose, a gentle stagger wobble and a smooth recovery.
 	PhysicsReaction->bKinematicLegsWhenPowered = true;
@@ -162,7 +166,9 @@ void ARPGNpcCharacter::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	// The body: give on the springs at the struck bone, or a whole-body ragdoll for knockdowns / launches.
 	if (PhysicsReaction) PhysicsReaction->HandlePowerHit(Hit, Result);
 	if (PhysicsReaction && PhysicsReaction->GetReactionState() == ERPGPhysicsReactionState::Limp) OnRagdoll();
-	else if (Result.Displacement >= StepDisplacement)
+	else ReactToHit(Hit.HitBone, Hit.ImpactLocation, Hit.StrikeDirection.IsNearlyZero() && Hit.Attacker ? GetActorLocation() - Hit.Attacker->GetActorLocation() : Hit.StrikeDirection,
+		Result.Reaction == ERPGPowerReaction::Stagger ? HitSpeedStagger : HitSpeedFlinch, Hit.Attacker);
+	if (!bDown && Result.Displacement >= StepDisplacement)
 	{
 		// Pushed hard enough to move: a balance step the way the blow pushes, on the struck leg if a leg was hit.
 		const FName Limb = PhysicsReaction ? PhysicsReaction->GetLimbForBone(Hit.HitBone) : NAME_None;
@@ -198,8 +204,13 @@ void ARPGNpcCharacter::ReceiveEnergyHit_Implementation(const FRPGEnergyImpact& I
 		OnRagdoll();
 		return;
 	}
-	// The struck bone takes the spell's force on the springs, at the point it hit, the way it was travelling.
-	PhysicsReaction->HandleEnergyHit(Impact);
+	// The struck part takes the spell's force at the point it hit, the way it was travelling (capped by that part's weight).
+	{
+		const FBodyInstance* Body = GetMesh() ? GetMesh()->GetBodyInstance(Impact.Hit.BoneName) : nullptr;
+		const float Mass = Body ? FMath::Max(0.5f, Body->GetBodyMass()) : 5.f;
+		ReactToHit(Impact.Hit.BoneName, Impact.Hit.ImpactPoint, Impact.Direction, FMath::Lerp(180.f, 450.f, FMath::Clamp(Impact.Charge, 0.f, 1.f)), Impact.Attacker,
+			Impact.Impulse > 0.f ? FMath::Min(Impact.Impulse, Mass * 450.f) : -1.f);
+	}
 	// A leg hit hard enough steps that leg away with the force.
 	const FName Limb = PhysicsReaction->GetLimbForBone(Impact.Hit.BoneName);
 	const bool bLeg = Limb == TEXT("LegLeft") || Limb == TEXT("LegRight");
@@ -241,6 +252,21 @@ void ARPGNpcCharacter::PlayBalanceStep(const FVector& Push, bool bHeavy, float F
 	UE_LOG(LogRPGInput, Log, TEXT("%s balance step %s, %.0f cm (clip %.0f cm)"), *GetActorNameOrLabel(), *Step->GetName(), Distance, Travel);
 	if (!ActiveReaction) SetAnimRootMotionTranslationScale(1.f);
 	StopForReaction(Step->GetPlayLength() + 0.4f);
+}
+
+void ARPGNpcCharacter::ReactToHit(FName Bone, const FVector& Point, const FVector& Direction, float Speed, const AActor* Attacker, float MaxImpulse)
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!HitReaction || !Body) return;
+	// The struck part's weight (the nearest bone with a physics body).
+	float Mass = 5.f;
+	for (FName B = Bone; B != NAME_None; B = Body->GetParentBone(B))
+		if (const FBodyInstance* Instance = Body->GetBodyInstance(B)) { Mass = Instance->GetBodyMass(); break; }
+	FVector Impulse = Direction.GetSafeNormal() * Speed * Mass;
+	if (MaxImpulse > 0.f) Impulse = Impulse.GetClampedToMaxSize(MaxImpulse);
+	// Momentum: an attacker moving into the blow carries some of their weight x speed into it.
+	if (Attacker) Impulse += Attacker->GetVelocity() * RPGBodyMass::TotalKgFor(0.f) * MomentumTransfer;
+	HitReaction->AddHit(Bone, Point, Impulse);
 }
 
 void ARPGNpcCharacter::PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Reaction)

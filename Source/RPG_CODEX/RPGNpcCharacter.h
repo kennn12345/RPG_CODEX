@@ -11,6 +11,7 @@ class UAnimSequence;
 class UAnimMontage;
 class URPGCharacterStatsComponent;
 class URPGPhysicsReactionComponent;
+class URPGHitReactionComponent;
 
 /**
  * A humanoid NPC on GASP's character setup (motion matching, foot placement): BP_RPGNpc is a copy of GASP's
@@ -40,6 +41,18 @@ public:
 	TObjectPtr<URPGCharacterStatsComponent> Stats;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
 	TObjectPtr<URPGPhysicsReactionComponent> PhysicsReaction;
+	/** Ordinary hits: the body's give, calculated from where and how hard it was hit and applied on the animation. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
+	TObjectPtr<URPGHitReactionComponent> HitReaction;
+
+	/** Speed (cm/s) a flinch / stagger hit gives the struck body part; times that part's weight = the hit's push. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float HitSpeedFlinch = 160.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float HitSpeedStagger = 280.f;
+	/** Share of the attacker's own momentum (their weight x speed) that carries into the hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float MomentumTransfer = 0.04f;
 
 	/** Name shown over its head with rpg.Debug (empty: the actor's name). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC")
@@ -128,6 +141,8 @@ private:
 	void OnRagdoll();
 	void HandleLimpEnding();
 	void ApplyWalkIntent();
+	/** The ordinary-hit give: push the struck part with Speed x its weight along Direction, plus the attacker's momentum. */
+	void ReactToHit(FName Bone, const FVector& Point, const FVector& Direction, float Speed, const AActor* Attacker, float MaxImpulse = -1.f);
 
 	FVector Home = FVector::ZeroVector;
 	float BusyUntil = 0.f;
