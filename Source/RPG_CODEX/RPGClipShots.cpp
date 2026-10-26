@@ -1,4 +1,5 @@
-// Visual check (needs rendering, so it is NOT under "RPG"): plays animation clips on the combat test dummy and films each
+// Visual check (needs rendering, so it is NOT under "RPG"): plays animation clips on the combat test dummy (or, in a
+// level without one, the first NPC) and films each
 // one from three cameras (side, front, three-quarter) at evenly spaced moments - to look at a clip on the real
 // character before deciding to use it.
 //   set RPG_SHOT_CLIPS=/Game/Path/ClipA,/Game/Path/ClipB
@@ -11,6 +12,7 @@
 
 #include "RPG_CODEX.h"
 #include "RPGCombatTestDummy.h"
+#include "RPGNpcCharacter.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Camera/CameraActor.h"
@@ -19,6 +21,8 @@
 #include "Editor.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/WorldSettings.h"
 #include "HAL/PlatformMisc.h"
@@ -32,7 +36,7 @@
 
 namespace
 {
-	constexpr int32 ShotsPerClip = 8;
+	constexpr int32 ShotsPerClip = 12;
 
 	struct FClipView { const TCHAR* Name; FVector Offset; };   // camera offset from the dummy: X forward, Y right, Z up (cm)
 	const FClipView ClipViews[] = {
@@ -56,6 +60,8 @@ namespace
 			APlayerController* Controller = UGameplayStatics::GetPlayerController(World, 0);
 			if (!Dummy.IsValid())
 				for (TActorIterator<ARPGCombatTestDummy> It(World); It; ++It) Dummy = *It;
+			if (!Dummy.IsValid())
+				for (TActorIterator<ARPGNpcCharacter> It(World); It; ++It) { Dummy = *It; break; }
 			if (!Controller || !Dummy.IsValid()) return Wait(TEXT("no player controller / dummy"));
 			if (ClipPaths.IsEmpty()) { Test->AddError(TEXT("CLIPSHOT: set RPG_SHOT_CLIPS")); return true; }
 			const float Now = World->GetTimeSeconds();
@@ -63,8 +69,19 @@ namespace
 			if (!CameraActor)
 			{
 				// The dummy stands still at its spot, no reactions; the player is moved out of the way and hidden.
-				Dummy->StopWanderingAtHome();
-				Dummy->PhysicsReaction->bReactionsEnabled = false;
+				if (ARPGCombatTestDummy* Old = Cast<ARPGCombatTestDummy>(Dummy.Get()))
+				{
+					ClipMesh = Old->Mesh;
+					Old->StopWanderingAtHome();
+					Old->PhysicsReaction->bReactionsEnabled = false;
+				}
+				else if (ARPGNpcCharacter* Npc = Cast<ARPGNpcCharacter>(Dummy.Get()))
+				{
+					ClipMesh = Npc->GetMesh();
+					Npc->bWander = false;
+					if (AController* Ai = Npc->GetController()) Ai->StopMovement();
+					Npc->GetCharacterMovement()->DisableMovement();
+				}
 				if (APawn* Player = Controller->GetPawn())
 				{
 					Player->SetActorLocation(Dummy->GetActorLocation() + FVector(0.f, -2000.f, 0.f), false, nullptr, ETeleportType::ResetPhysics);
@@ -103,8 +120,9 @@ namespace
 				const FVector Chest = Body.GetLocation() + FVector(0.f, 0.f, Raise);
 				const FVector Eye = Body.TransformPosition(ClipViews[View].Offset) + FVector(0.f, 0.f, Raise);
 				CameraActor->SetActorLocationAndRotation(Eye, (Chest - Eye).Rotation());
-				Dummy->Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-				Dummy->Mesh->PlayAnimation(Clip, true);
+				if (!ClipMesh.IsValid()) { Test->AddError(TEXT("CLIPSHOT: no mesh to play on")); return true; }
+				ClipMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+				ClipMesh->PlayAnimation(Clip, true);
 				World->GetWorldSettings()->SetTimeDilation(0.25f);
 				ClipStart = Now;
 				NextShot = 0;
@@ -137,7 +155,8 @@ namespace
 
 		FAutomationTestBase* Test;
 		TArray<FString> ClipPaths;
-		TWeakObjectPtr<ARPGCombatTestDummy> Dummy;
+		TWeakObjectPtr<AActor> Dummy;
+		TWeakObjectPtr<USkeletalMeshComponent> ClipMesh;   // the mesh that plays the clips
 		TObjectPtr<ACameraActor> CameraActor = nullptr;
 		int32 ClipIndex = 0, View = 0, NextShot = 0, Phase = 0, WaitFrames = 0;
 		float ClipStart = 0.f;

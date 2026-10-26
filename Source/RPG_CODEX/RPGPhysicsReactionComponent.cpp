@@ -512,10 +512,27 @@ void URPGPhysicsReactionComponent::ReturnToAnimated(float BlendTime)
 	{
 		OnLimpEnding.Broadcast();
 		if (State == ERPGPhysicsReactionState::Animated) return;   // a listener already finished it (e.g. an instant reset)
+		// Out of a limp ragdoll: the body is held exactly where it lies (each body kinematic, pinned to where it is in
+		// the world) while the animation fades in over it (a get-up). Left simulating, its parts jitter on the ground and
+		// pop out of each other all through the fade. (Static bodies would drop out of the physics blend: the pose would
+		// snap to the animation.)
+		if (USkeletalMeshComponent* Mesh = GetMesh(); Mesh && PhysicsControl)
+		{
+			for (const TPair<FName, FName>& BoneModifier : BoneModifiers)
+			{
+				const FBodyInstance* Body = Mesh->GetBodyInstance(BoneModifier.Key);
+				if (!Body) continue;
+				const FTransform Pose = Body->GetUnrealWorldTransform();
+				PhysicsControl->SetBodyModifierKinematicTargetSpace(BoneModifier.Value, EPhysicsControlKinematicTargetSpace::World);
+				PhysicsControl->SetBodyModifierKinematicTarget(BoneModifier.Value, Pose.GetLocation(), Pose.Rotator(), true);
+			}
+			bPinnedForFade = true;
+		}
 	}
 	bReturning = true;
 	ReturnTime = 0.f;
-	ReturnDuration = BlendTime >= 0.f ? BlendTime : ReturnBlendTime;
+	ReturnDuration = NextReturnBlendTime >= 0.f ? NextReturnBlendTime : BlendTime >= 0.f ? BlendTime : ReturnBlendTime;
+	NextReturnBlendTime = -1.f;
 	ReturnStartBlend = PhysicsBlend;
 	if (ReturnDuration <= 0.f) FinishReturn();
 }
@@ -536,6 +553,14 @@ void URPGPhysicsReactionComponent::FinishReturn()
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Kinematic, true, false);
 	PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(AllModifiers, EResetToCachedTargetBehavior::ResetDuringUpdateControls, true, false);
 	SetSolidRagdoll(false);
+	if (bPinnedForFade)
+	{
+		// back to following the animation (zero offset from each bone)
+		bPinnedForFade = false;
+		PhysicsControl->SetBodyModifiersKinematicTargetSpace(AllModifiers, EPhysicsControlKinematicTargetSpace::OffsetInBoneSpace);
+		for (const FName Modifier : AllModifiers)
+			PhysicsControl->SetBodyModifierKinematicTarget(Modifier, FVector::ZeroVector, FRotator::ZeroRotator, false);
+	}
 	if (bNaturalFall)
 	{
 		bNaturalFall = false;

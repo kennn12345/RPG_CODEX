@@ -267,7 +267,17 @@ def center_of_mass(cs):
         q = cs[a][1] if b is None else mul(add(cs[a][1], cs[b][1]), 0.5); c = add(c, mul(q, m))
     return mul(c, 1 / _MASS_SUM)
 
-BALANCE_INSET = 3.0   # cm toward the other foot from the standing foot's middle
+def flat_hand_q(side, fingers):
+    """Component-space rotation of a hand lying palm down, fingers along `fingers` (flattened to the ground): the idle
+    hand's finger line and thumb side turned onto that direction and the matching thumb side (toward the body's middle)."""
+    h = IDLE_CS['hand_' + side][1]
+    f0 = norm(sub(IDLE_CS['middle_01_' + side][1], h))
+    t0 = ortho(sub(IDLE_CS['index_01_' + side][1], IDLE_CS['pinky_01_' + side][1]), f0)
+    F = norm([fingers[0], fingers[1], 0.0])
+    T = mul(cross(F, [0.0, 0.0, 1.0]), -1.0 if side == 'l' else 1.0)
+    return qnorm(qmul(qfrom_frames(f0, t0, F, T), IDLE_CS['hand_' + side][0]))
+
+BALANCE_INSET = 3.0  # cm toward the other foot from the standing foot's middle
 BALANCE_BALL = 0.55   # where over a supporting foot the centre of mass is held: this share of the way from ankle to ball
 
 def build_pose(P, return_cs=False):
@@ -303,12 +313,32 @@ def balanced(P):
     P['balance'] = [0.0]
     return P
 
+def _line_yaw(a, b):
+    """Yaw (deg) of the line from bone b to bone a (right to left side) away from straight across (+X)."""
+    d = sub(IDLE_CS[a][1], IDLE_CS[b][1]); return math.degrees(math.atan2(d[1], d[0]))
+SQUARE_HIPS = _line_yaw('thigh_l', 'thigh_r')
+SQUARE_CHEST = _line_yaw('upperarm_l', 'upperarm_r') - SQUARE_HIPS
+
+def squared(local, w):
+    """square (0..1): the idle's turn taken out of the body before it is posed (hips square to the front, then the chest
+    square over the hips). A stance turned like a fighter's would roll the body onto one side once it lies down."""
+    cs = to_cs(local)
+    for bone, deg in (('pelvis', SQUARE_HIPS), ('spine_03', SQUARE_CHEST)):
+        q = qnorm(qmul(qaxis([0, 0, 1], -deg * w), cs[bone][0]))
+        local[bone] = (qnorm(qmul(qconj(cs[PARENT[bone]][0]), q)), local[bone][1])
+        cs = to_cs(local)
+
 def _build_pose(P, return_cs=False):
     local = {b: (list(q), list(t)) for b, (q, t) in IDLE.items()}
     for b, v in FIST.items(): local[b] = (list(finger_q(b, P.get('hand_open_' + b[-1], [0])[0])), list(v[1]))
+    square = P.get('square', [0])[0]
+    if square > 0: squared(local, square)
     # pelvis: world-space offset + rotation about its own pivot
     pq, pt = local['pelvis']
-    local['pelvis'] = (qnorm(qmul(qeuler(*P['pelvis_rot']), pq)), add(pt, P['pelvis_off']))
+    # pelvis_lie (deg, + = onto the left side): a turn about the forward axis after pelvis_rot, so a body lying face
+    # down rolls onto its side (and back) about its own long axis
+    lie = qaxis([0, 1, 0], P.get('pelvis_lie', [0])[0])
+    local['pelvis'] = (qnorm(qmul(lie, qmul(qeuler(*P['pelvis_rot']), pq))), add(pt, P['pelvis_off']))
     cs = to_cs(local)
     # spine: distribute a world-space rotation over the chain
     def rot_chain(bone, q_world):
@@ -321,7 +351,9 @@ def _build_pose(P, return_cs=False):
         y, p, r = P['clav_' + side]; rot_chain('clavicle_' + side, qeuler(y, p, r))
     # head: hold roughly level in world, plus a little of the body's turn
     hy, hp, hr = P['head_rot']
-    hq_target = qmul(qeuler(hy, hp + HEAD_PITCH_LIFT, hr), IDLE_CS['head'][0])
+    # (a squared body's head faces straight ahead too: the idle's turn comes off it as well; and a body rolled onto its
+    # side takes its head with it, so head_rot stays the head's turn relative to the lying body)
+    hq_target = qmul(lie, qmul(qmul(qeuler(hy, hp + HEAD_PITCH_LIFT, hr), qaxis([0, 0, 1], -(SQUARE_HIPS + SQUARE_CHEST) * square)), IDLE_CS['head'][0]))
     nk = cs['neck_02'][0]; cur = cs['head'][0]
     blend = qmul(hq_target, qconj(cur))   # remaining world rotation needed at the head
     half = qnorm(lerp([0, 0, 0, 1], blend if blend[3] >= 0 else [-x for x in blend], 0.4))
@@ -358,6 +390,11 @@ def _build_pose(P, return_cs=False):
         # wrist bent out to the side (degrees, about the forward axis): turns a hanging hand's palm toward the ground
         bend = P.get('wrist_out_' + side, [0])[0]
         if bend: cs[hand] = (qnorm(qmul(qaxis([0, 1, 0], -bend if side == 'l' else bend), cs[hand][0])), cs[hand][1])
+        # hand_flat_* (0..1): the hand turned flat onto the ground (palm down), fingers along hand_dir_* (world), as when
+        # pushing up off the floor; blended from the forearm-straight wrist above
+        flat = P.get('hand_flat_' + side, [0])[0]
+        if flat > 0:
+            cs[hand] = (_nlerp(cs[hand][0], flat_hand_q(side, P.get('hand_dir_' + side, [0, 1, 0])), flat), cs[hand][1])
         for tb, w in FOREARM_TWIST:   # spread the roll along the forearm instead of snapping at the wrist
             b = tb + '_' + side
             local[b] = (qnorm(qmul(qaxis(qrot(qconj(fq), axis), roll * w), IDLE[b][0])), IDLE[b][1])  # roll in forearm space
@@ -366,7 +403,8 @@ def _build_pose(P, return_cs=False):
         foot = 'foot_' + side
         # foot_turn_*: turn about the vertical first (e.g. a turned-out rear foot straightening to point at the target as
         # it lifts), then foot_rot, so tipping the foot up never rolls it onto its side
-        R = qmul(qeuler(*P['foot_rot_' + side]), qaxis([0, 0, 1], P.get('foot_turn_' + side, [0])[0] + FOOT_BASE_TURN[side]))
+        # (and a body rolled onto its side takes its feet with it: foot_rot stays relative to the lying body)
+        R = qmul(lie, qmul(qeuler(*P['foot_rot_' + side]), qaxis([0, 0, 1], P.get('foot_turn_' + side, [0])[0] + FOOT_BASE_TURN[side])))
         # planted feet pivot on the ball (heel swings), so the toes don't slide across the floor
         ball0, ank0 = IDLE_CS['ball_' + side][1], IDLE_CS[foot][1]
         # plant_* moves where a planted foot sits (a step): the ball goes to its idle spot + plant, the heel pivots there

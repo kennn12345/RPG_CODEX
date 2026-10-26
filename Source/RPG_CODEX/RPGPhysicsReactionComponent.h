@@ -123,6 +123,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
 	void ReturnToAnimated(float BlendTime = -1.f);
 
+	/** Set by an OnLimpEnding listener (the get-up) to fade this once over this long instead (< 0: as asked). */
+	float NextReturnBlendTime = -1.f;
+
 	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
 	ERPGPhysicsReactionState GetReactionState() const { return State; }
 
@@ -269,7 +272,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
 	float LimpMaxSettleWait = 1.5f;
 
-	/** Fade from the ragdoll back to the animation (a placeholder until there are get-up animations). */
+	/** Fade from the ragdoll into the get-up animation. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0"))
 	float LimpReturnBlendTime = 0.5f;
 
@@ -360,6 +363,8 @@ private:
 	/** Launched by a body impact: real gravity and a slicker body on the ground, so it tumbles, rolls and slides out
 	 *  the momentum it has instead of dropping and gripping. */
 	bool bNaturalFall = false;
+	/** The bodies are pinned where the ragdoll lay, for the fade into the get-up. */
+	bool bPinnedForFade = false;
 	UPROPERTY(Transient)
 	TObjectPtr<class UPhysicalMaterial> TumbleMaterial;
 	TEnumAsByte<ECollisionChannel> SavedMeshObjectType = ECC_Pawn;

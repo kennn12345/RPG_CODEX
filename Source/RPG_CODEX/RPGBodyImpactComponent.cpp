@@ -15,17 +15,27 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 namespace
 {
-	/** GASP's 12 get-ups and their kind (stand up, crouch scramble, roll then stand, up into a run). */
+	/** Our own get-ups (Tools/ProtoAnim/getups.py: face down, face up, on either side, and start variants of them, each
+	 *  ending in the standing idle)
+	 *  and their kind (stand up, crouch scramble, roll then stand, up into a run). Only standing ones so far. */
 	enum class EGetUpKind : uint8 { Stand, Crouch, Roll, Run };
 	struct FGetUp { const TCHAR* Name; EGetUpKind Kind; };
 	const FGetUp GetUps[] = {
-		{ TEXT("stand_F"), EGetUpKind::Stand }, { TEXT("stand_B"), EGetUpKind::Stand }, { TEXT("stand_L"), EGetUpKind::Stand }, { TEXT("stand_R"), EGetUpKind::Stand },
-		{ TEXT("crouch_F"), EGetUpKind::Crouch }, { TEXT("crouch_B"), EGetUpKind::Crouch }, { TEXT("crouch_L"), EGetUpKind::Crouch }, { TEXT("crouch_R"), EGetUpKind::Crouch },
-		{ TEXT("roll_L"), EGetUpKind::Roll }, { TEXT("roll_R"), EGetUpKind::Roll },
-		{ TEXT("run_F"), EGetUpKind::Run }, { TEXT("run_B"), EGetUpKind::Run },
+		{ TEXT("FaceDown"), EGetUpKind::Stand }, { TEXT("FaceUp"), EGetUpKind::Stand },
+		{ TEXT("SideL"), EGetUpKind::Stand }, { TEXT("SideR"), EGetUpKind::Stand },
+		// the same get-ups from other ways a body lands (closer starts: less of a blend from the ragdoll)
+		{ TEXT("FaceDownArmsSide"), EGetUpKind::Stand }, { TEXT("FaceDownArmsUp"), EGetUpKind::Stand },
+		{ TEXT("FaceDownFrog"), EGetUpKind::Stand }, { TEXT("FaceUpArmsOut"), EGetUpKind::Stand },
+		{ TEXT("FaceUpArmsUp"), EGetUpKind::Stand }, { TEXT("SideLCurled"), EGetUpKind::Stand },
+		{ TEXT("SideRCurled"), EGetUpKind::Stand },
+		// from recorded landings no start was close to (Saved/GetUpMisses.csv)
+		{ TEXT("FaceDownSprawl"), EGetUpKind::Stand }, { TEXT("FaceUpArmsV"), EGetUpKind::Stand }, { TEXT("FaceUpKneeOut"), EGetUpKind::Stand },
 	};
 
 	/** Body pose features compared between the ragdoll and the clips: where these bones are relative to the hips, in a
@@ -35,8 +45,17 @@ namespace
 		{ TEXT("head"), 1.5f }, { TEXT("spine_05"), 1.5f },
 		{ TEXT("hand_l"), 1.f }, { TEXT("hand_r"), 1.f }, { TEXT("lowerarm_l"), 0.7f }, { TEXT("lowerarm_r"), 0.7f },
 		{ TEXT("calf_l"), 0.7f }, { TEXT("calf_r"), 0.7f }, { TEXT("foot_l"), 1.f }, { TEXT("foot_r"), 1.f },
+		{ TEXT("upperarm_l"), 0.3f }, { TEXT("upperarm_r"), 0.3f }, { TEXT("thigh_l"), 0.3f }, { TEXT("thigh_r"), 0.3f },
 	};
 	constexpr int32 NumFeatures = UE_ARRAY_COUNT(FeatureBones);
+
+	/** The limb segments (indices into FeatureBones: upper arm, forearm, thigh, shin on each side). A start whose segment
+	 *  points far from the ragdoll's (MaxSegmentTurn) can't be faded into: half way, the shortest turn between the two
+	 *  flips from one way round to the other and the limb whips and shakes through the fade. */
+	const int32 Segments[][2] = { { 10, 4 }, { 4, 2 }, { 11, 5 }, { 5, 3 }, { 12, 6 }, { 6, 8 }, { 13, 7 }, { 7, 9 } };
+	constexpr float MaxSegmentTurn = 110.f;
+	/** Weight of the limb turn (deg^2) against the pose error (weighted cm^2) when choosing a start. */
+	constexpr float TurnCost = 1.5f;
 
 	struct FPoseFeatures
 	{
@@ -57,6 +76,21 @@ namespace
 		}
 		F.PelvisHeight = PelvisHeight;
 		return F;
+	}
+	const TCHAR* SegmentNames[] = { TEXT("upper arm L"), TEXT("forearm L"), TEXT("upper arm R"), TEXT("forearm R"),
+		TEXT("thigh L"), TEXT("shin L"), TEXT("thigh R"), TEXT("shin R") };
+	/** The largest turn (degrees) any limb segment would make from pose A to pose B (and which segment). */
+	float LargestSegmentTurn(const FPoseFeatures& A, const FPoseFeatures& B, int32* OutSegment = nullptr)
+	{
+		float Largest = 0.f;
+		for (int32 I = 0; I < UE_ARRAY_COUNT(Segments); ++I)
+		{
+			const int32* S = Segments[I];
+			const FVector DA = (A.Points[S[1]] - A.Points[S[0]]).GetSafeNormal(), DB = (B.Points[S[1]] - B.Points[S[0]]).GetSafeNormal();
+			const float Turn = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(float(FVector::DotProduct(DA, DB)), -1.f, 1.f)));
+			if (Turn > Largest) { Largest = Turn; if (OutSegment) *OutSegment = I; }
+		}
+		return Largest;
 	}
 	float PoseError(const FPoseFeatures& A, const FPoseFeatures& B)
 	{
@@ -98,7 +132,7 @@ namespace
 		if (Samples.Num()) return Samples;
 		for (const FGetUp& G : GetUps)
 		{
-			const FString Path = FString::Printf(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_%s.M_ragdoll_getup_%s"), G.Name, G.Name);
+			const FString Path = FString::Printf(TEXT("/Game/RPG/Animations/SK_UEFN_Mannequin/RPG_GetUp_%s.RPG_GetUp_%s"), G.Name, G.Name);
 			UAnimSequence* Clip = LoadObject<UAnimSequence>(nullptr, *Path);
 			const USkeleton* Skeleton = Clip ? Clip->GetSkeleton() : nullptr;
 			if (!Skeleton) continue;
@@ -150,6 +184,7 @@ void URPGBodyImpactComponent::BeginPlay()
 	}
 	// NPCs stand themselves up (their own reactions); anyone else (the player) is stood up here.
 	bOwnLimpHandler = !GetOwner()->IsA<ARPGNpcCharacter>();
+	GetUpSamples();   // loaded and measured now, not in the middle of the first get-up (a frame hitch)
 }
 
 URPGPhysicsReactionComponent* URPGBodyImpactComponent::GetReaction(bool bCreate)
@@ -259,17 +294,42 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	for (int32 I = 0; I < NumFeatures; ++I) Bones[I] = Body->GetBoneLocation(FeatureBones[I].Bone);
 	const FPoseFeatures Now = MakeFeatures(Pelvis, Bones, float(Pelvis.Z) - FloorZ);
 	const TArray<FGetUpSample>& Samples = GetUpSamples();
-	auto Allowed = [bWantsToMove](const FGetUpSample& S)
+	auto Moves = [](const FGetUpSample& S) { return S.GetUp->Kind == EGetUpKind::Run || S.GetUp->Kind == EGetUpKind::Crouch; };
+	// (wanting to move with no get-up that moves off: any of them)
+	const bool bOnlyMoving = bWantsToMove && Samples.ContainsByPredicate(Moves);
+	auto Kind = [bOnlyMoving, &Moves](const FGetUpSample& S)
 	{
-		const bool bMoves = S.GetUp->Kind == EGetUpKind::Run || S.GetUp->Kind == EGetUpKind::Crouch;
-		return bWantsToMove ? bMoves : S.GetUp->Kind != EGetUpKind::Run;
+		return bOnlyMoving ? Moves(S) : S.GetUp->Kind != EGetUpKind::Run;
 	};
+	// and only starts every limb can turn to without whipping round (unless none can: then the closest regardless)
+	const bool bAnyFadeable = Samples.ContainsByPredicate([&](const FGetUpSample& S) { return Kind(S) && LargestSegmentTurn(Now, S.Features) <= MaxSegmentTurn; });
+	auto Allowed = [&](const FGetUpSample& S)
+	{
+		return Kind(S) && (!bAnyFadeable || LargestSegmentTurn(Now, S.Features) <= MaxSegmentTurn);
+	};
+	// Scored by how far the body parts are from the clip's AND how far its limbs would have to turn (big turns whip
+	// round through the fade), then a little variety among near-equal scores.
+	auto Score = [&Now](const FGetUpSample& S) { return PoseError(Now, S.Features) + TurnCost * FMath::Square(LargestSegmentTurn(Now, S.Features)); };
 	float Best = TNumericLimits<float>::Max();
-	for (const FGetUpSample& S : Samples) if (Allowed(S)) Best = FMath::Min(Best, PoseError(Now, S.Features));
+	for (const FGetUpSample& S : Samples) if (Allowed(S)) Best = FMath::Min(Best, Score(S));
 	TArray<const FGetUpSample*> Close;
-	for (const FGetUpSample& S : Samples) if (Allowed(S) && PoseError(Now, S.Features) <= Best * 1.25f + 25.f) Close.Add(&S);
+	for (const FGetUpSample& S : Samples) if (Allowed(S) && Score(S) <= Best * 1.25f + 25.f) Close.Add(&S);
 	if (Close.Num() == 0) return nullptr;
 	const FGetUpSample& Pick = *Close[FMath::RandRange(0, Close.Num() - 1)];
+	// A start still far from the body (limbs turning a long way) fades in more slowly: limbs untwist at a human speed.
+	int32 TurnSegment = 0;
+	const float Turn = LargestSegmentTurn(Now, Pick.Features, &TurnSegment);
+	if (Turn > MaxSegmentTurn)
+	{
+		// No start close enough: the landing is written to Saved/GetUpMisses.csv (body parts relative to the hips, in
+		// the matching frame: forward = hips to head along the ground), to author a get-up that starts like it.
+		FString Row = FString::Printf(TEXT("%s,%s,%.0f,%s,%.1f"), *Character->GetActorNameOrLabel(), *Pick.Clip->GetName(), Turn, SegmentNames[TurnSegment], Now.PelvisHeight);
+		for (int32 I = 0; I < NumFeatures; ++I) Row += FString::Printf(TEXT(",%s,%.1f,%.1f,%.1f"), FeatureBones[I].Bone, Now.Points[I].X, Now.Points[I].Y, Now.Points[I].Z);
+		FFileHelper::SaveStringToFile(Row + LINE_TERMINATOR, *(FPaths::ProjectSavedDir() / TEXT("GetUpMisses.csv")), FFileHelper::EEncodingOptions::AutoDetect,
+			&IFileManager::Get(), FILEWRITE_Append);
+	}
+	if (URPGPhysicsReactionComponent* Reaction = Character->FindComponentByClass<URPGPhysicsReactionComponent>())
+		Reaction->NextReturnBlendTime = FMath::GetMappedRangeValueClamped(FVector2f(60.f, 150.f), FVector2f(0.5f, 1.f), Turn);
 
 	// Turn and place the capsule so that frame lies on the body (the fade back to animation blends into it).
 	const FVector Head = Body->GetBoneLocation(TEXT("head")) - Pelvis;
@@ -286,7 +346,8 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	if (!Anim) return nullptr;
 	UAnimMontage* Montage = Anim->PlaySlotAnimationAsDynamicMontage(Pick.Clip, TEXT("DefaultSlot"), 0.f, 0.35f, Rate, 1, -1.f, Pick.Time);
 	OutDuration = (Pick.Clip->GetPlayLength() - Pick.Time) / FMath::Max(Rate, 0.1f);
-	UE_LOG(LogRPGInput, Log, TEXT("%s gets up with %s from %.2fs (pose match %.0f cm, %d close matches) at %.2fx"), *Character->GetActorNameOrLabel(),
-		*Pick.Clip->GetName(), Pick.Time, FMath::Sqrt(Best / 12.f), Close.Num(), Rate);
+	UE_LOG(LogRPGInput, Log, TEXT("%s gets up with %s from %.2fs (pose match %.0f cm, largest limb turn %.0f deg (%s)%s, %d close matches) at %.2fx"),
+		*Character->GetActorNameOrLabel(), *Pick.Clip->GetName(), Pick.Time, FMath::Sqrt(PoseError(Now, Pick.Features) / (NumFeatures + 2)), Turn, SegmentNames[TurnSegment],
+		bAnyFadeable ? TEXT("") : TEXT(", none closer"), Close.Num(), Rate);
 	return Montage;
 }
