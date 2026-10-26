@@ -1,5 +1,7 @@
 # Our own dynamic get-ups (RDR2-style) — plan
 
+Latest update (October26, afternoon): user approved reactive physics and requested visible get-up variety. There are now29 custom get-up assets: the original14 preserved,14 opposite-knee recoveries with authored closing steps, and a right-side back roll. Clip-level selection avoids repeated styles only among safe close matches. See `Docs/GETUP_VARIETY_2026-10-26.md` for exact changes, tests and retained limitations; older status below records the earlier work.
+
 Agreed 2026-10-26. The user does not like GASP's get-up clips. Goal: like Red Dead Redemption 2 (Euphoria): an active
 ragdoll while falling / down, then **our own** get-up animations — the body pushing itself off the ground back to the
 standing idle — matched to how the body actually lies, blended from the real ragdoll pose, hands and feet pinned to the

@@ -25,7 +25,7 @@ namespace
 	 *  ending in the standing idle)
 	 *  and their kind (stand up, crouch scramble, roll then stand, up into a run). Only standing ones so far. */
 	enum class EGetUpKind : uint8 { Stand, Crouch, Roll, Run };
-	struct FGetUp { const TCHAR* Name; EGetUpKind Kind; };
+	struct FGetUp { const TCHAR* Name; EGetUpKind Kind; const TCHAR* Style = TEXT("RightKnee"); };
 	const FGetUp GetUps[] = {
 		{ TEXT("FaceDown"), EGetUpKind::Stand }, { TEXT("FaceUp"), EGetUpKind::Stand },
 		{ TEXT("SideL"), EGetUpKind::Stand }, { TEXT("SideR"), EGetUpKind::Stand },
@@ -36,6 +36,22 @@ namespace
 		{ TEXT("SideRCurled"), EGetUpKind::Stand },
 		// from recorded landings no start was close to (Saved/GetUpMisses.csv)
 		{ TEXT("FaceDownSprawl"), EGetUpKind::Stand }, { TEXT("FaceUpArmsV"), EGetUpKind::Stand }, { TEXT("FaceUpKneeOut"), EGetUpKind::Stand },
+		// Same matching starts, genuinely different opposite-knee recovery and closing steps.
+		{ TEXT("FaceDown_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceUp_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("SideL_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("SideR_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceDownArmsSide_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceDownArmsUp_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceDownFrog_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceUpArmsOut_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceUpArmsUp_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("SideLCurled_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("SideRCurled_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceDownSprawl_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceUpArmsV_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceUpKneeOut_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
+		{ TEXT("FaceUp_RollRight"), EGetUpKind::Roll, TEXT("RightRoll") },
 	};
 
 	/** Body pose features compared between the ragdoll and the clips: where these bones are relative to the hips, in a
@@ -165,6 +181,35 @@ namespace
 		}
 		return Samples;
 	}
+
+	const FGetUpSample* ChooseGetUp(const FPoseFeatures& Now,bool bWantsToMove,FName LastStyle,FName LastClip,int32& OutClose,bool& bAnyFadeable)
+	{
+		const TArray<FGetUpSample>& Samples=GetUpSamples();
+		auto Moves=[](const FGetUpSample& S){return S.GetUp->Kind==EGetUpKind::Run || S.GetUp->Kind==EGetUpKind::Crouch;};
+		const bool bOnlyMoving=bWantsToMove && Samples.ContainsByPredicate(Moves);
+		auto Kind=[&](const FGetUpSample& S){return bOnlyMoving?Moves(S):S.GetUp->Kind!=EGetUpKind::Run;};
+		bAnyFadeable=Samples.ContainsByPredicate([&](const FGetUpSample& S){return Kind(S) && LargestSegmentTurn(Now,S.Features)<=MaxSegmentTurn;});
+		auto Score=[&](const FGetUpSample& S){return PoseError(Now,S.Features)+TurnCost*FMath::Square(LargestSegmentTurn(Now,S.Features));};
+		TMap<const FGetUp*,const FGetUpSample*> PerClip;
+		float Best=TNumericLimits<float>::Max();
+		for (const FGetUpSample& S:Samples)
+		{
+			if (!Kind(S) || (bAnyFadeable && LargestSegmentTurn(Now,S.Features)>MaxSegmentTurn)) continue;
+			const FGetUpSample* const* Previous=PerClip.Find(S.GetUp);
+			if (!Previous || Score(S)<Score(**Previous)) PerClip.Add(S.GetUp,&S);
+			Best=FMath::Min(Best,Score(S));
+		}
+		TArray<const FGetUpSample*> Close;
+		for (const auto& P:PerClip) if (Score(*P.Value)<=Best*1.25f+25.f) Close.Add(P.Value);
+		OutClose=Close.Num();
+		if (Close.IsEmpty()) return nullptr;
+		// Preserve the same pose-score/limb-turn envelope; variety only resolves safe ties.
+		if (!LastStyle.IsNone() && Close.ContainsByPredicate([&](const FGetUpSample* S){return FName(S->GetUp->Style)!=LastStyle;}))
+			Close.RemoveAll([&](const FGetUpSample* S){return FName(S->GetUp->Style)==LastStyle;});
+		else if (!LastClip.IsNone() && Close.ContainsByPredicate([&](const FGetUpSample* S){return FName(S->Clip->GetName())!=LastClip;}))
+			Close.RemoveAll([&](const FGetUpSample* S){return FName(S->Clip->GetName())==LastClip;});
+		return Close[FMath::RandRange(0,Close.Num()-1)];
+	}
 }
 
 URPGBodyImpactComponent::URPGBodyImpactComponent()
@@ -293,29 +338,11 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	FVector Bones[NumFeatures];
 	for (int32 I = 0; I < NumFeatures; ++I) Bones[I] = Body->GetBoneLocation(FeatureBones[I].Bone);
 	const FPoseFeatures Now = MakeFeatures(Pelvis, Bones, float(Pelvis.Z) - FloorZ);
-	const TArray<FGetUpSample>& Samples = GetUpSamples();
-	auto Moves = [](const FGetUpSample& S) { return S.GetUp->Kind == EGetUpKind::Run || S.GetUp->Kind == EGetUpKind::Crouch; };
-	// (wanting to move with no get-up that moves off: any of them)
-	const bool bOnlyMoving = bWantsToMove && Samples.ContainsByPredicate(Moves);
-	auto Kind = [bOnlyMoving, &Moves](const FGetUpSample& S)
-	{
-		return bOnlyMoving ? Moves(S) : S.GetUp->Kind != EGetUpKind::Run;
-	};
-	// and only starts every limb can turn to without whipping round (unless none can: then the closest regardless)
-	const bool bAnyFadeable = Samples.ContainsByPredicate([&](const FGetUpSample& S) { return Kind(S) && LargestSegmentTurn(Now, S.Features) <= MaxSegmentTurn; });
-	auto Allowed = [&](const FGetUpSample& S)
-	{
-		return Kind(S) && (!bAnyFadeable || LargestSegmentTurn(Now, S.Features) <= MaxSegmentTurn);
-	};
-	// Scored by how far the body parts are from the clip's AND how far its limbs would have to turn (big turns whip
-	// round through the fade), then a little variety among near-equal scores.
-	auto Score = [&Now](const FGetUpSample& S) { return PoseError(Now, S.Features) + TurnCost * FMath::Square(LargestSegmentTurn(Now, S.Features)); };
-	float Best = TNumericLimits<float>::Max();
-	for (const FGetUpSample& S : Samples) if (Allowed(S)) Best = FMath::Min(Best, Score(S));
-	TArray<const FGetUpSample*> Close;
-	for (const FGetUpSample& S : Samples) if (Allowed(S) && Score(S) <= Best * 1.25f + 25.f) Close.Add(&S);
-	if (Close.Num() == 0) return nullptr;
-	const FGetUpSample& Pick = *Close[FMath::RandRange(0, Close.Num() - 1)];
+	URPGBodyImpactComponent* History=Character->FindComponentByClass<URPGBodyImpactComponent>();
+	int32 CloseCount=0; bool bAnyFadeable=false;
+	const FGetUpSample* Selected=ChooseGetUp(Now,bWantsToMove,History?History->LastGetUpStyle:NAME_None,History?History->LastGetUpClip:NAME_None,CloseCount,bAnyFadeable);
+	if (!Selected) return nullptr;
+	const FGetUpSample& Pick=*Selected;
 	// A start still far from the body (limbs turning a long way) fades in more slowly: limbs untwist at a human speed.
 	int32 TurnSegment = 0;
 	const float Turn = LargestSegmentTurn(Now, Pick.Features, &TurnSegment);
@@ -345,9 +372,43 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	UAnimInstance* Anim = Body->GetAnimInstance();
 	if (!Anim) return nullptr;
 	UAnimMontage* Montage = Anim->PlaySlotAnimationAsDynamicMontage(Pick.Clip, TEXT("DefaultSlot"), 0.f, 0.35f, Rate, 1, -1.f, Pick.Time);
+	if (!Montage) return nullptr;
+	if (History) { History->LastGetUpClip=Pick.Clip->GetFName(); History->LastGetUpStyle=FName(Pick.GetUp->Style); }
 	OutDuration = (Pick.Clip->GetPlayLength() - Pick.Time) / FMath::Max(Rate, 0.1f);
-	UE_LOG(LogRPGInput, Log, TEXT("%s gets up with %s from %.2fs (pose match %.0f cm, largest limb turn %.0f deg (%s)%s, %d close matches) at %.2fx"),
+	UE_LOG(LogRPGInput, Log, TEXT("%s gets up with %s from %.2fs (pose match %.0f cm, largest limb turn %.0f deg (%s)%s, %d close clips, style %s) at %.2fx"),
 		*Character->GetActorNameOrLabel(), *Pick.Clip->GetName(), Pick.Time, FMath::Sqrt(PoseError(Now, Pick.Features) / (NumFeatures + 2)), Turn, SegmentNames[TurnSegment],
-		bAnyFadeable ? TEXT("") : TEXT(", none closer"), Close.Num(), Rate);
+		bAnyFadeable ? TEXT("") : TEXT(", none closer"), CloseCount, Pick.GetUp->Style, Rate);
 	return Montage;
 }
+
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
+#include "Misc/AutomationTest.h"
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGGetUpVarietyTest,"RPG.Npc.GetUpVariety",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)
+bool FRPGGetUpVarietyTest::RunTest(const FString&)
+{
+	const auto& Samples=GetUpSamples();
+	TSet<FName> Loaded,Styles;
+	for (const auto& S:Samples) { Loaded.Add(S.Clip->GetFName()); Styles.Add(FName(S.GetUp->Style)); }
+	TestEqual(TEXT("All 29 custom recovery clips loaded"),Loaded.Num(),29);
+	TestEqual(TEXT("Three visibly different recovery styles"),Styles.Num(),3);
+	int32 Poses=0,Selections=0;
+	for (const auto& Source:Samples)
+	{
+		if (Source.Time!=0.f || FName(Source.GetUp->Style)!=TEXT("RightKnee")) continue;
+		++Poses; FName LastStyle,LastClip;
+		for (int32 I=0;I<6;++I)
+		{
+			int32 Count=0;bool bFadeable=false;
+			const auto* Pick=ChooseGetUp(Source.Features,false,LastStyle,LastClip,Count,bFadeable);
+			if (!TestNotNull(TEXT("Compatible recovery found"),Pick)) continue;
+			TestTrue(TEXT("Limb-turn safety retained"),bFadeable && LargestSegmentTurn(Source.Features,Pick->Features)<=MaxSegmentTurn);
+			TestTrue(TEXT("Original start has a compatible alternate style"),Count>=2);
+			if (!LastStyle.IsNone()) TestTrue(TEXT("Repeated identical landing changes recovery style"),FName(Pick->GetUp->Style)!=LastStyle);
+			LastStyle=FName(Pick->GetUp->Style); LastClip=Pick->Clip->GetFName(); ++Selections;
+		}
+	}
+	TestEqual(TEXT("Every original landing variant covered"),Poses,14);
+	UE_LOG(LogRPGInput,Display,TEXT("GETUP VARIETY loaded=%d styles=%d sourcePoses=%d safeSelections=%d"),Loaded.Num(),Styles.Num(),Poses,Selections);
+	return true;
+}
+#endif

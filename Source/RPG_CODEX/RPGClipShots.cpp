@@ -89,6 +89,8 @@ namespace
 				}
 				CameraActor = World->SpawnActor<ACameraActor>(FVector::ZeroVector, FRotator::ZeroRotator);
 				CameraActor->GetCameraComponent()->SetFieldOfView(45.f);
+				const FString ReviewFOV=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_SHOT_FOV"));
+				if (!ReviewFOV.IsEmpty()) CameraActor->GetCameraComponent()->SetFieldOfView(FMath::Clamp(FCString::Atof(*ReviewFOV),30.f,90.f));
 				CameraActor->GetCameraComponent()->bConstrainAspectRatio = false;
 				Controller->SetViewTarget(CameraActor);
 				Phase = 0;

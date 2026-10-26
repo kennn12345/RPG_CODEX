@@ -1,5 +1,7 @@
 # Reactive NPC physics — phase one (2026-10-26)
 
+Latest user steering: approved this phase-one presentation, then requested more get-up variety. The newer `Docs/GETUP_VARIETY_2026-10-26.md` records29 custom clips and safe clip/style selection; preserve those additions alongside the original14. This explicitly authorized authored animation refinement does not authorize advanced active balance.
+
 ## Scope and current resume point
 
 User authorized phase-one Euphoria-inspired reactions through today (America/Chicago), including resumption after ordinary usage resets. This is original Chaos/Physical Animation integration, not Rockstar's engine. Do not expand into procedural walking/full-body active balance. Keep the fourteen custom get-ups; no evidence requires replacing them. Keep main, player controls, combat/Power interfaces and existing assets intact. Preserve the pre-existing untracked `Docs/GETUP_HANDOFF.md`.

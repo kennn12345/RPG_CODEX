@@ -55,9 +55,14 @@ public:
 	bool IsDown() const { return bDown; }
 	/** Fired when this character is knocked down by an impact (NPCs stop their AI / step reactions). */
 	FRPGOnKnockedDown OnKnockedDown;
+	/** Per-character history, only used to break ties between safe, close pose matches. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Get Up")
+	FName LastGetUpClip;
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Get Up")
+	FName LastGetUpStyle;
 
-	/** Stand Character up where its ragdoll lies: picks one of GASP's 12 get-ups by how the body lies (face down, back,
-	 *  left or right side) and intent (bWantsToMove: up into a run; otherwise a mix of stand, roll and crouch scramble),
+	/** Stand Character up where its ragdoll lies: picks a compatible custom get-up by pose and intent,
+	 *  using one best start frame per clip and avoiding repeated recovery styles among safe near-equal matches,
 	 *  turns and places the capsule so the clip's first frame lies on the body, plays it at Rate.
 	 *  Returns the montage (null if none could play) and its duration. Shared by NPC knockdowns and the player. */
 	static UAnimMontage* StandUp(ACharacter* Character, float Rate, float& OutDuration, bool bWantsToMove = false);

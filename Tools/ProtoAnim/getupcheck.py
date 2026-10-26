@@ -6,7 +6,7 @@ Joint angles are measured in anatomical frames read off the idle (squared to fac
 reads ~0 everywhere. Self-collision uses capsules round the bones; what the idle already overlaps (mesh-normal contact,
 e.g. upper arm against the side of the chest) is subtracted.
 """
-import json, math, sys
+import json, math, sys, os
 import protoanim as pa
 from protoanim import add, sub, mul, dot, cross, norm, length, qrot, qconj, qmul, qaxis
 
@@ -182,6 +182,6 @@ if __name__ == '__main__':
     want = sys.argv[1:] or ['RPG_GetUp']
     idle = {'fps': 30, 'frames': 1, 'poses': [pa.IDLE]}
     check_clip('idle (should be ok)', idle)
-    clips = json.load(open(pa.SP.path('clips', '.json')))
+    clips = json.load(open(os.environ.get('RPG_CLIP_FILE', pa.SP.path('clips', '.json'))))
     for name, clip in clips.items():
         if any(w in name for w in want): check_clip(name, clip)

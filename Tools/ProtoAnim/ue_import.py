@@ -7,7 +7,7 @@ except NameError:  # some editor execution paths don't define __file__
 sys.path.insert(0, HERE)
 import skel_profile as SP
 FOLDER = SP.P['folder']
-clips = json.load(open(SP.path('clips', '.json')))
+clips = json.load(open(os.environ.get('RPG_CLIP_FILE', SP.path('clips', '.json'))))
 skel = unreal.load_asset(SP.P['skeleton'])
 tools = unreal.AssetToolsHelpers.get_asset_tools()
 report = {}

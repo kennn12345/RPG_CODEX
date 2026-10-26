@@ -6,7 +6,7 @@ Per tracked point (hands, elbows, feet, knees, head, chest, hips) and per frame:
   jolt         the acceleration jumps in a single frame (a velocity corner: a key or a partial key the curve kinks at)
   flip         a bone turns much faster than its neighbours on that frame (an IK pole / twist flipping round)
 """
-import json, math, sys
+import json, math, sys, os
 import protoanim as pa
 from protoanim import sub, length, norm, dot
 
@@ -61,6 +61,6 @@ def analyse(name, clip, report=True):
 
 if __name__ == '__main__':
     want = sys.argv[1:] or ['RPG_GetUp']
-    clips = json.load(open(pa.SP.path('clips', '.json')))
+    clips = json.load(open(os.environ.get('RPG_CLIP_FILE', pa.SP.path('clips', '.json'))))
     for name, clip in clips.items():
         if any(w in name for w in want): analyse(name, clip)
