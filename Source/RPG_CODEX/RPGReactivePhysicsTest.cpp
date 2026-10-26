@@ -7,6 +7,8 @@
 #include "RPG_CODEX.h"
 #include "AIController.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/SkeletalMeshActor.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -230,6 +232,95 @@ bool FRPGReactivePhysicsVisualTest::RunTest(const FString&)
 {
 	ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
 	ADD_LATENT_AUTOMATION_COMMAND(FReactiveReview(this,true));
+	ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+	return true;
+}
+
+namespace
+{
+	/** Verify the reusable component without an NPC or legacy controller, including external cancellation/teardown. */
+	class FReactiveStandaloneReview : public IAutomationLatentCommand
+	{
+	public:
+		explicit FReactiveStandaloneReview(FAutomationTestBase* InTest):Test(InTest) {}
+		bool Update() override
+		{
+			UWorld* World=GEditor?GEditor->PlayWorld:nullptr;
+			if (!World) { if (++WaitFrames<600) return false; Test->AddError(TEXT("Standalone review: no PIE world")); return true; }
+			if (!Actor.IsValid())
+			{
+				ARPGNpcCharacter* Source=nullptr;
+				for (TActorIterator<ARPGNpcCharacter> It(World);It;++It) { Source=*It; break; }
+				if (!Source || !Source->GetMesh()->GetSkeletalMeshAsset()) { Test->AddError(TEXT("No actual NPC rig available for standalone fixture")); return true; }
+				Actor=World->SpawnActor<ASkeletalMeshActor>(FVector(12000,14000,1000),FRotator::ZeroRotator);
+				Mesh=Actor->GetSkeletalMeshComponent();
+				Mesh->SetSkeletalMesh(Source->GetMesh()->GetSkeletalMeshAsset());
+				Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+				Mesh->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
+				Mesh->bEnableUpdateRateOptimizations=true;
+				UAnimSequence* Idle=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Stand_Idle_Loop.M_Neutral_Stand_Idle_Loop"));
+				if (!Idle) { Test->AddError(TEXT("Actual UEFN idle unavailable")); return true; }
+				Mesh->PlayAnimation(Idle,true);
+				Reaction=NewObject<URPGReactivePhysicsComponent>(Actor.Get());
+				Reaction->RegisterComponent();
+				Reaction->bAutomaticRagdoll=false;
+				if (!Reaction->IsReady()) { Test->AddError(TEXT("Standalone rig was not accepted")); return true; }
+				Start=World->GetTimeSeconds(); return false;
+			}
+			const float T=World->GetTimeSeconds()-Start;
+			FBodyInstance* Arm=Mesh->GetBodyInstance(TEXT("upperarm_l"));
+			if (!Arm) { Test->AddError(TEXT("Standalone arm body missing")); return true; }
+			if (Phase==0 && T>=.8f)
+			{
+				const FVector Point=Mesh->GetBoneLocation(TEXT("upperarm_l"));
+				Test->TestFalse(TEXT("Standalone full ragdoll requires an existing recovery coordinator"),Reaction->ApplyHit(TEXT("upperarm_l"),Point,FVector(100,0,0),1.f,true));
+				Test->TestTrue(TEXT("Standalone local physical hit accepted"),Reaction->ApplyHit(TEXT("upperarm_l"),Point,FVector(0,Arm->GetBodyMass()*180.f,0)));
+				Phase=1;
+			}
+			if (Phase==1 && T>=1.f && T<2.f)
+			{
+				SawSimulated|=Reaction->GetSimulatingUpperBodies()>0;
+				Reaction->Recover(); // a Blueprint may request the same recovery every update
+			}
+			if (Phase==1 && T>=2.f)
+			{
+				Test->TestTrue(TEXT("Standalone uses real simulated upper bodies"),SawSimulated);
+				Test->TestFalse(TEXT("Repeated recovery requests must not postpone completion forever"),Reaction->IsLocalReactionActive());
+				Test->TestEqual(TEXT("Standalone recovery restores collision mode"),int32(Mesh->GetCollisionEnabled()),int32(ECollisionEnabled::QueryOnly));
+				const FVector Point=Mesh->GetBoneLocation(TEXT("upperarm_l"));
+				for (int32 I=0;I<8;++I) Test->TestTrue(TEXT("Burst hit accepted"),Reaction->ApplyHit(TEXT("upperarm_l"),Point,FVector(0,Arm->GetBodyMass()*2000.f,0)));
+				Phase=2;
+			}
+			if (Phase==2 && T>=2.15f)
+			{
+				Test->TestTrue(TEXT("Same-frame burst impulse remains body-mass bounded"),Reaction->LastAppliedImpulse<=Arm->GetBodyMass()*Reaction->MaxLocalVelocityChange+.1f);
+				UPhysicalAnimationComponent* Motors=Reaction->GetPhysicalAnimation();
+				Reaction->DestroyComponent();
+				Test->TestFalse(TEXT("Destroying an active component stops its body simulation"),Arm->IsInstanceSimulatingPhysics());
+				Test->TestFalse(TEXT("Destroying component unregisters owned motors"),Motors && Motors->IsRegistered());
+				Test->TestEqual(TEXT("Teardown restores original collision"),int32(Mesh->GetCollisionEnabled()),int32(ECollisionEnabled::QueryOnly));
+				Test->TestEqual(TEXT("Teardown restores original pose tick policy"),int32(Mesh->VisibilityBasedAnimTickOption),int32(EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered));
+				Test->TestTrue(TEXT("Teardown restores update-rate optimization"),Mesh->bEnableUpdateRateOptimizations);
+				UE_LOG(LogRPGInput,Display,TEXT("REACTIVE STANDALONE completed: simulated=%d burstImpulse=%.2f cap=%.2f"),SawSimulated,Reaction->LastAppliedImpulse,Arm->GetBodyMass()*Reaction->MaxLocalVelocityChange);
+				return true;
+			}
+			return false;
+		}
+	private:
+		FAutomationTestBase* Test;
+		TWeakObjectPtr<ASkeletalMeshActor> Actor;
+		USkeletalMeshComponent* Mesh=nullptr;
+		URPGReactivePhysicsComponent* Reaction=nullptr;
+		float Start=0.f;
+		int32 Phase=0,WaitFrames=0;
+		bool SawSimulated=false;
+	};
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGReactiveStandaloneTest,"RPG.Npc.ReactiveStandalone",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)
+bool FRPGReactiveStandaloneTest::RunTest(const FString&)
+{
+	ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
+	ADD_LATENT_AUTOMATION_COMMAND(FReactiveStandaloneReview(this));
 	ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
 	return true;
 }

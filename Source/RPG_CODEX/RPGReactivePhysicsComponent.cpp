@@ -201,7 +201,9 @@ bool URPGReactivePhysicsComponent::ApplyHit(FName HitBone,FVector Point,FVector 
 
 void URPGReactivePhysicsComponent::Recover()
 {
-	if (!bOwnsBodies) return;
+	// Blueprint/state-machine callers may keep asking to recover every update. Preserve the
+	// original fade start instead of restarting it forever and retaining simulated bodies.
+	if (!bOwnsBodies || State==ERPGReactivePhysicsState::Recovering) return;
 	State=ERPGReactivePhysicsState::Recovering; RecoveryTime=0.f;
 	for (FName Bone:UpperBodies) TargetBlends.FindOrAdd(Bone)=BodyBlends.FindRef(Bone);
 }
