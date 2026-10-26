@@ -170,6 +170,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0", ClampMax = "1"))
 	float PoweredMaxBlend = 0.7f;
 
+	/** Ordinary hits: keep the legs on the animation (a struck leg is shown by a balance step instead), so physics never
+	 *  flings a leg about. The rest of the body still gives. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered")
+	bool bKinematicLegsWhenPowered = false;
+
 	/** Rotation damping put on every ragdoll body (the physics asset's own is replaced). 0.01 is UE5 Manny's; GASP's
 	 *  mannequin asset uses 5, which makes hits look locked. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction", meta = (ClampMin = "0"))

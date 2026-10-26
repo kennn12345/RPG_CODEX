@@ -14,6 +14,10 @@
 #include "RPGNpcAIController.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "Editor.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "UnrealClient.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
@@ -65,6 +69,23 @@ namespace
 				Phase = 1; HitAt = Now;
 				return false;
 			}
+			if (Phase == 1 && FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_SHOT_NPC")) == TEXT("1") && Npcs[0].IsValid() && Now - HitAt <= 2.f && Now - LastShot >= 0.1f)
+			{
+				// RPG_SHOT_NPC=1 (rendered editor): film the normal punch's reaction from the side, every 0.1 s for 2 s.
+				ARPGNpcCharacter* Target = Npcs[0].Get();
+				if (!Camera)
+				{
+					Camera = World->SpawnActor<ACameraActor>(FVector::ZeroVector, FRotator::ZeroRotator);
+					Camera->GetCameraComponent()->SetFieldOfView(40.f);
+					Camera->GetCameraComponent()->bConstrainAspectRatio = false;
+					if (APlayerController* PC = World->GetFirstPlayerController()) PC->SetViewTarget(Camera);
+				}
+				const FVector Look = Target->GetActorLocation() + FVector(0.f, 0.f, 10.f);
+				const FVector Eye = Look + Target->GetActorRightVector() * 380.f + FVector(0.f, 0.f, 40.f);
+				Camera->SetActorLocationAndRotation(Eye, (Look - Eye).Rotation());
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / FString::Printf(TEXT("Screenshots/NpcHit/hit_%02d_%.1fs.png"), Shot++, Now - HitAt), false, false);
+				LastShot = Now;
+			}
 			if (Phase == 1)
 			{
 				ARPGNpcCharacter* Light = Npcs[0].Get();
@@ -105,7 +126,9 @@ namespace
 		TArray<TWeakObjectPtr<ARPGNpcCharacter>> Npcs;
 		TArray<FVector> StartSpots;
 		int32 Frames = 0, Phase = 0;
-		float Start = -1.f, HitAt = 0.f;
+		float Start = -1.f, HitAt = 0.f, LastShot = -1.f;
+		int32 Shot = 0;
+		ACameraActor* Camera = nullptr;
 		bool bWalkOk = false, bLightWentLimp = false, bHeavyWentLimp = false, bHeavyRecovered = false;
 	};
 }

@@ -41,6 +41,14 @@ ARPGNpcCharacter::ARPGNpcCharacter()
 
 	Stats = CreateDefaultSubobject<URPGCharacterStatsComponent>(TEXT("Stats"));
 	PhysicsReaction = CreateDefaultSubobject<URPGPhysicsReactionComponent>(TEXT("PhysicsReaction"));
+	// Realistic give, not flailing: legs stay on the animation (leg hits step instead), firm muscles, the struck part
+	// only half as weak, physics never more than half the pose, a gentle stagger wobble and a smooth recovery.
+	PhysicsReaction->bKinematicLegsWhenPowered = true;
+	PhysicsReaction->MotorStrength = 70.f;
+	PhysicsReaction->StruckLimbStrengthScale = 0.5f;
+	PhysicsReaction->PoweredMaxBlend = 0.5f;
+	PhysicsReaction->StaggerMotorScale = 0.85f;
+	PhysicsReaction->ReturnBlendTime = 0.45f;
 
 	GetUpFaceDown = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F.M_ragdoll_getup_stand_F"));
 	GetUpFaceUp = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B.M_ragdoll_getup_stand_B"));
@@ -57,6 +65,12 @@ void ARPGNpcCharacter::BeginPlay()
 		// GASP's motion matching reads acceleration: path following must accelerate like a player, not set velocity.
 		Move->GetNavMovementProperties()->bUseAccelerationForPaths = true;
 		Move->bRequestedMoveUseAcceleration = true;
+	}
+	if (USkeletalMeshComponent* Body = GetMesh())
+	{
+		// GASP's character mesh ignores visibility traces, so spells (and other traces) only found the capsule and passed
+		// through. The body takes them: they hit the actual bone.
+		Body->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	}
 	if (PhysicsReaction) PhysicsReaction->OnLimpEnding.AddUObject(this, &ARPGNpcCharacter::HandleLimpEnding);
 }

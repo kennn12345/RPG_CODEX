@@ -386,7 +386,10 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDaz
 		Data.bEnabled = true;
 		PhysicsControl->SetControlData(Name, Data, true, false);
 	}
-	PhysicsControl->SetBodyModifiersCollisionType(LegModifiers, ECollisionEnabled::QueryOnly);
+	// No physical collision during a give (it isn't a ragdoll): arm and torso shapes overlap in many poses, and the
+	// solver shoving them apart every frame made the arms whip about.
+	PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryOnly);
+	if (bKinematicLegsWhenPowered) PhysicsControl->SetBodyModifiersMovementType(LegModifiers, EPhysicsMovementType::Kinematic, true, false);
 	ApplyPoweredMotorScales(0.f);
 	// From the animation the bodies start exactly on the pose, so full weight at once; part-way through a fade back
 	// it blends in quickly instead of popping to the physics pose.
