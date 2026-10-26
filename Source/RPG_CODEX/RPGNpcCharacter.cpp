@@ -69,6 +69,8 @@ void ARPGNpcCharacter::BeginPlay()
 	{
 		// GASP's motion matching reads acceleration: path following must accelerate like a player, not set velocity.
 		Move->GetNavMovementProperties()->bUseAccelerationForPaths = true;
+		// This actor ticks first (a push sets this frame's velocity before movement runs).
+		Move->PrimaryComponentTick.AddPrerequisite(this, PrimaryActorTick);
 		Move->bRequestedMoveUseAcceleration = true;
 	}
 	if (USkeletalMeshComponent* Body = GetMesh())
@@ -89,13 +91,26 @@ void ARPGNpcCharacter::ApplyWalkIntent()
 	FStructProperty* InputState = FindFProperty<FStructProperty>(GetClass(), TEXT("CharacterInputState"));
 	if (!InputState) return;
 	for (TFieldIterator<FBoolProperty> It(InputState->Struct); It; ++It)
+	{
 		if (It->GetName().StartsWith(TEXT("WantsToWalk_")))
 			It->SetPropertyValue_InContainer(InputState->ContainerPtrToValuePtr<void>(this), bWalk);
+		// Pushed: keep facing (strafe) so the body steps back / sideways instead of turning to walk away.
+		if (It->GetName().StartsWith(TEXT("WantsToStrafe_")))
+			It->SetPropertyValue_InContainer(InputState->ContainerPtrToValuePtr<void>(this), bShoving);
+	}
 }
 
 void ARPGNpcCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if (bShoving)
+	{
+		// The push carries the body, slowing at ShoveBraking; motion matching steps it along. Ends when spent.
+		ShoveVelocity = ShoveVelocity.GetSafeNormal() * FMath::Max(0.f, float(ShoveVelocity.Size()) - ShoveBraking * DeltaTime);
+		if (UCharacterMovementComponent* Move = GetCharacterMovement(); Move && Move->IsMovingOnGround())
+			Move->Velocity = FVector(ShoveVelocity.X, ShoveVelocity.Y, Move->Velocity.Z);
+		if (ShoveVelocity.IsNearlyZero(1.f) || GetWorld()->GetTimeSeconds() >= ShoveUntil) { bShoving = false; ShoveVelocity = FVector::ZeroVector; }
+	}
 	ApplyWalkIntent();
 
 	// A reaction step ended: back to full root motion.
@@ -167,14 +182,12 @@ void ARPGNpcCharacter::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	if (PhysicsReaction && PhysicsReaction->GetReactionState() == ERPGPhysicsReactionState::Limp) OnRagdoll();
 	else ReactToHit(Hit.HitBone, Hit.ImpactLocation, Hit.StrikeDirection.IsNearlyZero() && Hit.Attacker ? GetActorLocation() - Hit.Attacker->GetActorLocation() : Hit.StrikeDirection,
 		Result.Reaction == ERPGPowerReaction::Stagger ? HitSpeedStagger : HitSpeedFlinch, Hit.Attacker);
-	if (!bDown && Result.Displacement >= StepDisplacement)
+	if (!bDown)
 	{
-		// Pushed hard enough to move: a balance step the way the blow pushes, on the struck leg if a leg was hit.
-		const FName Limb = PhysicsReaction ? PhysicsReaction->GetLimbForBone(Hit.HitBone) : NAME_None;
-		const float FootSide = Limb == TEXT("LegLeft") ? 1.f : Limb == TEXT("LegRight") ? -1.f : 0.f;
-		const FVector Push = Hit.StrikeDirection.IsNearlyZero() && Hit.Attacker ? GetActorLocation() - Hit.Attacker->GetActorLocation() : Hit.StrikeDirection;
-		PlayBalanceStep(Push, Result.Displacement >= StaggerHeavyDisplacement, FootSide,
-			FMath::Clamp(float(Result.Displacement) * StepPerDisplacement, StepMinDistance, StepMaxDistance));
+		// The push: the Power System's displacement velocity, plus the attacker's momentum over this body's weight.
+		FVector Push = FVector(Result.DisplacementVelocity) * ShoveScale;
+		if (Hit.Attacker) Push += Hit.Attacker->GetVelocity() * MomentumTransfer * RPGBodyMass::TotalKgFor(0.f) / RPGBodyMass::TotalKgFor(BodyWeightLbs);
+		Shove(Push);
 	}
 	PlayImpactFeel(Hit.Attacker, Result.Reaction);
 
@@ -210,47 +223,33 @@ void ARPGNpcCharacter::ReceiveEnergyHit_Implementation(const FRPGEnergyImpact& I
 		ReactToHit(Impact.Hit.BoneName, Impact.Hit.ImpactPoint, Impact.Direction, FMath::Lerp(180.f, 450.f, FMath::Clamp(Impact.Charge, 0.f, 1.f)), Impact.Attacker,
 			Impact.Impulse > 0.f ? FMath::Min(Impact.Impulse, Mass * 450.f) : -1.f);
 	}
-	// A leg hit hard enough steps that leg away with the force.
-	const FName Limb = PhysicsReaction->GetLimbForBone(Impact.Hit.BoneName);
-	const bool bLeg = Limb == TEXT("LegLeft") || Limb == TEXT("LegRight");
-	if (Impact.Charge >= EnergyStepCharge || (bLeg && Impact.Charge >= EnergyStepCharge * 0.5f))
+	// The push on the whole body: the spell's impulse along its travel, plus the caster's momentum.
+	FVector Push = Impact.Direction.GetSafeNormal() * Impact.Impulse * EnergyShovePerImpulse;
+	if (Impact.Attacker) Push += Impact.Attacker->GetVelocity() * MomentumTransfer * RPGBodyMass::TotalKgFor(0.f) / RPGBodyMass::TotalKgFor(BodyWeightLbs);
+	Shove(Push);
+}
+
+void ARPGNpcCharacter::Shove(FVector Velocity)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	const UWorld* World = GetWorld();
+	Velocity.Z = 0.f;
+	if (bDown || !Move || !World || Velocity.Size() < MinShove) return;
+	Velocity = Velocity.GetClampedToMaxSize(MaxShove);
+	// The body moves; with no walking input it brakes to a stop, and motion matching picks the steps for that motion
+	// (the size, angle and speed of every push differ, so do the steps). It keeps facing the way it faced (strafing).
+	// (GASP rewrites braking and friction every frame, so the push is driven here, before movement, each frame - see Tick.)
+	ShoveVelocity = (ShoveVelocity + Velocity).GetClampedToMaxSize(MaxShove);
+	bShoving = true;
+	ShoveUntil = World->GetTimeSeconds() + ShoveTime;
+	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
-		const FVector Push = FVector(Impact.Direction.X, Impact.Direction.Y, 0.f);
-		PlayBalanceStep(Push, Impact.Charge >= 0.75f, Limb == TEXT("LegLeft") ? 1.f : Limb == TEXT("LegRight") ? -1.f : 0.f,
-			FMath::Lerp(StepMinDistance, StepMaxDistance * 0.6f, FMath::Clamp(Impact.Charge, 0.f, 1.f)));
+		AI->ClearFocus(EAIFocusPriority::Gameplay);
+		AI->SetControlRotation(GetActorRotation());
 	}
-}
-
-UAnimSequence* ARPGNpcCharacter::PickStepClip(const FVector& WorldPush, bool bHeavy, float FootSide) const
-{
-	// Push in the NPC's own frame: 0 = straight ahead, +90 = to its right, 180 = straight back.
-	const FVector Local = GetActorTransform().InverseTransformVectorNoScale(FVector(WorldPush.X, WorldPush.Y, 0.f));
-	if (Local.IsNearlyZero()) return nullptr;
-	const float Angle = FMath::RadiansToDegrees(FMath::Atan2(Local.Y, Local.X));
-	static const TCHAR* Sectors[] = { TEXT("F"), TEXT("FR"), TEXT("R"), TEXT("BR"), TEXT("B"), TEXT("BL"), TEXT("L"), TEXT("FL") };
-	const int32 Sector = FMath::RoundToInt(FMath::Fmod(Angle + 360.f, 360.f) / 45.f) % 8;
-	// The struck leg is the one that steps; GASP names the foot a stop lands on.
-	const bool bLeftFoot = FootSide > 0.f ? true : FootSide < 0.f ? false : FMath::RandBool();
-	FString Dir = Sectors[Sector];
-	if (Dir == TEXT("L") || Dir == TEXT("R")) Dir += bLeftFoot ? TEXT("L") : TEXT("R");
-	const TCHAR* Gait = bHeavy ? TEXT("Run") : TEXT("Walk");
-	const FString Name = FString::Printf(TEXT("M_Neutral_%s_Stop_%s_%s"), Gait, *Dir, bLeftFoot ? TEXT("Lfoot") : TEXT("Rfoot"));
-	return LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Characters/UEFN_Mannequin/Animations/%s/%s.%s"), Gait, *Name, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
-}
-
-void ARPGNpcCharacter::PlayBalanceStep(const FVector& Push, bool bHeavy, float FootSide, float Distance)
-{
-	if (bDown || ActiveReaction) return;   // already stepping: the springs take the rest
-	UAnimSequence* Step = PickStepClip(Push, bHeavy, FootSide);
-	UAnimInstance* Anim = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
-	if (!Step || !Anim) return;
-	// The step's own root motion carries the capsule (feet planted), scaled to how far this push should move it.
-	const float Travel = float(Step->ExtractRootMotionFromRange(0., Step->GetPlayLength(), FAnimExtractContext(0., false)).GetTranslation().Size2D());
-	SetAnimRootMotionTranslationScale(Travel > 1.f ? FMath::Clamp(Distance / Travel, 0.1f, 1.5f) : 1.f);
-	ActiveReaction = Anim->PlaySlotAnimationAsDynamicMontage(Step, ReactionSlot, 0.12f, 0.3f);
-	UE_LOG(LogRPGInput, Log, TEXT("%s balance step %s, %.0f cm (clip %.0f cm)"), *GetActorNameOrLabel(), *Step->GetName(), Distance, Travel);
-	if (!ActiveReaction) SetAnimRootMotionTranslationScale(1.f);
-	StopForReaction(Step->GetPlayLength() + 0.4f);
+	StopForReaction(ShoveTime + 0.3f);
+	UE_LOG(LogRPGInput, Log, TEXT("%s pushed %.0f cm/s (%.0f deg from facing)"), *GetActorNameOrLabel(), Velocity.Size(),
+		FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(float(FVector::DotProduct(Velocity.GetSafeNormal2D(), GetActorForwardVector())), -1.f, 1.f))));
 }
 
 void ARPGNpcCharacter::ReactToHit(FName Bone, const FVector& Point, const FVector& Direction, float Speed, const AActor* Attacker, float MaxImpulse)
@@ -302,6 +301,8 @@ void ARPGNpcCharacter::OnRagdoll()
 {
 	// Down: no walking or stepping while the body is physical.
 	bDown = true;
+	bShoving = false;
+	ShoveVelocity = FVector::ZeroVector;
 	if (UAnimInstance* Anim = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
 		if (ActiveReaction) Anim->Montage_Stop(0.1f, ActiveReaction);
 	ActiveReaction = nullptr;

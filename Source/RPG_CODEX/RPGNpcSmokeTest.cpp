@@ -59,7 +59,7 @@ namespace
 				bWalkOk = Walked >= FMath::Max(1, Npcs.Num() - 1);
 				// Hits: a normal punch on the first, a strong one on the second.
 				ACharacter* Player = UGameplayStatics::GetPlayerCharacter(World, 0);
-				if (URPGCharacterStatsComponent* PlayerStats = URPGCharacterStatsComponent::FindStats(Player)) PlayerStats->SetStatBaseByName(TEXT("Strength"), 3.f);
+				if (URPGCharacterStatsComponent* PlayerStats = URPGCharacterStatsComponent::FindStats(Player)) PlayerStats->SetStatBaseByName(TEXT("Strength"), 5.f);
 				Hit(Player, Npcs[0].Get(), TEXT("spine_05"));
 				if (Npcs.Num() > 1)
 				{

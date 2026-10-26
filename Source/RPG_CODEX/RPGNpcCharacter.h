@@ -19,10 +19,10 @@ class URPGBodyImpactComponent;
  * SandboxCharacter_CMC reparented to this class, so it moves exactly like the player, walked by URPGNpcAIController.
  *
  * Hits (punches, kicks, energy spells) go through the Power System. Reactions stay realistic:
- *   - ordinary hits: the struck part gives on muscle springs on top of the animation (URPGPhysicsReactionComponent,
- *     whole body, capped physics weight so the animation never lets go) and recovers smoothly;
- *   - hits that really move the body: a balance step (one of GASP's eight-way stop steps, toward the push, on the hit
- *     leg's side) played as a montage, its root motion carrying the capsule so the feet stay planted;
+ *   - ordinary hits: the body gives from the hit point (URPGHitReactionComponent: torque on every joint up to the hips,
+ *     on the animation) and recovers smoothly;
+ *   - and every hit pushes the body itself (force, direction, the attacker's momentum, its weight): it keeps facing
+ *     its way while GASP's motion matching picks the footwork for that motion - a shuffle, a stumble, a sideways catch;
  *   - knockdown / launch / out of health: whole-body ragdoll, then a get-up chosen by how the body lies (face down,
  *     back, left or right side), placed where it lies.
  */
@@ -78,23 +78,24 @@ public:
 	/** Seconds it stands its ground after any hit before walking on. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
 	float HitPause = 1.2f;
-	/** A push of at least this many cm (the Power System's displacement) takes a balance step; heavier pushes (at
-	 *  StaggerHeavyDisplacement and up) take the bigger running stop. */
+	/** Pushes: a hit moves the body itself (the Power System's displacement velocity for melee, the spell's impulse over
+	 *  the body's weight for energy, plus the attacker's momentum), and GASP's motion matching finds the footwork - a
+	 *  shuffle, a stumble, a sideways catch - so no two pushes step the same. Melee: this x the displacement velocity. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
-	float StepDisplacement = 12.f;
+	float ShoveScale = 2.5f;
+	/** Energy: cm/s of push per kg cm/s of spell impulse (a full charge pushes ~2-3x a tap). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
-	float StaggerHeavyDisplacement = 45.f;
-	/** How far a balance step carries the body: the step's own root motion is scaled to the push (this many cm per cm
-	 *  of push), between StepMinDistance and StepMaxDistance. */
+	float EnergyShovePerImpulse = 0.06f;
+	/** Pushes slower than this (cm/s) don't move the feet; faster ones are capped at MaxShove. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
-	float StepPerDisplacement = 0.8f;
+	float MinShove = 30.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
-	float StepMinDistance = 18.f;
+	float MaxShove = 450.f;
+	/** How quickly a pushed body brings itself to a stop (cm/s^2; lower = more steps), and for how long. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "1"))
+	float ShoveBraking = 380.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
-	float StepMaxDistance = 90.f;
-	/** Energy spells: a charge of at least this much on a leg makes it step (lighter hits only give on the springs). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0", ClampMax = "1"))
-	float EnergyStepCharge = 0.25f;
+	float ShoveTime = 1.1f;
 
 	/** Get-up speed: this rate at full health, down to GetUpHurtRate near 0 (and when knocked out). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up", meta = (ClampMin = "0.1"))
@@ -119,9 +120,8 @@ public:
 
 private:
 	void ReceivePowerHit(const FRPGMeleeHitInfo& Hit);
-	/** A balance step toward Push (horizontal), the struck leg's side (+1 left, -1 right, 0 either), carrying Distance cm. */
-	void PlayBalanceStep(const FVector& Push, bool bHeavy, float FootSide, float Distance);
-	UAnimSequence* PickStepClip(const FVector& WorldPush, bool bHeavy, float FootSide) const;
+	/** Push the body at Velocity (world, horizontal): it keeps facing its way while GASP steps it to a stop. */
+	void Shove(FVector Velocity);
 	void PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Reaction);
 	void StopForReaction(float Seconds);
 	void OnRagdoll();
@@ -132,6 +132,9 @@ private:
 
 	FVector Home = FVector::ZeroVector;
 	float BusyUntil = 0.f;
+	float ShoveUntil = 0.f;
+	FVector ShoveVelocity = FVector::ZeroVector;
+	bool bShoving = false;
 	bool bDown = false;
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ActiveReaction;
