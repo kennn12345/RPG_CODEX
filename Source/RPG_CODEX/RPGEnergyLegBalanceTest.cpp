@@ -76,7 +76,13 @@ public:
         if(Local>=.7f && !bShot)
         {
             const bool Left=Case<2;const float Charge=Case%2?1.f:0.f;
-            const FVector Point=D->Mesh->GetBoneLocation(Left?TEXT("calf_l"):TEXT("calf_r"));
+            // Aim below the knee joint: a 60 cm charged sphere aimed at that joint also catches
+            // the hanging hand from the side. Keep the real enlarged sweep and first-contact behavior.
+            const FVector Knee=D->Mesh->GetBoneLocation(Left?TEXT("calf_l"):TEXT("calf_r"));
+            const FVector Ankle=D->Mesh->GetBoneLocation(Left?TEXT("foot_l"):TEXT("foot_r"));
+            FVector Point=FMath::Lerp(Knee,Ankle,0.32f);
+            const float FloorZ=Home.Z-D->Capsule->GetScaledCapsuleHalfHeight()-1.f;
+            Point.Z=FMath::Max(Point.Z,FloorZ+S->GetRadius(Charge)+2.f);
             const FVector Out=D->GetActorRightVector()*(Left?-1.f:1.f);
             FActorSpawnParameters Spawn;Spawn.Owner=P;
             auto* Orb=W->SpawnActor<ARPGEnergyOrb>(Point+Out*150.f,FRotator::ZeroRotator,Spawn);

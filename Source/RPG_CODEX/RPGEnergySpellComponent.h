@@ -37,7 +37,7 @@ public:
     virtual void TickComponent(float Delta, ELevelTick TickType, FActorComponentTickFunction* Tick) override;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Energy", meta=(ClampMin="0.1")) float FullChargeSeconds = 1.5f;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Energy", meta=(ClampMin="1")) float BaseRadius = 10.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Energy", meta=(ClampMin="1")) float BaseRadius = 15.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Energy", meta=(ClampMin="1")) float FullSizeMultiplier = 2.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Energy") FLinearColor Color = FLinearColor(0.08f,0.5f,1.f);
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Energy", meta=(ClampMin="100")) float ProjectileSpeed = 3300.f;

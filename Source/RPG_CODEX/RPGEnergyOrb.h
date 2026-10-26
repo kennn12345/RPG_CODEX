@@ -19,6 +19,7 @@ public:
     virtual void BeginPlay() override;
     virtual void Tick(float Delta) override;
     void ChargeAt(URPGEnergySpellComponent* Source, bool bLeft);
+    void StopChargeEffects();
     void Launch(const FVector& Direction, float Charge, float Radius, float Speed, float Range, float Damage, float Impulse, FLinearColor Color);
     static bool Trace(UWorld* World, const FVector& Start, const FVector& End, float Radius, AActor* Ignore, FHitResult& Hit);
     static void ApplyImpact(const FRPGEnergyImpact& Impact);
@@ -33,9 +34,11 @@ private:
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Filaments;
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Sparks;
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Trail;
+    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> StaticArcs;
     UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> CoreMaterial;
     UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ShellMaterial;
     UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> RingMaterial;
+    UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> StaticMaterial;
     TWeakObjectPtr<URPGEnergySpellComponent> ChargeSource;
     bool bLeftHand = false;
     FVector Velocity = FVector::ZeroVector;
@@ -44,6 +47,15 @@ private:
     float ImpactAge = 0.f;
     FLinearColor Tint = FLinearColor(0.08f,0.5f,1.f);
     TArray<FVector> TrailPositions;
+    struct FStaticCluster
+    {
+        int32 Cycle = INDEX_NONE;
+        TArray<FVector> Points;
+    };
+    FStaticCluster StaticClusters[3];
+    int32 StaticSeed = 0;
+    float StaticTime = 0.f;
     void HitTarget(const FHitResult& Hit);
     void UpdateVisual(float Delta, float Charge);
+    void UpdateStatic(float Delta, bool bFullyHeld);
 };

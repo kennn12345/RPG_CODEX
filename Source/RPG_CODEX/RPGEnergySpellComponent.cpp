@@ -93,6 +93,7 @@ void URPGEnergySpellComponent::Release(ERPGHand Which)
     FRPGEnergyHandState& Hand = Which == ERPGHand::Left ? Left : Right;
     if (!Hand.bHeld) return;
     Hand.bHeld = false;
+    if (Hand.Orb.IsValid()) Hand.Orb->StopChargeEffects();
     Hand.ReleasedCharge = Hand.Charge;
     Hand.ReleaseWait = 0.f;
     Hand.ReleaseSeconds = 0.f;

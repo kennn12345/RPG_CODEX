@@ -295,12 +295,12 @@ void FRPGAnimInstanceProxy::ApplySpellPose(FPoseContext& Output) const
         const FTransform RootCS = BoneComponentTransform(Pose,Root),MidCS = BoneComponentTransform(Pose,Mid),EndCS = BoneComponentTransform(Pose,End);
         const FVector R = RootCS.GetLocation(),M = MidCS.GetLocation(),E = EndCS.GetLocation();
         const float Length = FVector::Distance(R,M)+FVector::Distance(M,E);
-        const float Reach = FMath::Clamp(0.965f-0.065f*S.Charge+S.Extension*(0.015f+0.065f*S.Charge),0.89f,0.98f);
+        const float Reach = FMath::Clamp(0.978f-0.028f*S.Charge+S.Extension*(0.009f+0.028f*S.Charge),0.95f,0.987f);
         const FVector Out = S.RightCS*(H==0?-1.f:1.f),Dir = S.DirectionCS.GetSafeNormal();
         const float Tremor = (1.f-S.Extension)*S.Charge*S.Charge*0.55f;
         const FVector Shake = S.UpCS*FMath::Sin(S.Time*49.f+H*1.1f)*Tremor + Out*FMath::Sin(S.Time*63.f)*Tremor*0.5f;
-        const FVector Target = R+Dir*(Length*Reach)-S.UpCS*4.f+Out*2.f+Shake;
-        const FVector Pole = R-S.UpCS*Length*0.85f+Out*Length*0.45f+Dir*Length*0.2f;
+        const FVector Target = R+Dir*(Length*Reach)-S.UpCS*1.5f+Out+Shake;
+        const FVector Pole = R-S.UpCS*Length*0.85f+Out*Length*0.3f+Dir*Length*0.2f;
         FVector NewMid,NewEnd;
         AnimationCore::SolveTwoBoneIK(R,M,E,Pole,Target,NewMid,NewEnd,false,1.0,1.0);
         const FQuat Q1 = FQuat::FindBetweenNormals((M-R).GetSafeNormal(),(NewMid-R).GetSafeNormal());

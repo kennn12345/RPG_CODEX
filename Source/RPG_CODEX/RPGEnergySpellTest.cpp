@@ -22,6 +22,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -93,10 +94,48 @@ public:
             Dir=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_SPELL_REVIEW_DIR"));
             if(Dir.IsEmpty())Dir=FPaths::ProjectSavedDir()/TEXT("SpellReview/Default");
             IFileManager::Get().MakeDirectory(*Dir,true);
-            Test->TestEqual(TEXT("Tap orb radius"),Spells->GetRadius(0.f),10.f);
-            Test->TestEqual(TEXT("Full orb doubles diameter"),Spells->GetRadius(1.f),20.f);
+            Test->TestEqual(TEXT("Tap orb radius enlarged by fifty percent"),Spells->GetRadius(0.f),15.f);
+            Test->TestEqual(TEXT("Full orb doubles diameter"),Spells->GetRadius(1.f),30.f);
         }
         const float T=World->GetTimeSeconds()-Start,Dt=World->GetDeltaSeconds();
+        // Inspect the actual pooled render components, including the release delay and in-flight actor.
+        for(TActorIterator<ARPGEnergyOrb> It(World);It;++It)
+        {
+            const ARPGEnergyOrb* Orb=*It;
+            const FRPGEnergyHandState* Hand=Spells->Left.Orb.Get()==Orb?&Spells->Left:Spells->Right.Orb.Get()==Orb?&Spells->Right:nullptr;
+            const bool bFullHeld=Hand && Hand->bHeld && Hand->Charge>=1.f;
+            TInlineComponentArray<UStaticMeshComponent*> Parts(Orb);
+            for(const UStaticMeshComponent* Part:Parts)
+            {
+                if(Part->GetName().StartsWith(TEXT("ChargeStatic")) && Part->IsVisible())
+                {
+                    SawStaticBeforeFull |= !bFullHeld && !Orb->bLaunched;
+                    SawStaticOnProjectile |= Orb->bLaunched || Orb->bImpacted;
+                    SawGroundStatic |= bFullHeld && !State->bIsFlying;
+                    SawHoverStatic |= bFullHeld && State->bIsFlying;
+                    if(bFullHeld)
+                    {
+                        const FVector Unit=Part->GetRelativeLocation()/Orb->OrbRadius;
+                        if(LastStaticPoint.IsNearlyZero()) LastStaticPoint=Unit;
+                        else SawStaticRelocate |= FVector::Distance(Unit,LastStaticPoint)>0.5f;
+                    }
+                }
+                if(Part->GetName()==TEXT("Core") && bFullHeld && T>20.7f && T<23.8f)
+                {
+                    MinFullCoreScale=FMath::Min(MinFullCoreScale,float(Part->GetRelativeScale3D().X));
+                    MaxFullCoreScale=FMath::Max(MaxFullCoreScale,float(Part->GetRelativeScale3D().X));
+                }
+            }
+        }
+        if(T>2.04f && T<2.38f && Spells->Left.PoseWeight>0.99f)
+        {
+            const FVector Shoulder=Player->GetMesh()->GetBoneLocation(TEXT("upperarm_l"));
+            const FVector Elbow=Player->GetMesh()->GetBoneLocation(TEXT("lowerarm_l"));
+            const FVector Wrist=Player->GetMesh()->GetBoneLocation(TEXT("hand_l"));
+            const float Bend=FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct((Elbow-Shoulder).GetSafeNormal(),(Wrist-Elbow).GetSafeNormal()),-1.,1.)));
+            if(T<2.17f) { FullElbowBend=FMath::Max(FullElbowBend,Bend); ++ElbowSamples; }
+            if(T>2.28f) ReleaseElbowBend=FMath::Min(ReleaseElbowBend,Bend);
+        }
         Camera->SetActorLocation(Home+FVector(-420,-650,160)+FVector(0,0,Player->GetActorLocation().Z-Home.Z));
         const FVector Target=Dummy->Mesh->GetBoneLocation(TEXT("spine_04"));
         Camera->SetActorRotation((Target-Camera->GetActorLocation()).Rotation());
@@ -223,6 +262,11 @@ public:
         Test->TestTrue(TEXT("Evaluated hover body follows up/down aim"),SawBodyUp && SawBodyDown);
         Test->TestTrue(TEXT("Aim-only hover holds world position"),MaxHoverDrift<0.5f);
         Test->TestTrue(TEXT("Left reaches full charge at 1.5 seconds"),SawFull);
+        Test->TestTrue(TEXT("Static clusters appear at full charge on ground and in hover"),SawGroundStatic && SawHoverStatic && SawStaticRelocate);
+        Test->TestFalse(TEXT("No static before full charge or during release delay"),SawStaticBeforeFull);
+        Test->TestFalse(TEXT("Static never follows the projectile or impact"),SawStaticOnProjectile);
+        Test->TestTrue(TEXT("Fully charged ball visibly pulses its shape"),MinFullCoreScale>0.f && MaxFullCoreScale/MinFullCoreScale>1.07f);
+        Test->TestTrue(TEXT("Straighter charge retains an elbow bend and extends on release"),ElbowSamples>0 && FullElbowBend>15.f && FullElbowBend<46.f && ReleaseElbowBend>5.f && ReleaseElbowBend<FullElbowBend-5.f);
         Test->TestTrue(TEXT("Both hands charge simultaneously"),SawBoth);
         Test->TestTrue(TEXT("Releasing left preserves right charge"),SawIndependent);
         Test->TestTrue(TEXT("Hover spell pose active"),SawHover);
@@ -235,6 +279,7 @@ public:
         FString Report=FString::Printf(TEXT("Energy integration completed. left=%d right=%d both=%d independent=%d hover=%d punch=%d tapImpulse=%.1f chargedImpulse=%.1f hitBone=%s maxSpellHandSpeed=%.1f at %.3f\n"),Spells->Left.ShotsFired,Spells->Right.ShotsFired,SawBoth,SawIndependent,SawHover,SawPunch,TapImpulse,Dummy->PhysicsReaction->LastReaction.ImpulseMagnitude,*TapBone.ToString(),MaxHandSpeed,MaxHandAt);
         FFileHelper::SaveStringToFile(Report,*(Dir/TEXT("result.txt")));Test->AddInfo(Report);
         Test->AddInfo(FString::Printf(TEXT("FORWARD AIM samples=%d bodyYaw=%.2f armYaw=%.2f hoverDrift=%.3f up=%d down=%d left=%d right=%d bank=%d"),ForwardSamples,MaxBodyYaw,MaxArmYaw,MaxHoverDrift,SawHoverUp,SawHoverDown,SawHoverLeft,SawHoverRight,SawHoverBank));
+        Test->AddInfo(FString::Printf(TEXT("STATIC AURA ground=%d hover=%d relocate=%d premature=%d launched=%d pulseRatio=%.3f elbowCharge=%.2f release=%.2f"),SawGroundStatic,SawHoverStatic,SawStaticRelocate,SawStaticBeforeFull,SawStaticOnProjectile,MaxFullCoreScale/FMath::Max(MinFullCoreScale,0.001f),FullElbowBend,ReleaseElbowBend));
         return true;
     }
 private:
@@ -253,6 +298,9 @@ private:
     int32 Waiting=0,Warmup=0,Shot=0,CancelShots=0;
     float Start=-1,NextShot=0,TapImpulse=0,MaxHandSpeed=0,MaxHandAt=0;
     float MaxBodyYaw=0,MaxArmYaw=0,MaxHoverDrift=0;int32 ForwardSamples=0;
+    bool SawGroundStatic=false,SawHoverStatic=false,SawStaticRelocate=false,SawStaticBeforeFull=false,SawStaticOnProjectile=false;
+    float MinFullCoreScale=100.f,MaxFullCoreScale=0.f,FullElbowBend=0.f,ReleaseElbowBend=180.f;int32 ElbowSamples=0;
+    FVector LastStaticPoint=FVector::ZeroVector;
     bool bAimHover=false,bAimCancelled=false,SawHoverUp=false,SawHoverDown=false,SawHoverLeft=false,SawHoverRight=false,SawHoverBank=false,SawBodyUp=false,SawBodyDown=false;
     bool SawFull=false,SawBoth=false,SawIndependent=false,SawHover=false,SawPunch=false,SawAfterPunch=false,bHover=false,bGround=false,bCancelled=false,bCancelStarted=false,bTraceChecks=false;
     bool bTapHit=false,bTapRead=false,bChargedHit=false,bChargedRead=false,LastHandValid=false;

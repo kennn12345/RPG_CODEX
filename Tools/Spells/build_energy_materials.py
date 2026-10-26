@@ -26,7 +26,7 @@ def custom(mat, code, inputs, output=unreal.CustomMaterialOutputType.CMOT_FLOAT3
         connect(source, value, name)
     return value
 
-for kind in ['Core', 'Shell', 'Ring']:
+for kind in ['Core', 'Shell', 'Ring', 'Static']:
     path = f'{ROOT}/M_Energy{kind}'
     mat = unreal.load_asset(path)
     if not mat:
@@ -35,23 +35,27 @@ for kind in ['Core', 'Shell', 'Ring']:
     mel.delete_all_material_expressions(mat)
     mat.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
     mat.set_editor_property('two_sided', True)
-    mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_OPAQUE if kind == 'Core' else unreal.BlendMode.BLEND_ADDITIVE)
+    mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_OPAQUE if kind in ['Core', 'Static'] else unreal.BlendMode.BLEND_ADDITIVE)
     uv = node(mat, unreal.MaterialExpressionTextureCoordinate)
     time = node(mat, unreal.MaterialExpressionTime)
     color = node(mat, unreal.MaterialExpressionVectorParameter, parameter_name='Color', default_value=unreal.LinearColor(0.08,0.5,1,1))
     fade = node(mat, unreal.MaterialExpressionScalarParameter, parameter_name='Fade', default_value=1.0)
+    brightness = node(mat, unreal.MaterialExpressionScalarParameter, parameter_name='Brightness', default_value=1.0)
     fresnel = node(mat, unreal.MaterialExpressionFresnel, exponent=2.0, base_reflect_fraction=0.02)
-    inputs = {'UV':uv, 'T':time, 'C':color, 'F':fresnel, 'Fade':fade}
+    inputs = {'UV':uv, 'T':time, 'C':color, 'F':fresnel, 'Fade':fade, 'Brightness':brightness}
     veins = 'float v=pow(saturate(0.5+0.5*sin((UV.x*9+sin(UV.y*23-T*3)*0.15+T*0.8)*6.283185)),18);'
     if kind == 'Core':
         code = veins + 'return (C*(1.7+F*4+v*4)+float3(0.65,0.88,1)*pow(1-F,4)*1.4)*Fade;'
     elif kind == 'Shell':
         code = veins + 'return C*(1.2+v*2.0)*Fade;'
-    else:
+    elif kind == 'Ring':
         code = 'return lerp(C,float3(0.6,0.9,1),0.25)*4*Fade;'
+    else:
+        code = 'return lerp(C,float3(0.78,0.94,1),0.4)*14*Fade;'
+    code = code.replace('*Fade;', '*Fade*Brightness;')
     emissive = custom(mat, code, inputs)
     mel.connect_material_property(emissive, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    if kind != 'Core':
+    if kind not in ['Core', 'Static']:
         if kind == 'Shell':
             opacity_code = veins + 'return saturate(pow(F,2.5)*0.6+v*0.13)*Fade;'
         else:
