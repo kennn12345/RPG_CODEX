@@ -8,6 +8,8 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/Skeleton.h"
+#include "Animation/AnimTypes.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -16,44 +18,118 @@
 
 namespace
 {
-	/** All 12 GASP get-ups: how the body lies at the start (0 face down, 1 on its back, 2 left side down, 3 right side
-	 *  down), what kind (stand up, crouch scramble, roll then stand, up into a run), and where the clip's first frame lies
-	 *  relative to its root: pelvis X / Y (cm) and the pelvis-to-head direction (degrees) - measured from the clips. */
+	/** GASP's 12 get-ups and their kind (stand up, crouch scramble, roll then stand, up into a run). */
 	enum class EGetUpKind : uint8 { Stand, Crouch, Roll, Run };
-	struct FGetUp { const TCHAR* Name; int32 Lying; EGetUpKind Kind; FVector Start; };
+	struct FGetUp { const TCHAR* Name; EGetUpKind Kind; };
 	const FGetUp GetUps[] = {
-		{ TEXT("stand_F"), 0, EGetUpKind::Stand, FVector(2.8f, -10.8f, 84.6f) },
-		{ TEXT("stand_B"), 1, EGetUpKind::Stand, FVector(0.1f, 3.0f, -92.1f) },
-		{ TEXT("stand_L"), 2, EGetUpKind::Stand, FVector(-5.9f, -5.5f, -7.0f) },
-		{ TEXT("stand_R"), 3, EGetUpKind::Stand, FVector(-4.7f, -13.6f, 160.6f) },
-		{ TEXT("crouch_F"), 0, EGetUpKind::Crouch, FVector(0.3f, -5.6f, 91.7f) },
-		{ TEXT("crouch_B"), 1, EGetUpKind::Crouch, FVector(5.7f, 6.2f, -93.2f) },
-		{ TEXT("crouch_L"), 2, EGetUpKind::Crouch, FVector(-7.9f, -11.8f, -4.6f) },
-		{ TEXT("crouch_R"), 3, EGetUpKind::Crouch, FVector(8.5f, -15.1f, 169.2f) },
-		{ TEXT("roll_L"), 0, EGetUpKind::Roll, FVector(18.0f, 0.3f, 173.8f) },
-		{ TEXT("roll_R"), 0, EGetUpKind::Roll, FVector(-1.6f, 0.9f, 6.0f) },
-		{ TEXT("run_F"), 0, EGetUpKind::Run, FVector(0.0f, -9.6f, 91.1f) },
-		{ TEXT("run_B"), 1, EGetUpKind::Run, FVector(-0.8f, 13.7f, -88.8f) },
+		{ TEXT("stand_F"), EGetUpKind::Stand }, { TEXT("stand_B"), EGetUpKind::Stand }, { TEXT("stand_L"), EGetUpKind::Stand }, { TEXT("stand_R"), EGetUpKind::Stand },
+		{ TEXT("crouch_F"), EGetUpKind::Crouch }, { TEXT("crouch_B"), EGetUpKind::Crouch }, { TEXT("crouch_L"), EGetUpKind::Crouch }, { TEXT("crouch_R"), EGetUpKind::Crouch },
+		{ TEXT("roll_L"), EGetUpKind::Roll }, { TEXT("roll_R"), EGetUpKind::Roll },
+		{ TEXT("run_F"), EGetUpKind::Run }, { TEXT("run_B"), EGetUpKind::Run },
 	};
 
-	/** Which get-up: wanting to move -> up into a run (or the crouch scramble); otherwise a mix (face down: stand or roll
-	 *  either way; any side: now and then the crouch scramble). */
-	const FGetUp& PickGetUp(int32 Lying, bool bWantsToMove)
+	/** Body pose features compared between the ragdoll and the clips: where these bones are relative to the hips, in a
+	 *  frame turned with the body (X along the hips-to-head direction on the ground, Z up), and how much each matters. */
+	struct FFeatureBone { const TCHAR* Bone; float Weight; };
+	const FFeatureBone FeatureBones[] = {
+		{ TEXT("head"), 1.5f }, { TEXT("spine_05"), 1.5f },
+		{ TEXT("hand_l"), 1.f }, { TEXT("hand_r"), 1.f }, { TEXT("lowerarm_l"), 0.7f }, { TEXT("lowerarm_r"), 0.7f },
+		{ TEXT("calf_l"), 0.7f }, { TEXT("calf_r"), 0.7f }, { TEXT("foot_l"), 1.f }, { TEXT("foot_r"), 1.f },
+	};
+	constexpr int32 NumFeatures = UE_ARRAY_COUNT(FeatureBones);
+
+	struct FPoseFeatures
 	{
-		TArray<const FGetUp*> Pool;
-		auto Add = [&](EGetUpKind Kind, int32 Weight) { for (const FGetUp& G : GetUps) if (G.Lying == Lying && G.Kind == Kind) for (int32 W = 0; W < Weight; ++W) Pool.Add(&G); };
-		if (bWantsToMove)
+		FVector Points[NumFeatures];
+		float PelvisHeight = 0.f;
+	};
+	FPoseFeatures MakeFeatures(const FVector& Pelvis, const FVector* Bones, float PelvisHeight)
+	{
+		// Bones[0] is the head: the frame turns with the hips-to-head direction (flattened), so any facing compares.
+		FVector X = FVector(Bones[0].X - Pelvis.X, Bones[0].Y - Pelvis.Y, 0.f).GetSafeNormal();
+		if (X.IsNearlyZero()) X = FVector::ForwardVector;
+		const FVector Y = FVector::CrossProduct(FVector::UpVector, X);
+		FPoseFeatures F;
+		for (int32 I = 0; I < NumFeatures; ++I)
 		{
-			Add(EGetUpKind::Run, 1);
-			if (Pool.Num() == 0) Add(EGetUpKind::Crouch, 1);
+			const FVector D = Bones[I] - Pelvis;
+			F.Points[I] = FVector(FVector::DotProduct(D, X), FVector::DotProduct(D, Y), D.Z);
 		}
-		if (Pool.Num() == 0)
+		F.PelvisHeight = PelvisHeight;
+		return F;
+	}
+	float PoseError(const FPoseFeatures& A, const FPoseFeatures& B)
+	{
+		float E = 2.f * FMath::Square(A.PelvisHeight - B.PelvisHeight);
+		for (int32 I = 0; I < NumFeatures; ++I) E += FeatureBones[I].Weight * float((A.Points[I] - B.Points[I]).SizeSquared());
+		return E;
+	}
+
+	/** One candidate start: a clip at a time, its pose features, and where it lies relative to its root (pelvis X / Y,
+	 *  pelvis-to-head direction in degrees) for placing the capsule. */
+	struct FGetUpSample
+	{
+		const FGetUp* GetUp = nullptr;
+		UAnimSequence* Clip = nullptr;
+		float Time = 0.f;
+		FPoseFeatures Features;
+		FVector2D PelvisFromRoot = FVector2D::ZeroVector;
+		float HeadYaw = 0.f;
+	};
+
+	FTransform ClipBoneTransform(const UAnimSequence* Clip, const FReferenceSkeleton& Ref, int32 Index, double Time)
+	{
+		// Component space at Time: the bone's local transform times each parent's, up to the root.
+		FTransform Result = FTransform::Identity;
+		const FAnimExtractContext Context(Time);
+		for (int32 I = Index; I != INDEX_NONE; I = Ref.GetParentIndex(I))
 		{
-			Add(EGetUpKind::Stand, 4);
-			Add(EGetUpKind::Roll, 2);   // each way
-			Add(EGetUpKind::Crouch, 1);
+			FTransform Local;
+			Clip->GetBoneTransform(Local, FSkeletonPoseBoneIndex(I), Context, false);
+			Result = Result * Local;
 		}
-		return Pool.Num() ? *Pool[FMath::RandRange(0, Pool.Num() - 1)] : GetUps[0];
+		return Result;
+	}
+
+	/** Every get-up's candidate start frames (the first 0.6 s, every 0.15 s), measured once from the clips. */
+	const TArray<FGetUpSample>& GetUpSamples()
+	{
+		static TArray<FGetUpSample> Samples;
+		if (Samples.Num()) return Samples;
+		for (const FGetUp& G : GetUps)
+		{
+			const FString Path = FString::Printf(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_%s.M_ragdoll_getup_%s"), G.Name, G.Name);
+			UAnimSequence* Clip = LoadObject<UAnimSequence>(nullptr, *Path);
+			const USkeleton* Skeleton = Clip ? Clip->GetSkeleton() : nullptr;
+			if (!Skeleton) continue;
+			Clip->AddToRoot();   // kept for the session (the samples point at it)
+			const FReferenceSkeleton& Ref = Skeleton->GetReferenceSkeleton();
+			const int32 PelvisIndex = Ref.FindBoneIndex(TEXT("pelvis"));
+			if (PelvisIndex == INDEX_NONE) continue;
+			for (float T = 0.f; T <= FMath::Min(0.6f, Clip->GetPlayLength() * 0.3f) + KINDA_SMALL_NUMBER; T += 0.15f)
+			{
+				const FVector Root = ClipBoneTransform(Clip, Ref, 0, T).GetLocation();
+				const FVector Pelvis = ClipBoneTransform(Clip, Ref, PelvisIndex, T).GetLocation();
+				FVector Bones[NumFeatures];
+				bool bAll = true;
+				for (int32 I = 0; I < NumFeatures; ++I)
+				{
+					const int32 Index = Ref.FindBoneIndex(FeatureBones[I].Bone);
+					if (Index == INDEX_NONE) { bAll = false; break; }
+					Bones[I] = ClipBoneTransform(Clip, Ref, Index, T).GetLocation();
+				}
+				if (!bAll) continue;
+				FGetUpSample S;
+				S.GetUp = &G;
+				S.Clip = Clip;
+				S.Time = T;
+				S.Features = MakeFeatures(Pelvis, Bones, float(Pelvis.Z - Root.Z));
+				S.PelvisFromRoot = FVector2D(Pelvis.X - Root.X, Pelvis.Y - Root.Y);
+				S.HeadYaw = FMath::RadiansToDegrees(FMath::Atan2(Bones[0].Y - Pelvis.Y, Bones[0].X - Pelvis.X));
+				Samples.Add(S);
+			}
+		}
+		return Samples;
 	}
 }
 
@@ -148,8 +224,8 @@ void URPGBodyImpactComponent::KnockDown(const FVector& Velocity, const FVector& 
 	if (UCharacterMovementComponent* Move = Character->GetCharacterMovement()) { Move->StopMovementImmediately(); Move->DisableMovement(); }
 	if (bOwnLimpHandler) Character->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	// Stays limp for its flight (up and down again) and then DownTime once it settles.
-	const float Gravity = 980.f * 1.6f;
-	Reaction->Launch(Velocity, Point, DownTime + FMath::Max(0.f, 2.f * float(Velocity.Z) / Gravity));
+	const float Gravity = 980.f;   // impacts fall under real gravity
+	Reaction->Launch(Velocity, Point, DownTime + FMath::Max(0.f, 2.f * float(Velocity.Z) / Gravity), true);
 	OnKnockedDown.Broadcast();
 }
 
@@ -170,37 +246,47 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	OutDuration = 0.f;
 	USkeletalMeshComponent* Body = Character ? Character->GetMesh() : nullptr;
 	if (!Body) return nullptr;
-	// How the body lies: the chest's front and the hips' left (spine and thighs) - face down, on its back, or on a side.
 	const FVector Pelvis = Body->GetBoneLocation(TEXT("pelvis"));
-	const FVector Left = (Body->GetBoneLocation(TEXT("thigh_l")) - Body->GetBoneLocation(TEXT("thigh_r"))).GetSafeNormal();
-	const FVector Front = FVector::CrossProduct(Body->GetBoneLocation(TEXT("spine_05")) - Pelvis, Left).GetSafeNormal();
-	const bool bOnSide = FMath::Abs(Left.Z) > FMath::Abs(Front.Z);
-	const bool bFaceDown = !bOnSide && Front.Z < 0.f;
-	const bool bLeftDown = bOnSide && Left.Z < 0.f;
-	const FGetUp& Pick = PickGetUp(bOnSide ? (bLeftDown ? 2 : 3) : (bFaceDown ? 0 : 1), bWantsToMove);
-
-	// Turn and place the capsule so the clip's first frame lies on the body (the fade back to animation blends into it).
 	FHitResult Ground;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(RPGStandUp), false, Character);
 	const bool bGround = Character->GetWorld()->LineTraceSingleByChannel(Ground, Pelvis + FVector(0.f, 0.f, 80.f), Pelvis - FVector(0.f, 0.f, 300.f), ECC_Visibility, Params);
-	const FVector Head = Body->GetBoneLocation(TEXT("head")) - Pelvis;
-	const float MeshYaw = FMath::RadiansToDegrees(FMath::Atan2(Head.Y, Head.X)) - Pick.Start.Z;
-	const FVector Offset = FRotator(0.f, MeshYaw, 0.f).RotateVector(FVector(Pick.Start.X, Pick.Start.Y, 0.f));
-	const float HalfHeight = Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 	const float FloorZ = bGround ? float(Ground.ImpactPoint.Z) : float(Pelvis.Z) - 10.f;
+
+	// The body's actual pose, compared with every get-up's first frames: the closest clip AND the frame to start it
+	// from (wanting to move: only the get-ups that move off - into a run or a crouch scramble). A little variety among
+	// near-equal matches.
+	FVector Bones[NumFeatures];
+	for (int32 I = 0; I < NumFeatures; ++I) Bones[I] = Body->GetBoneLocation(FeatureBones[I].Bone);
+	const FPoseFeatures Now = MakeFeatures(Pelvis, Bones, float(Pelvis.Z) - FloorZ);
+	const TArray<FGetUpSample>& Samples = GetUpSamples();
+	auto Allowed = [bWantsToMove](const FGetUpSample& S)
+	{
+		const bool bMoves = S.GetUp->Kind == EGetUpKind::Run || S.GetUp->Kind == EGetUpKind::Crouch;
+		return bWantsToMove ? bMoves : S.GetUp->Kind != EGetUpKind::Run;
+	};
+	float Best = TNumericLimits<float>::Max();
+	for (const FGetUpSample& S : Samples) if (Allowed(S)) Best = FMath::Min(Best, PoseError(Now, S.Features));
+	TArray<const FGetUpSample*> Close;
+	for (const FGetUpSample& S : Samples) if (Allowed(S) && PoseError(Now, S.Features) <= Best * 1.25f + 25.f) Close.Add(&S);
+	if (Close.Num() == 0) return nullptr;
+	const FGetUpSample& Pick = *Close[FMath::RandRange(0, Close.Num() - 1)];
+
+	// Turn and place the capsule so that frame lies on the body (the fade back to animation blends into it).
+	const FVector Head = Body->GetBoneLocation(TEXT("head")) - Pelvis;
+	const float MeshYaw = FMath::RadiansToDegrees(FMath::Atan2(Head.Y, Head.X)) - Pick.HeadYaw;
+	const FVector Offset = FRotator(0.f, MeshYaw, 0.f).RotateVector(FVector(Pick.PelvisFromRoot.X, Pick.PelvisFromRoot.Y, 0.f));
+	const float HalfHeight = Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 	Character->SetActorLocationAndRotation(FVector(Pelvis.X - Offset.X, Pelvis.Y - Offset.Y, FloorZ + HalfHeight + 1.f),
 		FRotator(0.f, MeshYaw - Body->GetRelativeRotation().Yaw, 0.f), false, nullptr, ETeleportType::None);
 	if (AController* Controller = Character->GetController())
 		if (Controller->IsPlayerController()) Controller->SetControlRotation(FRotator(Controller->GetControlRotation().Pitch, Character->GetActorRotation().Yaw, 0.f));
 	if (UCharacterMovementComponent* Move = Character->GetCharacterMovement()) Move->SetMovementMode(MOVE_Walking);
 
-	const FString Path = FString::Printf(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_%s.M_ragdoll_getup_%s"), Pick.Name, Pick.Name);
-	UAnimSequence* Clip = LoadObject<UAnimSequence>(nullptr, *Path);
 	UAnimInstance* Anim = Body->GetAnimInstance();
-	if (!Clip || !Anim) return nullptr;
-	UAnimMontage* Montage = Anim->PlaySlotAnimationAsDynamicMontage(Clip, TEXT("DefaultSlot"), 0.f, 0.35f, Rate);
-	OutDuration = Clip->GetPlayLength() / FMath::Max(Rate, 0.1f);
-	UE_LOG(LogRPGInput, Log, TEXT("%s gets up %s (%s) at %.2fx"), *Character->GetActorNameOrLabel(),
-		bOnSide ? (bLeftDown ? TEXT("from its left side") : TEXT("from its right side")) : (bFaceDown ? TEXT("from face down") : TEXT("from its back")), *Clip->GetName(), Rate);
+	if (!Anim) return nullptr;
+	UAnimMontage* Montage = Anim->PlaySlotAnimationAsDynamicMontage(Pick.Clip, TEXT("DefaultSlot"), 0.f, 0.35f, Rate, 1, -1.f, Pick.Time);
+	OutDuration = (Pick.Clip->GetPlayLength() - Pick.Time) / FMath::Max(Rate, 0.1f);
+	UE_LOG(LogRPGInput, Log, TEXT("%s gets up with %s from %.2fs (pose match %.0f cm, %d close matches) at %.2fx"), *Character->GetActorNameOrLabel(),
+		*Pick.Clip->GetName(), Pick.Time, FMath::Sqrt(Best / 12.f), Close.Num(), Rate);
 	return Montage;
 }

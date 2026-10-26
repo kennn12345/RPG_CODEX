@@ -536,6 +536,13 @@ void URPGPhysicsReactionComponent::FinishReturn()
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Kinematic, true, false);
 	PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(AllModifiers, EResetToCachedTargetBehavior::ResetDuringUpdateControls, true, false);
 	SetSolidRagdoll(false);
+	if (bNaturalFall)
+	{
+		bNaturalFall = false;
+		if (USkeletalMeshComponent* Mesh = GetMesh())
+			for (FBodyInstance* Body : Mesh->Bodies)
+				if (Body && bUseDefaultPhysMaterial && GEngine && GEngine->DefaultPhysMaterial) Body->SetPhysMaterialOverride(GEngine->DefaultPhysMaterial);
+	}
 }
 
 void URPGPhysicsReactionComponent::SetSolidRagdoll(bool bSolid)
@@ -582,7 +589,7 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 
 	// Power System ragdolls fall with the heavier ragdoll gravity (the launch speeds are worked out with it).
 	const float ExtraGravity = URPGPowerSettings::Get()->GetRagdollGravity() - URPGPowerSettings::Get()->Gravity;
-	if (State == ERPGPhysicsReactionState::Limp && bWaitForSettle && ExtraGravity > 0.f)
+	if (State == ERPGPhysicsReactionState::Limp && bWaitForSettle && ExtraGravity > 0.f && !bNaturalFall)
 		if (USkeletalMeshComponent* LimpMesh = GetMesh())
 			for (FBodyInstance* Body : LimpMesh->Bodies)
 				if (Body && Body->IsInstanceSimulatingPhysics())
@@ -703,10 +710,22 @@ void URPGPhysicsReactionComponent::SetFlightFollow(bool bOn)
 	}
 }
 
-void URPGPhysicsReactionComponent::Launch(const FVector& Velocity, const FVector& Point, float LimpSeconds)
+void URPGPhysicsReactionComponent::Launch(const FVector& Velocity, const FVector& Point, float LimpSeconds, bool bInNaturalFall)
 {
 	if (!bSetUp) return;
 	EnterFullRagdoll(LimpSeconds);
+	bNaturalFall = bInNaturalFall;
+	if (bNaturalFall)
+		if (USkeletalMeshComponent* Mesh = GetMesh())
+		{
+			if (!TumbleMaterial)
+			{
+				TumbleMaterial = NewObject<UPhysicalMaterial>(this, TEXT("RagdollTumble"));
+				TumbleMaterial->Friction = 0.35f;     // cloth / skin sliding on ground: slides and rolls on
+				TumbleMaterial->Restitution = 0.12f;  // a small bounce off the ground
+			}
+			for (FBodyInstance* Body : Mesh->Bodies) if (Body) Body->SetPhysMaterialOverride(TumbleMaterial);
+		}
 	bWaitForSettle = true;
 	bVelocityPending = true;
 	PendingVelocity = Velocity;

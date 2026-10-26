@@ -151,7 +151,7 @@ public:
 
 	/** Whole-body ragdoll moving at Velocity (world cm/s; body parts near Point a little more), limp for LimpSeconds
 	 *  after it settles. Collisions, throws, explosions. */
-	void Launch(const FVector& Velocity, const FVector& Point, float LimpSeconds);
+	void Launch(const FVector& Velocity, const FVector& Point, float LimpSeconds, bool bNaturalFall = false);
 	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
 	bool IsFlightFollowing() const { return bFlightFollow; }
 
@@ -357,6 +357,11 @@ private:
 	 *  the owner's capsule stops blocking (its body has left it). Restored when the body is back on the animation. */
 	void SetSolidRagdoll(bool bSolid);
 	bool bSolidRagdoll = false;
+	/** Launched by a body impact: real gravity and a slicker body on the ground, so it tumbles, rolls and slides out
+	 *  the momentum it has instead of dropping and gripping. */
+	bool bNaturalFall = false;
+	UPROPERTY(Transient)
+	TObjectPtr<class UPhysicalMaterial> TumbleMaterial;
 	TEnumAsByte<ECollisionChannel> SavedMeshObjectType = ECC_Pawn;
 	FCollisionResponseContainer SavedMeshResponses;
 	TArray<TPair<TWeakObjectPtr<class UPrimitiveComponent>, FCollisionResponseContainer>> SavedCapsuleResponses;
