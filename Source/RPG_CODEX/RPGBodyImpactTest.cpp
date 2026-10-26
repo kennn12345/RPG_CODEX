@@ -66,14 +66,16 @@ namespace
 				Film(World, N, Now);
 				if (!PlayerImpact->IsDown() && !N->BodyImpact->IsDown()) Player->GetCharacterMovement()->Velocity = Dir * 1500.f;
 				if (N->BodyImpact->IsDown()) bNpcDown = true;
-				if (PlayerImpact->IsDown()) bPlayerDown = true;
+				if (PlayerImpact->IsDown() && !bPlayerDown) { bPlayerDown = true; PlayerDownAt = Player->GetActorLocation(); }
+				if (bPlayerDown && !bPlayerUp && !PlayerImpact->IsDown()) PlayerUpAt = Player->GetActorLocation();
 				if (bNpcDown && !N->BodyImpact->IsDown() && !N->IsBusy()) bNpcUp = true;
 				if (bPlayerDown && !PlayerImpact->IsDown()) bPlayerUp = true;
 				const bool bDone = bNpcDown && bNpcUp && bPlayerDown && bPlayerUp;
 				if (!bDone && Now - PhaseStart < 14.f) return false;
-				const bool bPass = bDone;
-				const FString Line = FString::Printf(TEXT("IMPACTTEST %s  NPC knocked down %d, got up %d; player knocked down %d, got up %d; NPC moved %.0f cm"),
-					bPass ? TEXT("PASS") : TEXT("FAIL"), bNpcDown, bNpcUp, bPlayerDown, bPlayerUp, float(FVector::Dist2D(N->GetActorLocation(), N->GetHome())));
+				const float PlayerTravel = float(FVector::Dist(PlayerDownAt, PlayerUpAt));
+				const bool bPass = bDone && PlayerTravel < 1000.f;   // a 15 m/s crash throws you meters, not out of sight
+				const FString Line = FString::Printf(TEXT("IMPACTTEST %s  NPC knocked down %d, got up %d; player knocked down %d, got up %d %.0f cm from the crash; NPC moved %.0f cm"),
+					bPass ? TEXT("PASS") : TEXT("FAIL"), bNpcDown, bNpcUp, bPlayerDown, bPlayerUp, PlayerTravel, float(FVector::Dist2D(N->GetActorLocation(), N->GetHome())));
 				UE_LOG(LogRPGInput, Display, TEXT("%s"), *Line);
 				if (bPass) Test->AddInfo(Line); else Test->AddError(Line);
 				return true;
@@ -104,7 +106,7 @@ namespace
 		FAutomationTestBase* Test;
 		TWeakObjectPtr<ARPGNpcCharacter> Npc;
 		ACameraActor* Camera = nullptr;
-		FVector Dir = FVector::ForwardVector, Look = FVector::ZeroVector;
+		FVector Dir = FVector::ForwardVector, Look = FVector::ZeroVector, PlayerDownAt = FVector::ZeroVector, PlayerUpAt = FVector::ZeroVector;
 		int32 Frames = 0, Phase = 0, Shot = 0;
 		float Start = 0.f, PhaseStart = 0.f, LastShot = -1.f;
 		bool bNpcDown = false, bNpcUp = false, bPlayerDown = false, bPlayerUp = false;

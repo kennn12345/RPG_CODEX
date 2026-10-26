@@ -68,7 +68,9 @@ void URPGBodyImpactComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	if (bDown && bOwnLimpHandler)
 	{
 		const FVector Pelvis = Character->GetMesh()->GetBoneLocation(TEXT("pelvis"));
-		Character->GetCapsuleComponent()->SetWorldLocation(Pelvis + FVector(0.f, 0.f, 20.f), false, nullptr, ETeleportType::TeleportPhysics);
+		// No teleport flag: a physics teleport would carry the simulated body along with the capsule, which then moved the
+		// hips, which moved the capsule... and threw the body off without end.
+		Character->GetCapsuleComponent()->SetWorldLocation(Pelvis + FVector(0.f, 0.f, 20.f), false, nullptr, ETeleportType::None);
 	}
 }
 
