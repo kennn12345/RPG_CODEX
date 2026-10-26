@@ -353,6 +353,13 @@ private:
 	TMap<FName, TArray<FName>> LimbControls;
 	TArray<FName> AllModifiers;
 	TArray<FName> LegModifiers;
+	/** Ragdolls are solid: the body parts collide with the world, other characters, other ragdolls and each other, and
+	 *  the owner's capsule stops blocking (its body has left it). Restored when the body is back on the animation. */
+	void SetSolidRagdoll(bool bSolid);
+	bool bSolidRagdoll = false;
+	TEnumAsByte<ECollisionChannel> SavedMeshObjectType = ECC_Pawn;
+	FCollisionResponseContainer SavedMeshResponses;
+	TArray<TPair<TWeakObjectPtr<class UPrimitiveComponent>, FCollisionResponseContainer>> SavedCapsuleResponses;
 	bool bFlightFollow = false;
 	float CurrentYieldTime = 0.1f, CurrentRecoverTime = 0.6f, CurrentMotorBase = 1.f;
 	TArray<FName> AllControls;

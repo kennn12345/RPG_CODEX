@@ -12,6 +12,7 @@
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "Components/CapsuleComponent.h"
 
 namespace
 {
@@ -412,6 +413,7 @@ void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 	bReturning = false;
 	LimpDuration = InLimpTime;
 
+	SetSolidRagdoll(true);
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Simulated, true, false);
 	PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
 	PhysicsControl->SetControlsEnabled(AllControls, false);
@@ -533,6 +535,42 @@ void URPGPhysicsReactionComponent::FinishReturn()
 	PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Kinematic, true, false);
 	PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(AllModifiers, EResetToCachedTargetBehavior::ResetDuringUpdateControls, true, false);
+	SetSolidRagdoll(false);
+}
+
+void URPGPhysicsReactionComponent::SetSolidRagdoll(bool bSolid)
+{
+	USkeletalMeshComponent* Mesh = GetMesh();
+	if (!Mesh || bSolid == bSolidRagdoll) return;
+	bSolidRagdoll = bSolid;
+	if (bSolid)
+	{
+		// The body parts: a physics body that blocks the world, characters, other ragdolls (and itself: the physics
+		// asset's own pairs), and still takes traces (spells, aim).
+		SavedMeshObjectType = Mesh->GetCollisionObjectType();
+		SavedMeshResponses = Mesh->GetCollisionResponseToChannels();
+		Mesh->SetCollisionObjectType(ECC_PhysicsBody);
+		Mesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+		for (const ECollisionChannel Channel : { ECC_WorldStatic, ECC_WorldDynamic, ECC_Pawn, ECC_PhysicsBody, ECC_Visibility, ECC_Destructible })
+			Mesh->SetCollisionResponseToChannel(Channel, ECR_Block);
+		// The owner's own capsules let the body (and other characters) through: the body has left them behind.
+		SavedCapsuleResponses.Reset();
+		TInlineComponentArray<UCapsuleComponent*> Capsules(GetOwner());
+		for (UCapsuleComponent* Capsule : Capsules)
+		{
+			SavedCapsuleResponses.Emplace(Capsule, Capsule->GetCollisionResponseToChannels());
+			Capsule->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
+			Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		}
+	}
+	else
+	{
+		Mesh->SetCollisionObjectType(SavedMeshObjectType);
+		Mesh->SetCollisionResponseToChannels(SavedMeshResponses);
+		for (const TPair<TWeakObjectPtr<UPrimitiveComponent>, FCollisionResponseContainer>& Saved : SavedCapsuleResponses)
+			if (UPrimitiveComponent* Capsule = Saved.Key.Get()) Capsule->SetCollisionResponseToChannels(Saved.Value);
+		SavedCapsuleResponses.Reset();
+	}
 }
 
 void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
