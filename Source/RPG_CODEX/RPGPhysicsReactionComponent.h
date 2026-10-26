@@ -165,6 +165,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
 	float MotorStrength = 40.f;
 
+	/** Ordinary hits (POWERED): the most the physics may take over the pose. Below 1 the animation never fully lets
+	 *  go, so a hit is a give in the body rather than a floppy limb, however hard. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0", ClampMax = "1"))
+	float PoweredMaxBlend = 0.7f;
+
 	/** Rotation damping put on every ragdoll body (the physics asset's own is replaced). 0.01 is UE5 Manny's; GASP's
 	 *  mannequin asset uses 5, which makes hits look locked. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction", meta = (ClampMin = "0"))
@@ -231,7 +236,7 @@ public:
 
 	/** Seconds to fade from the physics pose to the animation at the end of a reaction. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction", meta = (ClampMin = "0"))
-	float ReturnBlendTime = 0.2f;
+	float ReturnBlendTime = 0.35f;
 
 	/** Bone that stays on the animation in POWERED, so the body keeps its footing (only the rest of it yields). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered")

@@ -83,7 +83,7 @@ eas.spawn_actor_from_class(unreal.VolumetricCloud, unreal.Vector(0, 0, 0))
 # Player start (south of the middle, looking north). The player keeps its average stats (Strength 5, the rest 50).
 eas.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0, -1500, 100), unreal.Rotator(roll=0, pitch=0, yaw=90))
 
-# Four dummies with different builds (the Power System arena's set, plus a Strength for when they fight back): two in
+# Four NPCs with different builds (the Power System arena's set, plus a Strength for when they fight back): two in
 # the flat middle (small wander area), two near the hills (big wander area, so they walk the slopes).
 #   label, x, y, wander radius, mass kg, strength, durability, stability, stagger resistance, max health
 DUMMIES = [
@@ -92,8 +92,11 @@ DUMMIES = [
     ('Heavy Brute', 2300, 600, 1600, 164, 8, 70, 70, 60, 250),
     ('Steady Veteran', -2300, -2300, 1600, 90, 6, 55, 85, 80, 150),
 ]
+# NPCs (2026-10-26): GASP characters (BP_RPGNpc) walked by AI on the navigation mesh, instead of the old test dummy
+# (ARPGCombatTestDummy stays for the automated tests and the Power arena).
+NPC = unreal.EditorAssetLibrary.load_blueprint_class('/Game/RPG/NPC/BP_RPGNpc')
 for label, x, y, radius, mass, strength, durability, stability, stagger, health in DUMMIES:
-    d = eas.spawn_actor_from_class(unreal.RPGCombatTestDummy, unreal.Vector(x, y, 92), unreal.Rotator(roll=0, pitch=0, yaw=-90))
+    d = eas.spawn_actor_from_class(NPC, unreal.Vector(x, y, 100), unreal.Rotator(roll=0, pitch=0, yaw=-90))
     d.set_actor_label(label.replace(' ', '_'))
     d.set_editor_property('display_label', label)
     d.set_editor_property('wander', True)
@@ -104,6 +107,10 @@ for label, x, y, radius, mass, strength, durability, stability, stagger, health 
                  ('stagger_resistance', stagger), ('max_health', health)):
         ss.set_editor_property(k, float(v))
     stats.set_editor_property('starting_stats', ss)
+
+# Navigation area over the whole field (the navigation mesh itself is built while playing: runtime generation).
+nav = eas.spawn_actor_from_class(unreal.NavMeshBoundsVolume, unreal.Vector(0, 0, 300))
+nav.set_actor_scale3d(unreal.Vector(52, 52, 8))
 
 les.save_current_level()
 unreal.log('DUMMY FIELD BUILT')

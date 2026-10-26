@@ -390,7 +390,7 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDaz
 	ApplyPoweredMotorScales(0.f);
 	// From the animation the bodies start exactly on the pose, so full weight at once; part-way through a fade back
 	// it blends in quickly instead of popping to the physics pose.
-	if (bFromAnimation) SetPhysicsBlend(1.f);
+	if (bFromAnimation) SetPhysicsBlend(PoweredMaxBlend);
 
 	LastReaction = FRPGPhysicsReactionInfo();
 	LastReaction.State = State;
@@ -560,7 +560,8 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		}
 		else
 		{
-			if (PhysicsBlend < 1.f) SetPhysicsBlend(FMath::Min(1.f, PhysicsBlend + DeltaTime / BlendInTime));
+			const float MaxBlend = State == ERPGPhysicsReactionState::Powered ? PoweredMaxBlend : 1.f;
+			if (PhysicsBlend < MaxBlend) SetPhysicsBlend(FMath::Min(MaxBlend, PhysicsBlend + DeltaTime / BlendInTime));
 			if (State == ERPGPhysicsReactionState::Powered)
 			{
 				// Struck limb: yields, then its motors recover to full strength, then the pose fades back.

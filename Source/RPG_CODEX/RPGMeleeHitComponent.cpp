@@ -1,5 +1,6 @@
 #include "RPGMeleeHitComponent.h"
 
+#include "Components/CapsuleComponent.h"
 #include "RPG_CODEX.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGMeleeTarget.h"
@@ -158,6 +159,8 @@ void URPGMeleeHitComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 		{
 			AActor* Target = Hit.GetActor();
 			if (!Target || Target == GetOwner() || HitThisStrike.Contains(Target)) continue;
+			// A character's movement capsule is not its body: take the hit on its skeletal mesh (the struck bone).
+			if (Cast<UCapsuleComponent>(Hit.GetComponent()) && Target->FindComponentByClass<USkeletalMeshComponent>()) continue;
 			HitThisStrike.Add(Target);
 			// Kicks: the strike direction is the leg's travel (the ankle, point 0), not whichever sphere touched first -
 			// the ball of the foot is often first, while it is still turning up to put the sole on the target.

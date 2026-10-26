@@ -20,7 +20,9 @@ public class RPG_CODEX : ModuleRules
 			"GameplayTags",
 			"GameplayTasks",
 			"DeveloperSettings",
-			"EngineCameras"
+			"EngineCameras",
+			"AIModule",
+			"NavigationSystem"
 		});
 		if (Target.bBuildEditor)
 		{
