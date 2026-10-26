@@ -56,10 +56,11 @@ public:
 	/** Fired when this character is knocked down by an impact (NPCs stop their AI / step reactions). */
 	FRPGOnKnockedDown OnKnockedDown;
 
-	/** Stand Character up where its ragdoll lies: picks the GASP get-up by how the body lies (face down, back, left or
-	 *  right side), turns and places the capsule so the clip's first frame lies on the body, plays it at Rate.
+	/** Stand Character up where its ragdoll lies: picks one of GASP's 12 get-ups by how the body lies (face down, back,
+	 *  left or right side) and intent (bWantsToMove: up into a run; otherwise a mix of stand, roll and crouch scramble),
+	 *  turns and places the capsule so the clip's first frame lies on the body, plays it at Rate.
 	 *  Returns the montage (null if none could play) and its duration. Shared by NPC knockdowns and the player. */
-	static UAnimMontage* StandUp(ACharacter* Character, float Rate, float& OutDuration);
+	static UAnimMontage* StandUp(ACharacter* Character, float Rate, float& OutDuration, bool bWantsToMove = false);
 
 private:
 	UFUNCTION()

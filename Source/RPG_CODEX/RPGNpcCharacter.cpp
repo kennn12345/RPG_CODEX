@@ -321,7 +321,8 @@ void ARPGNpcCharacter::HandleLimpEnding()
 	const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
 	const float HealthLeft = bKnockedOut || !A || A->GetMaxHealth() <= 0.f ? 0.f : FMath::Clamp(A->GetHealth() / A->GetMaxHealth(), 0.f, 1.f);
 	float Duration = 1.f;
-	ActiveReaction = URPGBodyImpactComponent::StandUp(this, FMath::Lerp(GetUpHurtRate, GetUpHealthyRate, HealthLeft), Duration);
+	// Now and then it scrambles straight up and off (a wandering NPC that wants to get moving).
+	ActiveReaction = URPGBodyImpactComponent::StandUp(this, FMath::Lerp(GetUpHurtRate, GetUpHealthyRate, HealthLeft), Duration, bWander && FMath::FRand() < 0.3f);
 	if (Duration <= 0.f) Duration = 1.f;
 	bDown = false;
 	StopForReaction(Duration + 0.5f);
