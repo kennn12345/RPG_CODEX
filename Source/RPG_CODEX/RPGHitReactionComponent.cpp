@@ -117,6 +117,19 @@ void URPGHitReactionComponent::AddHit(FName Bone, const FVector& Point, const FV
 	SetComponentTickEnabled(true);
 }
 
+void URPGHitReactionComponent::ResetReaction()
+{
+	if (!bActive) return;
+	for (FJoint& J : Joints) J.Angle=J.Speed=FVector::ZeroVector;
+	if (USkeletalMeshComponent* Mesh=GetMesh())
+		if (URPGAnimInstance* Anim=Cast<URPGAnimInstance>(Mesh->GetAnimInstance()))
+		{
+			Anim->FlowBones.Reset(); Anim->FlowRotations.Reset();
+		}
+	bActive=false;
+	SetComponentTickEnabled(false);
+}
+
 void URPGHitReactionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);

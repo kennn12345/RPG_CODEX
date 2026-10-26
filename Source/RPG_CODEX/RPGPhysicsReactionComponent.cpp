@@ -360,6 +360,7 @@ void URPGPhysicsReactionComponent::ApplyPendingVelocity()
 void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDazed)
 {
 	if (!bSetUp || !PhysicsControl) return;
+	OnPhysicsOwnershipRequested.Broadcast();
 	if (bFlightFollow) SetFlightFollow(false);
 	// A hit while already ragdolled keeps it limp.
 	if (State == ERPGPhysicsReactionState::Limp && !bReturning) return;
@@ -405,6 +406,14 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDaz
 void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 {
 	if (!bSetUp || !PhysicsControl) return;
+	const bool bFromLocalPhysical = !LocalPhysicalAnimationModifiers.IsEmpty();
+	float LocalBlend = 0.f;
+	if (bFromLocalPhysical)
+		if (USkeletalMeshComponent* Mesh=GetMesh())
+			for (const TPair<FName,FName>& Pair:BoneModifiers)
+				if (LocalPhysicalAnimationModifiers.Contains(Pair.Value))
+					if (const FBodyInstance* B=Mesh->GetBodyInstance(Pair.Key)) LocalBlend=FMath::Max(LocalBlend,B->PhysicsBlendWeight);
+	OnPhysicsOwnershipRequested.Broadcast();
 	if (bFlightFollow) SetFlightFollow(false);
 	const bool bFromAnimation = State == ERPGPhysicsReactionState::Animated;
 	const bool bWasLimp = State == ERPGPhysicsReactionState::Limp;
@@ -417,7 +426,8 @@ void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Simulated, true, false);
 	PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
 	PhysicsControl->SetControlsEnabled(AllControls, false);
-	if (bFromAnimation) SetPhysicsBlend(1.f);
+	// Keep the current local weight on takeover; the existing bounded blend-in reaches full ragdoll next.
+	if (bFromAnimation) SetPhysicsBlend(bFromLocalPhysical ? LocalBlend : 1.f);
 
 	if (!bWasLimp)
 	{
@@ -425,6 +435,37 @@ void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 		LastReaction.Limb = NAME_None;
 	}
 	LastReaction.State = State;
+	if (!bWasLimp) OnLimpStarted.Broadcast();
+}
+
+bool URPGPhysicsReactionComponent::BeginLocalPhysicalAnimation(const TArray<FName>& Bones)
+{
+	if (!bSetUp || !PhysicsControl || State != ERPGPhysicsReactionState::Animated || !LocalPhysicalAnimationModifiers.IsEmpty()) return false;
+	for (FName Bone : Bones)
+		if (const FName* Modifier = BoneModifiers.Find(Bone)) LocalPhysicalAnimationModifiers.Add(*Modifier);
+	if (LocalPhysicalAnimationModifiers.Num() != Bones.Num()) { LocalPhysicalAnimationModifiers.Reset(); return false; }
+	PhysicsControl->SetControlsEnabled(AllControls, false);
+	PhysicsControl->SetBodyModifiersMovementType(LocalPhysicalAnimationModifiers, EPhysicsMovementType::Simulated, true, false);
+	PhysicsControl->SetBodyModifiersPhysicsBlendWeight(LocalPhysicalAnimationModifiers, 0.f, true, false);
+	return true;
+}
+
+void URPGPhysicsReactionComponent::SetLocalPhysicalAnimationWeight(FName Bone, float Weight)
+{
+	if (PhysicsControl)
+		if (const FName* Modifier = BoneModifiers.Find(Bone); Modifier && LocalPhysicalAnimationModifiers.Contains(*Modifier))
+			PhysicsControl->SetBodyModifierPhysicsBlendWeight(*Modifier, FMath::Clamp(Weight, 0.f, 1.f), true, false);
+}
+
+void URPGPhysicsReactionComponent::EndLocalPhysicalAnimation(bool bRestoreAnimation)
+{
+	if (PhysicsControl && bRestoreAnimation && State == ERPGPhysicsReactionState::Animated)
+	{
+		PhysicsControl->SetBodyModifiersPhysicsBlendWeight(LocalPhysicalAnimationModifiers, 0.f, true, false);
+		PhysicsControl->SetBodyModifiersMovementType(LocalPhysicalAnimationModifiers, EPhysicsMovementType::Kinematic, true, false);
+		PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(LocalPhysicalAnimationModifiers, EResetToCachedTargetBehavior::ResetDuringUpdateControls, true, false);
+	}
+	LocalPhysicalAnimationModifiers.Reset();
 }
 
 void URPGPhysicsReactionComponent::HandleEnergyHit(const FRPGEnergyImpact& Impact)

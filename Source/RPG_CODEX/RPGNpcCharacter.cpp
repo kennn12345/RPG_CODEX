@@ -3,6 +3,7 @@
 #include "RPGAttributeSet.h"
 #include "RPGBodyMass.h"
 #include "RPGHitReactionComponent.h"
+#include "RPGReactivePhysicsComponent.h"
 #include "RPGBodyImpactComponent.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
@@ -47,7 +48,8 @@ ARPGNpcCharacter::ARPGNpcCharacter()
 	Stats = CreateDefaultSubobject<URPGCharacterStatsComponent>(TEXT("Stats"));
 	PhysicsReaction = CreateDefaultSubobject<URPGPhysicsReactionComponent>(TEXT("PhysicsReaction"));
 	HitReaction = CreateDefaultSubobject<URPGHitReactionComponent>(TEXT("HitReaction"));
-	// Physics bodies only for knockdowns / knockouts (whole-body ragdoll); ordinary hits use HitReaction.
+	ReactivePhysics = CreateDefaultSubobject<URPGReactivePhysicsComponent>(TEXT("ReactivePhysics"));
+	// Legacy PhysicsControl owns whole-body ragdoll; ReactivePhysics borrows upper-body modifiers for ordinary hits.
 	PhysicsReaction->bHitReactions = false;
 	// Realistic give, not flailing: legs stay on the animation (leg hits step instead), firm muscles, the struck part
 	// only half as weak, physics never more than half the pose, a gentle stagger wobble and a smooth recovery.
@@ -70,6 +72,9 @@ void ARPGNpcCharacter::BeginPlay()
 		// GASP's motion matching reads acceleration: path following must accelerate like a player, not set velocity.
 		Move->GetNavMovementProperties()->bUseAccelerationForPaths = true;
 		// This actor ticks first (a push sets this frame's velocity before movement runs).
+		// Movement normally installs the opposite dependency; explicitly reverse it rather than forming a cycle.
+		Move->bTickBeforeOwner = false;
+		PrimaryActorTick.RemovePrerequisite(Move, Move->PrimaryComponentTick);
 		Move->PrimaryComponentTick.AddPrerequisite(this, PrimaryActorTick);
 		Move->bRequestedMoveUseAcceleration = true;
 	}
@@ -82,6 +87,7 @@ void ARPGNpcCharacter::BeginPlay()
 		RPGBodyMass::Apply(Body, RPGBodyMass::TotalKgFor(BodyWeightLbs));
 	}
 	if (PhysicsReaction) PhysicsReaction->OnLimpEnding.AddUObject(this, &ARPGNpcCharacter::HandleLimpEnding);
+	if (PhysicsReaction) PhysicsReaction->OnLimpStarted.AddUObject(this, &ARPGNpcCharacter::OnRagdoll);
 	if (BodyImpact) BodyImpact->OnKnockedDown.AddUObject(this, &ARPGNpcCharacter::OnRagdoll);   // run into hard: down like a knockdown
 }
 
@@ -264,6 +270,11 @@ void ARPGNpcCharacter::ReactToHit(FName Bone, const FVector& Point, const FVecto
 	if (MaxImpulse > 0.f) Impulse = Impulse.GetClampedToMaxSize(MaxImpulse);
 	// Momentum: an attacker moving into the blow carries some of their weight x speed into it.
 	if (Attacker) Impulse += Attacker->GetVelocity() * RPGBodyMass::TotalKgFor(0.f) * MomentumTransfer;
+	if (ReactivePhysics && ReactivePhysics->ApplyHit(Bone,Point,Impulse))
+	{
+		HitReaction->ResetReaction(); // no additive torque stacked onto the physical-animation target
+		return;
+	}
 	HitReaction->AddHit(Bone, Point, Impulse);
 }
 

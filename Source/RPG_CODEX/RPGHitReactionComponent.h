@@ -28,6 +28,8 @@ public:
 
 	/** A hit on Bone at Point (world), pushing with Impulse (world, kg cm/s). */
 	void AddHit(FName Bone, const FVector& Point, const FVector& Impulse);
+	/** Clear an old additive reaction before handing its body to physical animation. */
+	void ResetReaction();
 
 	/** How strongly a given torque turns a joint (1 = the plain physics estimate). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Hit Reaction", meta = (ClampMin = "0"))

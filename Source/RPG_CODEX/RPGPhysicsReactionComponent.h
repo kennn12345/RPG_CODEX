@@ -106,6 +106,14 @@ public:
 	/** Fires once when a LIMP reaction starts fading back to the animation, while the pose is still the ragdoll's. The
 	 *  owner can move itself to where the body ended up first (the dummy stands up where it landed). */
 	FSimpleMulticastDelegate OnLimpEnding;
+	/** Called before a legacy controller takes over bodies. External local reactions must release their motors. */
+	FSimpleMulticastDelegate OnPhysicsOwnershipRequested;
+	/** Full-body transition notification, shared with externally requested knockdowns. */
+	FSimpleMulticastDelegate OnLimpStarted;
+	/** Local Physical Animation owns only these bodies while the legacy state stays Animated. */
+	bool BeginLocalPhysicalAnimation(const TArray<FName>& Bones);
+	void SetLocalPhysicalAnimationWeight(FName Bone, float Weight);
+	void EndLocalPhysicalAnimation(bool bRestoreAnimation);
 
 	/** Partial physics: bodies simulate under motors toward the animation, the limb holding HitBone yields. */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
@@ -333,6 +341,7 @@ public:
 	TObjectPtr<UPhysicsControlComponent> PhysicsControl;
 
 private:
+	TArray<FName> LocalPhysicalAnimationModifiers;
 	USkeletalMeshComponent* GetMesh() const;
 	bool SetUpControls();
 	void SetLimbMotorScale(FName Limb, float Scale);

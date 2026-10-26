@@ -1,0 +1,56 @@
+# Reactive NPC physics — phase one (2026-10-26)
+
+## Scope and current resume point
+
+User authorized phase-one Euphoria-inspired reactions through today (America/Chicago), including resumption after ordinary usage resets. This is original Chaos/Physical Animation integration, not Rockstar's engine. Do not expand into procedural walking/full-body active balance. Keep the fourteen custom get-ups; no evidence requires replacing them. Keep main, player controls, combat/Power interfaces and existing assets intact. Preserve the pre-existing untracked `Docs/GETUP_HANDOFF.md`.
+
+Starting commit: `2b9b4ef` on `gasp-integration` (already ahead of origin by one before this task). Backups of modified pre-existing sources are in `Saved/ReactivePhysics/Before`. No content assets have been changed.
+
+**Checked checkpoint / next action:** phase-one implementation is built and checked on the actual NPC. Final build `Build-I.log` succeeded; `FinalNpc30.log`, `FinalNpc120.log` and `Visual-Final60.log` contain the accepted final-path results and the separately retained Smoke failure described below. Sources are ready for normal play. Scheduled continuation through today may investigate only justified phase-one robustness/smoothness issues; preserve this checked version, avoid needless rebakes/repeated filming, and do not extend into active balance/stepping or alter Power to mask the existing Smoke flake. No permission pause is needed for already authorized implementation work. Stop at midnight America/Chicago (2026-10-27 05:00 UTC). Save an exact resume note if ordinary usage becomes unavailable; no purchases/model changes.
+
+## Actual architecture inspected
+
+`BP_RPGNpc` derives from `ARPGNpcCharacter`, based on GASP SandboxCharacter_CMC; mesh `SKM_UEFN_Mannequin`, Physics Asset `/Game/Characters/UEFN_Mannequin/Rigs/PA_UEFN_Mannequin`. Existing NPC ordinary hits used `URPGHitReactionComponent` animation-side torque springs; `URPGPhysicsReactionComponent`/PhysicsControl owned full ragdolls and kinematic pinned fades to `URPGBodyImpactComponent::StandUp`'s 14 custom matched get-ups. New component validates configured root `spine_02` against actual mesh and discovers all descendant physical bodies at runtime (15 upper bodies in inspected NPC). Feet and pelvis remain animated for local reactions. C++ integration logs record the actual mesh/class/asset, body names/masses and constraint limits; no assumption that all NPC rigs match is required.
+
+## Implementation
+
+- `URPGReactivePhysicsComponent` exposes `ApplyHit(Bone, WorldPoint, WorldImpulse, Intensity, ForceRagdoll)`, recovery, rig root, tunable inline Physical Animation profile and optional existing Physics Asset named profile. Invalid/missing bone/asset, zero/nonfinite input and conflicting legacy ownership return false without claiming the hit; NPC retains its established fallback.
+- Native `UPhysicalAnimationComponent` drives parent-relative orientations toward the live animation; Chaos joints retain lengths. Struck-body muscle strength yields then recovers. Body-mass caps limit local delta velocity and queued same-body bursts; upper-body weights localize the visible response, lower bodies stay anchored. Recover uses a quintic fade to exact zero before stopping simulation/motors; repeated hits retain current weight.
+- A small explicit ownership API in `RPGPhysicsReactionComponent` changes selected PhysicsControl modifiers to simulated/weighted while its state remains Animated. Its own motors stay disabled. Synchronous `OnPhysicsOwnershipRequested` relinquishes new motors before legacy powered/ragdoll control. Full ragdoll inherits current simulated transforms/velocities and local weight, then fades to full; `OnLimpStarted` stops NPC movement through existing OnRagdoll. Legacy recovery/get-ups still own return placement, settle and kinematic fade.
+- Explicitly reverse CharacterMovement's default owner tick dependency before the NPC's existing actor-before-movement prerequisite. The previous pair formed a cycle, making shove/animation ordering unreliable. This is restricted to NPCs; player order/controls are untouched.
+- Keep pose/bone refresh enabled and update-rate optimization off while the controller exists. For NPCs sharing PhysicsControl, `EnsurePoseEvaluation` saves and disables only that animation instance's `bUseMultiThreadedAnimationUpdate`, restoring it on teardown (and handling instance replacement). Rendered UE 5.8's editable-buffer cache otherwise intermittently became empty even with tick prerequisites and fresh visibility poses. The controlled per-instance synchronous run removed the warnings and reduced measured local hand speeds from ~921 to ~65 cm/s; the final production-path render measures68.14 cm/s. No global animation CVar, engine source or shared asset change. This per-NPC workaround has a CPU scheduling cost; large-crowd profiling is not yet performed.
+- NPC `ReactToHit` uses new component for supported upper-body hits and clears old additive torque if accepted. Leg/pelvis hit behavior and existing Power damage/knockdown/launch decisions remain. No second damage/hit-detection implementation. A missing component or disabled/unsupported setup retains the old path.
+- Debug `rpg.ReactivePhysics.Debug 1` or component `bDrawDebug`: bodies, hit point/impulse, target error and ownership diagnostics. Runtime getters and test CSV record weights, simulation, impulses and motion.
+
+## Defaults
+
+Inline profile: OrientationStrength=650; AngularDamping=90; MaxAngularForce=60000; HitMuscleScale=.45; MaxBlend=.65; BlendInSeconds=.08; HoldSeconds=.16; RecoverySeconds=.65. Named profile overrides per-body baseline drives if present; missing entries use inline values, and struck-muscle yield/recovery still applies.
+
+ImpulseScale=1; MaxLocalVelocityChange=300 cm/s; RagdollVelocityThreshold=700 cm/s (requested impulse / hit-body mass); bAutomaticRagdoll=true; RagdollSeconds=2; NeighborBlend=.32. Power's existing Knockdown/Launch route stays authoritative regardless of these thresholds. The reusable component requires the legacy recovery coordinator for an automatic/forced full ragdoll; standalone local reactions reject takeover of already simulating bodies. This is not an active standing-balance model.
+
+## Workflow and evidence
+
+Close Unreal before C++ builds. Build with `Build.bat RPG_CODEXEditor Win64 Development "-Project=C:/UNREAL PROJECTS/RPG_CODEX/RPG_CODEX.uproject" -WaitMutex -NoHotReloadFromIDE -gather` when adding sources; cached makefiles can otherwise omit a new test. Missing-test discovery is NOT a pass even if editor exits 0.
+
+Run actual map `/Game/RPG/Maps/L_DummyField`, `-ExecCmds="Automation RunTests RPG.Npc.ReactivePhysics" -TestExit="Automation Test Queue Empty" -unattended -nullrhi -UseFixedTimeStep -FPS=30/60/120`. Broader `RPG.Npc` includes Smoke and Collision. `Visual.ReactivePhysics` runs same assertions with actual rendering/camera/screenshots, not nullrhi. `RPG_REACTIVE_REVIEW_DIR` chooses fresh output folder. Fixtures use a disposable distant PIE floor/NPC, never save the level. Test covers invalid input, actual Chaos impulses, asymmetric/localized weights, repeated/recovery hits, exact release, disabled recovery, lower-body exclusion, actual energy interface routing, strong-impact motor handoff, custom get-up and another local hit afterwards.
+
+Initial run `Integration-A60.log` found no test because UBT hadn't gathered new source; superseded by Build-C and `Integration-B60.log` (actual test Success). Initial test hand speed peak339.65 cm/s, peak blend .65, six local impulses and full get-up completed ~12.92s; cycle warnings required the subsequent fix. Don't confuse final local-only `lowerMoved` metrics with ragdoll sampling in that first harness version. Latest harness restricts local sampling before the ragdoll interval.
+
+Historical Smoke light-punch knockdown flake and ~23% unmatched get-up starts were documented by Claude before this task. Don't hide/retune Power or replace get-ups to make tests green. No packaged build or multiplayer claim. Visual approval is still the user's; scripted engine tests aren't manual playtesting.
+
+## Final recorded results
+
+| Run | Result and evidence |
+|---|---|
+| Build-I.log | Succeeded; engine/toolchain deprecation warnings remain. No new compile errors. |
+| FinalNpc30.log | Collision PASS, ReactivePhysics PASS, Smoke PASS. Local hand peak87.56cm/s, peak blend.65;7 local impulses; no lower-body simulation during local interval; full ragdoll/get-up/post-get-up hit passed. |
+| FinalNpc120.log | Collision PASS, ReactivePhysics PASS; same local assertions, hand peak70.18cm/s. Smoke FAIL: Strength5 light punch classified Knockdown by unchanged Power System. Earlier Npc-B120 Smoke passed. Treat this as the previously documented flake, not an all-green suite. |
+| Visual-Final60.log | Actual rendered integration PASS using production settings (no test-only sync flag). Hand peak68.14cm/s, blend.65,7 impulses, finite transforms, zero local lower-body simulation, body takeover without teleport, existing custom get-up, post-get-up reaction and camera error0.000cm.380 screenshots at30Hz,1113x676. |
+
+Final focused/rendered NPC runs have no NPC pose-cache-empty warnings or tick dependency cycles. The broad Collision tests still log pre-existing **player** PhysicsControl cache warnings; player was deliberately outside this component's pose workaround. PoseSearch also reports asynchronous index warmup warnings during editor startup. Do not report globally warning-free logs.
+
+Rendered controls before synchronous evaluation (`Visual-B60`/`Visual-C60`) retained missing pose data and faster hands; C60 also failed a camera assertion comparing the previous camera cache against a newly relocated get-up capsule. The harness now compares the matching previous camera position, without widening its30cm threshold. The synchronous control `Visual-Sync60` passed with zero camera error. The final600cm/s local hand-speed guard would reject the prior921/1492cm/s paths; it is now passed at all final rates. These are regression measurements, not similarity scores or frame-rate performance benchmarks.
+
+Viewed final engine frame sequences through local/repeated hits, disable/fade, spell routing, full-body fall, settling, custom kneel/rise and standing. The12.67s preview is `C:/Users/cedar/Documents/Codex/2026-10-26/please-write-a-full-handoff-summary/outputs/Reactive-physics-phase1.mp4`;380 exported frames were all decoded/verified. Source1113x676 is cropped by one rightmost column to1112x676 for H.264, not resized. Logs/CSV/sheets/asset audit remain under `Saved/ReactivePhysics`. No map/Blueprint/Physics Asset/get-up asset was edited. `Docs/GETUP_HANDOFF.md` remains intentionally untracked and untouched.
+
+Remaining limits: user visual review; inherited Smoke classification flake and unmatched get-up starts; player cache warnings outside scope; no active balance or ground-contact IK, no crowd/replication/package validation. Mild hits are intentionally restrained, feet remain on locomotion and full loss of support is a true whole-body ragdoll. Future balancing/stepping should consume the component's hit/state data through a separate controller rather than stacking competing motors.

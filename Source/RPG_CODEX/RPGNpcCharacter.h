@@ -13,14 +13,15 @@ class URPGCharacterStatsComponent;
 class URPGPhysicsReactionComponent;
 class URPGHitReactionComponent;
 class URPGBodyImpactComponent;
+class URPGReactivePhysicsComponent;
 
 /**
  * A humanoid NPC on GASP's character setup (motion matching, foot placement): BP_RPGNpc is a copy of GASP's
  * SandboxCharacter_CMC reparented to this class, so it moves exactly like the player, walked by URPGNpcAIController.
  *
  * Hits (punches, kicks, energy spells) go through the Power System. Reactions stay realistic:
- *   - ordinary hits: the body gives from the hit point (URPGHitReactionComponent: torque on every joint up to the hips,
- *     on the animation) and recovers smoothly;
+ *   - ordinary upper-body hits: localized Chaos bodies give under Physical Animation muscles and fade back smoothly;
+ *     unsupported/leg hits retain URPGHitReactionComponent's animation-side torque and existing stepping;
  *   - and every hit pushes the body itself (force, direction, the attacker's momentum, its weight): it keeps facing
  *     its way while GASP's motion matching picks the footwork for that motion - a shuffle, a stumble, a sideways catch;
  *   - knockdown / launch / out of health: whole-body ragdoll, then a get-up chosen by how the body lies (face down,
@@ -45,6 +46,9 @@ public:
 	/** Ordinary hits: the body's give, calculated from where and how hard it was hit and applied on the animation. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
 	TObjectPtr<URPGHitReactionComponent> HitReaction;
+	/** Local Chaos/Physical Animation reactions; legacy springs remain the lower-body/failure fallback. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
+	TObjectPtr<URPGReactivePhysicsComponent> ReactivePhysics;
 	/** Body-to-body collisions (run into at speed: knocked down by momentum). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
 	TObjectPtr<URPGBodyImpactComponent> BodyImpact;
