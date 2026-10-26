@@ -149,6 +149,12 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1", ClampMax = "4"))
 	float RagdollGravityScale = 1.6f;
 
+	/** Total body weight (lb) of every humanoid (player and NPCs) unless the character sets its own. Every physics body
+	 *  part gets its realistic share of it (RPGBodyMass: head, neck, five spine pieces, pelvis, collarbones, upper arms,
+	 *  forearms, hands, thighs, below-the-knee, feet), so momentum and hit reactions follow real body weight. */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Weight", meta = (ClampMin = "40", ClampMax = "800"))
+	float HumanoidBodyWeightLbs = 200.f;
+
 	/** cm/s^2. Gravity used to work out launch speed. */
 	UPROPERTY(Config, EditAnywhere, Category = "Displacement Motion", meta = (ClampMin = "1"))
 	float Gravity = 980.f;

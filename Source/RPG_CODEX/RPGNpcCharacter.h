@@ -103,6 +103,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up", meta = (ClampMin = "0.1"))
 	float GetUpHurtRate = 0.7f;
 
+	/** Total body weight (lb) spread over the body parts by RPGBodyMass; 0 = the project's Humanoid Body Weight. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC", meta = (ClampMin = "0"))
+	float BodyWeightLbs = 0.f;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|NPC")
 	int32 HitCount = 0;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|NPC")

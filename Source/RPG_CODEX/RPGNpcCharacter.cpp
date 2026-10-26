@@ -1,6 +1,7 @@
 #include "RPGNpcCharacter.h"
 
 #include "RPGAttributeSet.h"
+#include "RPGBodyMass.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGHitCameraShake.h"
@@ -71,6 +72,8 @@ void ARPGNpcCharacter::BeginPlay()
 		// GASP's character mesh ignores visibility traces, so spells (and other traces) only found the capsule and passed
 		// through. The body takes them: they hit the actual bone.
 		Body->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		// Realistic weight for every body part (the baseline for momentum and hit reactions).
+		RPGBodyMass::Apply(Body, RPGBodyMass::TotalKgFor(BodyWeightLbs));
 	}
 	if (PhysicsReaction) PhysicsReaction->OnLimpEnding.AddUObject(this, &ARPGNpcCharacter::HandleLimpEnding);
 }

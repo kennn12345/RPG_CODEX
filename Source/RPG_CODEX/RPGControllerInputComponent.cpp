@@ -1,4 +1,5 @@
 #include "RPGControllerInputComponent.h"
+#include "RPGBodyMass.h"
 
 #include "RPGCameraModeComponent.h"
 #include "RPGCharacterStatsComponent.h"
@@ -59,6 +60,9 @@ void URPGControllerInputComponent::BeginPlay()
 
 	EnsureHelperComponents();
 	CreateInputActionsAndContexts();
+	// The player's body parts get the same realistic weight table as every humanoid.
+	if (const ACharacter* Character = Cast<ACharacter>(GetOwner()))
+		RPGBodyMass::Apply(Character->GetMesh(), RPGBodyMass::TotalKgFor(0.f));
 
 	if (APawn* Pawn = Cast<APawn>(GetOwner()))
 	{
