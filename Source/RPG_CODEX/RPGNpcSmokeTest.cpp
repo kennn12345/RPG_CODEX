@@ -59,7 +59,7 @@ namespace
 				bWalkOk = Walked >= FMath::Max(1, Npcs.Num() - 1);
 				// Hits: a normal punch on the first, a strong one on the second.
 				ACharacter* Player = UGameplayStatics::GetPlayerCharacter(World, 0);
-				if (URPGCharacterStatsComponent* PlayerStats = URPGCharacterStatsComponent::FindStats(Player)) PlayerStats->SetStatBaseByName(TEXT("Strength"), 5.f);
+				if (URPGCharacterStatsComponent* PlayerStats = URPGCharacterStatsComponent::FindStats(Player)) PlayerStats->SetStatBaseByName(TEXT("Strength"), 3.f);
 				Hit(Player, Npcs[0].Get(), TEXT("spine_05"));
 				if (Npcs.Num() > 1)
 				{
@@ -85,6 +85,20 @@ namespace
 				Camera->SetActorLocationAndRotation(Eye, (Look - Eye).Rotation());
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / FString::Printf(TEXT("Screenshots/NpcHit/hit_%02d_%.1fs.png"), Shot++, Now - HitAt), false, false);
 				LastShot = Now;
+			}
+			if (Phase == 1 && Npcs[0].IsValid() && Now - HitAt <= 3.f)
+			{
+				// Diagnostics: GASP's own Blueprint ragdoll flag, physics simulation and the reaction state on the punched NPC.
+				ARPGNpcCharacter* Target = Npcs[0].Get();
+				const FBoolProperty* Ragdolling = FindFProperty<FBoolProperty>(Target->GetClass(), TEXT("IsRagdolling"));
+				const bool bGaspRagdoll = Ragdolling && Ragdolling->GetPropertyValue_InContainer(Target);
+				if (bGaspRagdoll) bSawGaspRagdoll = true;
+				if (Now - LastDiag >= 0.1f)
+				{
+					LastDiag = Now;
+					UE_LOG(LogRPGInput, Display, TEXT("NPCDIAG t=%.1f push %.0f cm gaspRagdoll %d (prop %d) simulating %d reaction %d busy %d speed %.0f"), Now - HitAt, float(Target->LastPowerResult.Displacement), bGaspRagdoll, Ragdolling != nullptr,
+						Target->GetMesh()->IsSimulatingPhysics(), int32(Target->PhysicsReaction->GetReactionState()), Target->IsBusy(), Target->GetVelocity().Size());
+				}
 			}
 			if (Phase == 1)
 			{
@@ -126,7 +140,8 @@ namespace
 		TArray<TWeakObjectPtr<ARPGNpcCharacter>> Npcs;
 		TArray<FVector> StartSpots;
 		int32 Frames = 0, Phase = 0;
-		float Start = -1.f, HitAt = 0.f, LastShot = -1.f;
+		float Start = -1.f, HitAt = 0.f, LastShot = -1.f, LastDiag = -1.f;
+		bool bSawGaspRagdoll = false;
 		int32 Shot = 0;
 		ACameraActor* Camera = nullptr;
 		bool bWalkOk = false, bLightWentLimp = false, bHeavyWentLimp = false, bHeavyRecovered = false;

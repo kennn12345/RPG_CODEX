@@ -6,11 +6,13 @@
 #include "RPGCombatStateComponent.h"
 #include "RPGHitCameraShake.h"
 #include "RPGNpcAIController.h"
+#include "Navigation/PathFollowingComponent.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "RPGPowerSettings.h"
 #include "RPGPowerSystem.h"
 #include "RPG_CODEX.h"
 #include "AbilitySystemComponent.h"
+#include "AIController.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
@@ -123,7 +125,11 @@ bool ARPGNpcCharacter::IsBusy() const
 void ARPGNpcCharacter::StopForReaction(float Seconds)
 {
 	if (const UWorld* World = GetWorld()) BusyUntil = FMath::Max(BusyUntil, World->GetTimeSeconds() + Seconds);
-	if (AController* C = GetController()) C->StopMovement();
+	// Stop walking but keep the momentum: the body slows to a stop under its own braking instead of halting in one
+	// frame (which snapped the motion-matched pose from walking to idle right as the hit landed).
+	if (const AAIController* AI = Cast<AAIController>(GetController()))
+		if (UPathFollowingComponent* Path = AI->GetPathFollowingComponent())
+			Path->AbortMove(*this, FPathFollowingResultFlags::UserAbort, FAIRequestID::CurrentRequest, EPathFollowingVelocityMode::Keep);
 }
 
 void ARPGNpcCharacter::ReceiveMeleeHit_Implementation(const FRPGMeleeHitInfo& Hit)
@@ -232,6 +238,7 @@ void ARPGNpcCharacter::PlayBalanceStep(const FVector& Push, bool bHeavy, float F
 	const float Travel = float(Step->ExtractRootMotionFromRange(0., Step->GetPlayLength(), FAnimExtractContext(0., false)).GetTranslation().Size2D());
 	SetAnimRootMotionTranslationScale(Travel > 1.f ? FMath::Clamp(Distance / Travel, 0.1f, 1.5f) : 1.f);
 	ActiveReaction = Anim->PlaySlotAnimationAsDynamicMontage(Step, ReactionSlot, 0.12f, 0.3f);
+	UE_LOG(LogRPGInput, Log, TEXT("%s balance step %s, %.0f cm (clip %.0f cm)"), *GetActorNameOrLabel(), *Step->GetName(), Distance, Travel);
 	if (!ActiveReaction) SetAnimRootMotionTranslationScale(1.f);
 	StopForReaction(Step->GetPlayLength() + 0.4f);
 }
