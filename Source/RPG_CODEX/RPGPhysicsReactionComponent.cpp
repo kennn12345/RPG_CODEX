@@ -664,3 +664,15 @@ void URPGPhysicsReactionComponent::SetFlightFollow(bool bOn)
 		PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(AllModifiers, EResetToCachedTargetBehavior::ResetDuringUpdateControls, true, false);
 	}
 }
+
+void URPGPhysicsReactionComponent::Launch(const FVector& Velocity, const FVector& Point, float LimpSeconds)
+{
+	if (!bSetUp) return;
+	EnterFullRagdoll(LimpSeconds);
+	bWaitForSettle = true;
+	bVelocityPending = true;
+	PendingVelocity = Velocity;
+	PendingVelocityPoint = Point;
+	PendingVelocityFrames = 0;
+	ApplyPendingVelocity();
+}

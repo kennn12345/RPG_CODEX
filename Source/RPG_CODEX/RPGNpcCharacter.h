@@ -12,6 +12,7 @@ class UAnimMontage;
 class URPGCharacterStatsComponent;
 class URPGPhysicsReactionComponent;
 class URPGHitReactionComponent;
+class URPGBodyImpactComponent;
 
 /**
  * A humanoid NPC on GASP's character setup (motion matching, foot placement): BP_RPGNpc is a copy of GASP's
@@ -44,6 +45,9 @@ public:
 	/** Ordinary hits: the body's give, calculated from where and how hard it was hit and applied on the animation. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
 	TObjectPtr<URPGHitReactionComponent> HitReaction;
+	/** Body-to-body collisions (run into at speed: knocked down by momentum). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
+	TObjectPtr<URPGBodyImpactComponent> BodyImpact;
 
 	/** Speed (cm/s) a flinch / stagger hit gives the struck body part; times that part's weight = the hit's push. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
@@ -92,24 +96,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0", ClampMax = "1"))
 	float EnergyStepCharge = 0.25f;
 
-	/** Get-up clips (GASP), lying face down / on its back / on its left / right side, and where each first frame lies
-	 *  relative to the clip's root: pelvis X / Y (cm) and the pelvis-to-head direction (degrees), measured from the clips. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up")
-	TSoftObjectPtr<UAnimSequence> GetUpFaceDown;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up")
-	TSoftObjectPtr<UAnimSequence> GetUpFaceUp;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up")
-	TSoftObjectPtr<UAnimSequence> GetUpLeftSide;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up")
-	TSoftObjectPtr<UAnimSequence> GetUpRightSide;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up")
-	FVector GetUpFaceDownStart = FVector(2.8f, -10.7f, 84.6f);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up")
-	FVector GetUpFaceUpStart = FVector(0.1f, 3.0f, -92.1f);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up")
-	FVector GetUpLeftSideStart = FVector(-5.9f, -5.5f, -7.0f);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up")
-	FVector GetUpRightSideStart = FVector(-4.7f, -13.6f, 160.6f);
 	/** Get-up speed: this rate at full health, down to GetUpHurtRate near 0 (and when knocked out). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up", meta = (ClampMin = "0.1"))
 	float GetUpHealthyRate = 1.15f;

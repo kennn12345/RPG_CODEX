@@ -3,6 +3,7 @@
 #include "RPGAttributeSet.h"
 #include "RPGBodyMass.h"
 #include "RPGHitReactionComponent.h"
+#include "RPGBodyImpactComponent.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGHitCameraShake.h"
@@ -57,10 +58,7 @@ ARPGNpcCharacter::ARPGNpcCharacter()
 	PhysicsReaction->StaggerMotorScale = 0.85f;
 	PhysicsReaction->ReturnBlendTime = 0.45f;
 
-	GetUpFaceDown = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F.M_ragdoll_getup_stand_F"));
-	GetUpFaceUp = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B.M_ragdoll_getup_stand_B"));
-	GetUpLeftSide = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_L.M_ragdoll_getup_stand_L"));
-	GetUpRightSide = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_R.M_ragdoll_getup_stand_R"));
+	BodyImpact = CreateDefaultSubobject<URPGBodyImpactComponent>(TEXT("BodyImpact"));
 }
 
 void ARPGNpcCharacter::BeginPlay()
@@ -82,6 +80,7 @@ void ARPGNpcCharacter::BeginPlay()
 		RPGBodyMass::Apply(Body, RPGBodyMass::TotalKgFor(BodyWeightLbs));
 	}
 	if (PhysicsReaction) PhysicsReaction->OnLimpEnding.AddUObject(this, &ARPGNpcCharacter::HandleLimpEnding);
+	if (BodyImpact) BodyImpact->OnKnockedDown.AddUObject(this, &ARPGNpcCharacter::OnRagdoll);   // run into hard: down like a knockdown
 }
 
 void ARPGNpcCharacter::ApplyWalkIntent()
@@ -317,47 +316,18 @@ void ARPGNpcCharacter::HandleLimpEnding()
 	if (!Body) return;
 	if (!bDown) OnRagdoll();
 
-	// Stand up where the body lies: how it lies picks the get-up, and the capsule is turned and placed so that clip's
-	// first frame lies on the ragdoll (the fade back to animation then blends into it).
-	const FVector Pelvis = Body->GetBoneLocation(TEXT("pelvis"));
-	const FVector Left = (Body->GetBoneLocation(TEXT("thigh_l")) - Body->GetBoneLocation(TEXT("thigh_r"))).GetSafeNormal();
-	const FVector Front = FVector::CrossProduct(Body->GetBoneLocation(TEXT("spine_05")) - Pelvis, Left).GetSafeNormal();
-	const bool bOnSide = FMath::Abs(Left.Z) > FMath::Abs(Front.Z);
-	const bool bFaceDown = !bOnSide && Front.Z < 0.f;
-	const bool bLeftDown = bOnSide && Left.Z < 0.f;
-	UAnimSequence* GetUp = (bOnSide ? (bLeftDown ? GetUpLeftSide : GetUpRightSide) : (bFaceDown ? GetUpFaceDown : GetUpFaceUp)).LoadSynchronous();
-	const FVector Start = bOnSide ? (bLeftDown ? GetUpLeftSideStart : GetUpRightSideStart) : (bFaceDown ? GetUpFaceDownStart : GetUpFaceUpStart);
-
-	FHitResult Ground;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(RPGNpcGetUp), false, this);
-	const bool bGround = GetWorld()->LineTraceSingleByChannel(Ground, Pelvis + FVector(0.f, 0.f, 80.f), Pelvis - FVector(0.f, 0.f, 300.f), ECC_Visibility, Params);
-	const FVector Head = Body->GetBoneLocation(TEXT("head")) - Pelvis;
-	const float MeshYaw = FMath::RadiansToDegrees(FMath::Atan2(Head.Y, Head.X)) - Start.Z;
-	const FVector Offset = FRotator(0.f, MeshYaw, 0.f).RotateVector(FVector(Start.X, Start.Y, 0.f));
-	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	const FVector Target(Pelvis.X - Offset.X, Pelvis.Y - Offset.Y, (bGround ? Ground.ImpactPoint.Z : Home.Z - HalfHeight) + HalfHeight + 1.f);
-	SetActorLocationAndRotation(bGround ? Target : Home, FRotator(0.f, MeshYaw - Body->GetRelativeRotation().Yaw, 0.f), false, nullptr, ETeleportType::None);
-
-	if (UCharacterMovementComponent* Move = GetCharacterMovement()) Move->SetMovementMode(MOVE_Walking);
+	// Stand up where the body lies (the shared get-up, chosen by how the body lies). Hurt bodies get up slower.
+	const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
+	const float HealthLeft = bKnockedOut || !A || A->GetMaxHealth() <= 0.f ? 0.f : FMath::Clamp(A->GetHealth() / A->GetMaxHealth(), 0.f, 1.f);
 	float Duration = 1.f;
-	if (UAnimInstance* Anim = Body->GetAnimInstance(); Anim && GetUp)
-	{
-		// Hurt bodies get up slower.
-		const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
-		const float HealthLeft = bKnockedOut || !A || A->GetMaxHealth() <= 0.f ? 0.f : FMath::Clamp(A->GetHealth() / A->GetMaxHealth(), 0.f, 1.f);
-		const float Rate = FMath::Lerp(GetUpHurtRate, GetUpHealthyRate, HealthLeft);
-		ActiveReaction = Anim->PlaySlotAnimationAsDynamicMontage(GetUp, ReactionSlot, 0.f, 0.35f, Rate);
-		Duration = GetUp->GetPlayLength() / Rate;
-		UE_LOG(LogRPGInput, Log, TEXT("%s gets up %s (%s) at %.2fx"), *GetActorNameOrLabel(),
-			bOnSide ? (bLeftDown ? TEXT("from its left side") : TEXT("from its right side")) : (bFaceDown ? TEXT("from face down") : TEXT("from its back")),
-			*GetUp->GetName(), Rate);
-	}
+	ActiveReaction = URPGBodyImpactComponent::StandUp(this, FMath::Lerp(GetUpHurtRate, GetUpHealthyRate, HealthLeft), Duration);
+	if (Duration <= 0.f) Duration = 1.f;
 	bDown = false;
 	StopForReaction(Duration + 0.5f);
 	if (bKnockedOut)
 	{
 		if (UAbilitySystemComponent* AbilitySystem = Stats ? Stats->GetAbilitySystem() : nullptr)
-			if (const URPGAttributeSet* A = Stats->GetAttributes())
+			if (A)
 				AbilitySystem->SetNumericAttributeBase(URPGAttributeSet::GetHealthAttribute(), A->GetMaxHealth());
 		bKnockedOut = false;
 	}

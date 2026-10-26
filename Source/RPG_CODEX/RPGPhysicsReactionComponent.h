@@ -148,6 +148,10 @@ public:
 	 *  motors at FlightMotorScale, so it trails, swings out and catches up when the leader turns, climbs or dives. */
 	UFUNCTION(BlueprintCallable, Category = "RPG|Physics Reaction")
 	void SetFlightFollow(bool bOn);
+
+	/** Whole-body ragdoll moving at Velocity (world cm/s; body parts near Point a little more), limp for LimpSeconds
+	 *  after it settles. Collisions, throws, explosions. */
+	void Launch(const FVector& Velocity, const FVector& Point, float LimpSeconds);
 	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
 	bool IsFlightFollowing() const { return bFlightFollow; }
 
