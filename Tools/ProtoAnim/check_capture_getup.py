@@ -1,13 +1,16 @@
 """Checks the shipped recording's actual baked transforms, not just its authoring parameters."""
 import json
 import math
+import sys
 from pathlib import Path
 import protoanim as p
 import getupcheck as g
 from getups import CONTACT
 
 assert p.SP.NAME == 'uefn', 'Use RPG_SKEL=uefn'
-c = json.loads((Path(__file__).parent/'capture_getups_uefn.json').read_text())['RPG_GetUp_FaceDown_Capture8614']
+manifest = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent/'capture_getups_uefn.json'
+name = sys.argv[2] if len(sys.argv) > 2 else 'RPG_GetUp_FaceDown_Capture8614'
+c = json.loads(manifest.read_text())[name]
 assert c['frames'] == len(c['poses']) and c['fps'] == 60
 worst_floor = 999.
 for i, pose in enumerate(c['poses']):

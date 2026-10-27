@@ -55,6 +55,7 @@ namespace
 		{ TEXT("FaceUp_RollRight"), EGetUpKind::Roll, TEXT("RightRoll") },
 		// Approved phone capture: natural push, knee tuck and rise, retargeted to the gameplay skeleton.
 		{ TEXT("FaceDown_Capture8614"), EGetUpKind::Stand, TEXT("CapturedPush") },
+		{ TEXT("FaceUp_Capture8611"), EGetUpKind::Stand, TEXT("CapturedSitTurn") },
 	};
 
 	/** Body pose features compared between the ragdoll and the clips: where these bones are relative to the hips, in a
@@ -442,8 +443,8 @@ bool FRPGGetUpVarietyTest::RunTest(const FString&)
 	const auto& Samples=GetUpSamples();
 	TSet<FName> Loaded,Styles;
 	for (const auto& S:Samples) { Loaded.Add(S.Clip->GetFName()); Styles.Add(FName(S.GetUp->Style)); }
-	TestEqual(TEXT("All 30 custom recovery clips loaded"),Loaded.Num(),30);
-	TestEqual(TEXT("Four visibly different recovery styles"),Styles.Num(),4);
+	TestEqual(TEXT("All 31 custom recovery clips loaded"),Loaded.Num(),31);
+	TestEqual(TEXT("Five visibly different recovery styles"),Styles.Num(),5);
 	int32 Poses=0,Selections=0;
 	for (const auto& Source:Samples)
 	{
@@ -480,6 +481,47 @@ bool FRPGGetUpCaptureTest::RunTest(const FString&)
 	int32 Close=0;bool bFadeable=false;
 	const FGetUpSample* Pick=ChooseGetUp(Start->Features,false,NAME_None,NAME_None,Close,bFadeable);
 	if (TestNotNull(TEXT("Matching prone landing has a recovery"),Pick))
+	{
+		TestEqual(TEXT("Matching capture start selects the recorded recovery"),Pick->Clip->GetFName(),Name);
+		TestTrue(TEXT("Capture selection keeps the limb-turn bound"),bFadeable && LargestSegmentTurn(Start->Features,Pick->Features)<=MaxSegmentTurn);
+	}
+	const FReferenceSkeleton& Ref=Clip->GetSkeleton()->GetReferenceSkeleton();
+	for (double T=0.;T<=Clip->GetPlayLength();T+=1./60.)
+	{
+		const FTransform Root=ClipBoneTransform(Clip,Ref,0,T);
+		if (!Root.GetLocation().IsNearlyZero(.01f) || !Root.GetRotation().Equals(FQuat::Identity,.0001f))
+		{
+			AddError(TEXT("Recorded get-up moves the root; recovery placement owns displacement"));break;
+		}
+	}
+	UAnimSequence* Idle=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Stand_Idle_Loop.M_Neutral_Stand_Idle_Loop"));
+	if (TestNotNull(TEXT("GASP idle exists"),Idle))
+	{
+		TestEqual(TEXT("Capture uses the gameplay skeleton"),Clip->GetSkeleton(),Idle->GetSkeleton());
+		for (const FFeatureBone& Bone:FeatureBones)
+		{
+			const int32 Index=Ref.FindBoneIndex(Bone.Bone);
+			const FVector End=ClipBoneTransform(Clip,Ref,Index,Clip->GetPlayLength()).GetLocation();
+			const FVector Stand=ClipBoneTransform(Idle,Ref,Index,0.).GetLocation();
+			TestTrue(FString::Printf(TEXT("Capture ends in GASP idle: %s"),Bone.Bone),!End.ContainsNaN() && End.Equals(Stand,.5f));
+		}
+	}
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGGetUpCapture8611Test,"RPG.Npc.GetUpCapture8611",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)
+bool FRPGGetUpCapture8611Test::RunTest(const FString&)
+{
+	const FName Name(TEXT("RPG_GetUp_FaceUp_Capture8611"));
+	const auto& Samples=GetUpSamples();
+	const FGetUpSample* Start=Samples.FindByPredicate([&](const FGetUpSample& S){return S.Clip->GetFName()==Name && S.Time==0.f;});
+	if (!TestNotNull(TEXT("Approved capture is in the production get-up table"),Start)) return false;
+	UAnimSequence* Clip=Start->Clip;
+	FPoseFeatures Opposite=Start->Features;Opposite.ChestFacing=-Opposite.ChestFacing;
+	TestTrue(TEXT("Matching limb positions do not hide an opposite-facing torso"),ChestTurn(Start->Features,Opposite)>179.f);
+	TestTrue(TEXT("Captured performance and closing steps retained"),Clip->GetPlayLength()>5.f && Clip->GetPlayLength()<8.f);
+	int32 Close=0;bool bFadeable=false;
+	const FGetUpSample* Pick=ChooseGetUp(Start->Features,false,NAME_None,NAME_None,Close,bFadeable);
+	if (TestNotNull(TEXT("Matching supine landing has a recovery"),Pick))
 	{
 		TestEqual(TEXT("Matching capture start selects the recorded recovery"),Pick->Clip->GetFName(),Name);
 		TestTrue(TEXT("Capture selection keeps the limb-turn bound"),bFadeable && LargestSegmentTurn(Start->Features,Pick->Features)<=MaxSegmentTurn);
