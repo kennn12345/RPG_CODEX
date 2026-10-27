@@ -16,7 +16,7 @@ for name,c in clips.items():
     assert c['fps']==60 and c['frames']==len(c['poses'])
     assert not g.check_clip(name,c),(name,'anatomy')
     worst_floor=1000.;worst_ball=0.;max_step=0.;previous=None;hips=0.;head=0.;forward=-1.e6
-    min_elbow=180.;max_arm_turn=0.;max_extended_roll=0.;right_higher=-1000.;pelvis_bank=chest_bank=0.
+    min_elbow=180.;max_arm_turn=0.;max_extended_roll=0.;right_higher=-1000.;hike_excess=-1000.;pelvis_bank=chest_bank=0.
     anchor=p.to_cs(stance)
     for i,local in enumerate(c['poses']):
         assert local['root']==[[0.,0.,0.,1.],[0.,0.,0.]],(name,i,'root')
@@ -29,6 +29,11 @@ for name,c in clips.items():
                 assert abs(sum(x*y for x,y in zip(q,REFERENCE_FIST[b][0])))>1.-1.e-6,(name,i,b,'open retargeted fingers')
         cs=p.to_cs(local)
         right_higher=max(right_higher,cs['upperarm_r'][1][2]-cs['upperarm_l'][1][2])
+        # allowed: 1.5 cm in guard; otherwise 4 cm, rising to 12 cm only while the right elbow is raised up near or
+        # above its shoulder (a cocked cross load lifts the shoulder blade; a low elbow - the extension - may not)
+        up=cs['lowerarm_r'][1][2]-cs['upperarm_r'][1][2]
+        allowed=1.5 if 'CombatStance' in name else 4.+8.*min(1.,max(0.,(up+10.)/20.))
+        hike_excess=max(hike_excess,cs['upperarm_r'][1][2]-cs['upperarm_l'][1][2]-allowed)
         pelvis_bank=max(pelvis_bank,abs(math.degrees(math.asin(max(-1.,min(1.,g.frame(cs,'pelvis')[0][2]))))))
         chest_bank=max(chest_bank,abs(math.degrees(math.asin(max(-1.,min(1.,g.frame(cs,'spine_05')[0][2]))))))
         for s in 'lr':
@@ -62,7 +67,7 @@ for name,c in clips.items():
         previous=cs
     assert worst_floor>=-.05,(name,'floor clearance',worst_floor)
     guard='CombatStance' in name
-    assert right_higher<=(1.55 if guard else 4.05),(name,'right shoulder hike',right_higher)
+    assert hike_excess<=.05,(name,'right shoulder hike beyond its allowance',hike_excess,right_higher)
     assert pelvis_bank<=(.55 if guard else 3.05),(name,'pelvis lateral bank',pelvis_bank)
     assert chest_bank<=(.55 if guard else 5.05),(name,'chest lateral bank',chest_bank)
     # Global arm direction includes the intended fast shoulder/body turn. Test

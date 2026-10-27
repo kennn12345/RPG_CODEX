@@ -95,9 +95,16 @@ def repair_reference_arm(local,s,target,pole,rotation):
     for bone in [upper,lower,end]:
         local[bone]=(p.qnorm(p.qmul(p.qconj(cs[p.PARENT[bone]][0]),cs[bone][0])),local[bone][1])
 
+# A raised elbow rotates the shoulder blade up and lifts the shoulder: the filmed cross cocks its right elbow up level
+# with the head before driving. So beyond guard the cap grows with the right elbow's height above its shoulder, from
+# 4 cm (elbow 10 cm below) to 4 + COCKED_RISE (elbow 10 cm above); a low elbow - guard, the extension - stays capped.
+COCKED_RISE=float(os.environ.get('RPG_REF_COCKED_RISE','8'))
+
 def shoulder_cap(local,guard):
     """How far the right shoulder may sit above the left (cm)."""
-    return 1.5 if guard else 4.
+    if guard:return 1.5
+    cs=p.to_cs(local);up=cs['lowerarm_r'][1][2]-cs['upperarm_r'][1][2]
+    return 4.+COCKED_RISE*min(1.,max(0.,(up+10.)/20.))
 
 def settle_right_shoulder(local,limit):
     cs=p.to_cs(local);excess=cs['upperarm_r'][1][2]-cs['upperarm_l'][1][2]-limit
@@ -225,12 +232,20 @@ def finish(local,planted=False,guard=False):
         cs=p.to_cs(local)
         view_arm(local,s,cs['hand_'+s][1],cs['hand_'+s][0],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]))
         if g.wrist(p.to_cs(local),s)>55.:straight_wrist(local,s)
+    # the cap follows the elbow's height, and solving the arm can lower the elbow: hold the solved pose to its own cap
+    for _ in range(4):
+        cs=p.to_cs(local);cap=shoulder_cap(local,guard)
+        if cs['upperarm_r'][1][2]-cs['upperarm_l'][1][2]<=cap+.03:break
+        settle_right_shoulder(local,cap-.1)
+    if g.wrist(p.to_cs(local),'r')>55.:straight_wrist(local,'r')
     return follow_ik(local)
 
 def clip(name,rows,keys,**info):
     return dict(name=name,bones=p.BONES,fps=FPS,frames=len(rows),poses=rows,keys=keys,
         source='Visible player punches in ScreenRecording_10-27-2026 05-26-11_1.mov; manual 2D fit with RamsterZ Combo03 3D prior',
         staging=True,certified_accuracy=False,**info)
+
+ELBOW_DEFINED=float(os.environ.get("RPG_REF_ELBOW_DEFINED","10"))
 
 def view_arm(local,s,target,rotation,pole):
     """Choose the nearest elbow plane that keeps the camera-fit arm outside the torso/head."""
@@ -239,7 +254,12 @@ def view_arm(local,s,target,rotation,pole):
     # hinge from an anatomical outside/down direction instead of that ambiguous
     # fitted pole, keeping the elbow outside the ribs through extension.
     left,forward,_=g.frame(cs,'spine_05')
-    pole=p.add(p.add(p.mul(left,30. if s=='l' else -30.),p.mul(forward,-8.)),[0.,0.,-25.])
+    anatomical=p.add(p.add(p.mul(left,30. if s=='l' else -30.),p.mul(forward,-8.)),[0.,0.,-25.])
+    # ...but where the arm is clearly bent its own elbow is well defined (the filmed cross cocks it up and out wide,
+    # and the fixed outside/down seed tucked it, 100+ px off the filmed elbow): seed from the pose's elbow when it
+    # sits ELBOW_DEFINED cm or more off the shoulder-wrist line, the anatomical direction only near full extension.
+    elbow=p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]);off=p.sub(elbow,p.mul(axis,p.dot(elbow,axis)))
+    pole=elbow if p.length(off)>=ELBOW_DEFINED else anatomical
     for angle in [0]+[sign*a for a in range(3,181,3) for sign in (1,-1)]:
         trial=copy.deepcopy(original)
         repair_reference_arm(trial,s,target,p.qrot(p.qaxis(axis,angle),pole),rotation)
