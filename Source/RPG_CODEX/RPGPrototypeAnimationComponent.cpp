@@ -296,6 +296,22 @@ FString URPGPrototypeAnimationComponent::SetupAimAnimInstance()
 
 UAnimSequence* URPGPrototypeAnimationComponent::LoadFor(const TSoftObjectPtr<UAnimSequence>& Clip, const USkeleton* Skeleton)
 {
+    // Resolve the recorded stance even for existing Blueprints with the original soft reference serialized.
+    // Other rigs retain their fitted stance; actor facing remains owned by combat movement/aim.
+    if (Skeleton && Skeleton->GetName() == TEXT("SK_UEFN_Mannequin"))
+    {
+        const FString Requested = Clip.GetAssetName();
+        const TCHAR* Recorded = Requested == TEXT("RPG_Proto_CombatStance") ? TEXT("RPG_CombatStance_Capture8619")
+            : Requested == TEXT("RPG_FP_CombatStance") ? TEXT("RPG_FP_CombatStance_Capture8619") : nullptr;
+        if (!Recorded && (Requested.StartsWith(TEXT("RPG_Proto_Punch_")) || Requested.StartsWith(TEXT("RPG_FP_Punch_"))
+            || Requested == TEXT("RPG_Proto_UnarmedGuard") || Requested == TEXT("RPG_FP_UnarmedGuard"))) Recorded = *Requested;
+        if (Recorded)
+        {
+            const FString RecordedPath = FString::Printf(TEXT("/Game/RPG/Animations/CapturedStances/%s.%s"), Recorded, Recorded);
+            UAnimSequence* Captured = LoadObject<UAnimSequence>(nullptr, *RecordedPath);
+            if (Captured && Captured->GetSkeleton() == Skeleton) return Captured;
+        }
+    }
     UAnimSequence* Sequence = Clip.LoadSynchronous();
     if (!Skeleton || (Sequence && Sequence->GetSkeleton() == Skeleton)) return Sequence;
     const FString Name = Clip.GetAssetName();
@@ -379,8 +395,8 @@ void URPGPrototypeAnimationComponent::BuildPresentationMap(const USkeleton* Skel
     const TPair<TSoftObjectPtr<UAnimSequence>*, TSoftObjectPtr<UAnimSequence>*> Pairs[] = {{&RightPunch, &FirstPersonRightPunch}, {&LeftPunch, &FirstPersonLeftPunch}, {&RightPunchCharged, &FirstPersonRightPunchCharged}, {&LeftPunchCharged, &FirstPersonLeftPunchCharged}, {&RightFrontKick, &FirstPersonRightFrontKick}, {&LeftFrontKick, &FirstPersonLeftFrontKick}, {&RightFrontKickCharged, &FirstPersonRightFrontKickCharged}, {&LeftFrontKickCharged, &FirstPersonLeftFrontKickCharged}, {&UnarmedGuard, &FirstPersonUnarmedGuard}, {&CombatStance, &FirstPersonCombatStance}};
     for (const auto& Pair : Pairs)
     {
-        UAnimSequence* ThirdPerson = Pair.Key->LoadSynchronous();
-        UAnimSequence* FirstPerson = Pair.Value->LoadSynchronous();
+        UAnimSequence* ThirdPerson = LoadFor(*Pair.Key, Skeleton);
+        UAnimSequence* FirstPerson = LoadFor(*Pair.Value, Skeleton);
         if (ThirdPerson && FirstPerson && FirstPerson->GetSkeleton() == Skeleton) FirstPersonClips.Add(ThirdPerson, FirstPerson);
     }
 }
