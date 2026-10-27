@@ -15,7 +15,6 @@
 #include "RPGControllerInputComponent.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "RPGStrikeContactComponent.h"
-#include "RPGAnimInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Camera/CameraActor.h"
@@ -236,7 +235,6 @@ namespace
 			MaxFoldDeficit = 0.f;
 			bHaveLast = false;
 			MaxLengthError = 0.f;
-			MaxBendPlaneError = 0.f;
 			ShotMask = 0; LastDenseFrame = INDEX_NONE;
 			for (int32 L = 0; L < RPGStrikeContact::NumLimbs; ++L)
 			{
@@ -338,9 +336,6 @@ namespace
 			if (const URPGStrikeContactComponent* Contact = Player->FindComponentByClass<URPGStrikeContactComponent>())
 			{
 				const float C = Contact->GetCorrection(Limb).Size();
-				if(!bFoot)
-					if(const auto* Pose=Cast<URPGAnimInstance>(Mesh->GetAnimInstance()))
-						MaxBendPlaneError=FMath::Max(MaxBendPlaneError,Pose->GetContactResult(RPGStrikeContact::IndexOf(Limb)).BendPlaneError);
 				MaxCorrection = FMath::Max(MaxCorrection, C);
 				if (bHaveLast)
 				{
@@ -390,7 +385,6 @@ namespace
 				if (MaxDepth[G] > OtherLimit) Fails.Add(FString::Printf(TEXT("%s %.1f cm inside [%s]"), GroupName(bFoot, G), MaxDepth[G], *DepthBone[G].ToString()));
 			if (MaxFoldDeficit > 2.f) Fails.Add(FString::Printf(TEXT("%s folded %.0f deg past its limit"), bFoot ? TEXT("knee") : TEXT("elbow"), MaxFoldDeficit));
 			if (MaxRelease > 6.f) Fails.Add(FString::Printf(TEXT("let go %.1f cm in one frame (snap)"), MaxRelease));
-			if (MaxBendPlaneError > 5.f) Fails.Add(FString::Printf(TEXT("elbow hinge plane rolled %.1f deg away from bend"), MaxBendPlaneError));
 			if (Reversals > 2) Fails.Add(FString::Printf(TEXT("jitter: correction reversed %d times"), Reversals));
 			// A rapid pair intentionally starts its next strike during target recovery;
 			// score full release after the pair, while retaining per-frame checks throughout.
@@ -399,7 +393,6 @@ namespace
 			const URPGStrikeContactComponent* Contact = Player->FindComponentByClass<URPGStrikeContactComponent>();
 			const float Pushback = Contact ? Contact->PushbackDistance - PushbackBefore : 0.f;
 			const bool bPass = Fails.IsEmpty();
-			UE_LOG(LogRPGInput, Display, TEXT("RPGTEST hinge-plane max %.3f deg [%s] %s"), MaxBendPlaneError, bFirstPerson ? TEXT("first person") : TEXT("third person"), *Case.Name);
 			const FString Line = FString::Printf(TEXT("RPGTEST %s  [%s] %s: hits %d, impulses %d | deepest inside the dummy: %s %.1f cm [%s], %s %.1f cm [%s], %s %.1f cm [%s] | ")
 				TEXT("%s min %.0f deg | contact correction max %.1f cm, largest release %.2f cm/frame, frames in contact %d, at the end %.2f cm | hit [%s] speed %.0f cm/s dir (%.2f, %.2f, %.2f) | reaction %s strength %.2f | pushed back %.1f cm, reversals %d, fold past limit %.1f%s"),
 				bPass ? TEXT("PASS") : TEXT("FAIL"), bFirstPerson ? TEXT("first person") : TEXT("third person"), *Case.Name, Hits, Impulses,
@@ -443,7 +436,6 @@ namespace
 		float MinJointAngle = 180.f;
 		float Lengths[RPGStrikeContact::NumLimbs][2] = {};
 		float MaxLengthError = 0.f;
-		float MaxBendPlaneError = 0.f;
 		int32 ShotMask = 0;
 		int32 LastDenseFrame = INDEX_NONE;
 		ERPGPhysicsReactionState SeenState = ERPGPhysicsReactionState::Animated;

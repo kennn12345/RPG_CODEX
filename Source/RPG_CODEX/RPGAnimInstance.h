@@ -54,7 +54,6 @@ private:
 	FRPGLimbContactResult ContactResults[RPGStrikeContact::NumLimbs];
 	float ContactReleaseTime = 0.06f;
 	float ContactPressureHold = 0.f;
-	bool bReferenceArmContact = false;
 	TArray<class UAnimSequence*> FlightClips;
 	float FlightWeight = 0.f, FlightPhase = 0.f;
     float FlightTurn = 0.f, FlightActionTime = 0.f, FlightActionWeight = 0.f;
@@ -115,7 +114,6 @@ public:
 	UPROPERTY(Transient)
 	float ContactReleaseTime = 0.06f;
 	float ContactPressureHold = 0.f;
-	bool bReferenceArmContact = false;
 
 	/** What the contact did to this limb in the current pose (component space). */
 	FRPGLimbContactResult GetContactResult(int32 Limb) const;
