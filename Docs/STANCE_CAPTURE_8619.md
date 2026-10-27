@@ -65,3 +65,12 @@ At the user's request, lowered both stance fists by 5 cm in third person and app
 `LowerHands-Structure.log`: both bakes pass the existing structure and anatomy checks. Comparing every frame against the prior bake gives exactly 5 cm lower third-person hands, and 4.987–5 cm lower first-person hands. `LowerHands-Import.log` confirms both updated assets imported. The full import report still has 44 entries.
 
 `LowerHands-Gameplay.log`: CapturedStance, CapturedStanceFirstPerson, FirstPersonSteadiness and Visual.CapturedStance all PASS. Third-person maximum actor yaw variation 0.3493 degrees with zero travel; first person zero yaw/travel. Rendered stance, planted feet and punch return were visually checked. Updated preview: `FightStance-IMG8619-lowered-hands.mp4`.
+## Forward clearance and width — October 27, 2026
+
+At the user's request, moved both stance hands 5 cm forward and increased total hand spacing by 5 cm (2.5 cm outward per hand). The prior 5 cm lowering is retained. Parameters are `HAND_FORWARD_CM=5.0`, `HAND_SPREAD_CM=5.0` and `HAND_LOWER_CM=5.0` in `capture_stance8619.py`.
+
+Every third-person frame evaluates to exactly +5 cm forward, +/-2.5 cm outward and unchanged height relative to the lowered stance. The first-person left arm initially hit its reach limit; `fit_view_shoulder` now protracts the clavicle only as far as needed, using a continuous reach solve without stretching bones. Final first-person offsets are approximately +5.0–5.15 cm forward and 2.5 cm outward per hand, with height preserved within 0.01 cm. Torso, feet, facing and timing remain intact.
+
+`ForwardSpread-Structure-C.log`: both loops pass structure, hinge, planted-foot, seam and full anatomy checks. `ForwardSpread-Import-B.log`: both final assets imported; original report entries remain preserved (44 total). `ForwardSpread-Gameplay.log`: CapturedStance, CapturedStanceFirstPerson, FirstPersonSteadiness and Visual.CapturedStance all PASS. Actual player travel remains zero; third-person yaw variation is the same 0.3493 degrees from normal aim behavior. Rendered stance and punch return were visually checked.
+
+Updated preview: `FightStance-IMG8619-forward-wider.mp4`, 247 verified frames at 30 Hz (8.233 seconds), 1118x730, exported from gameplay timestamps.

@@ -19,6 +19,33 @@ TP = 'RPG_CombatStance_Capture8619'
 FP = 'RPG_FP_CombatStance_Capture8619'
 FPS = 60
 HAND_LOWER_CM = 5.0
+HAND_FORWARD_CM = 5.0
+HAND_SPREAD_CM = 5.0  # Total additional spacing; half per hand.
+
+
+def hand_offset(side):
+    return [HAND_SPREAD_CM*.5*(1. if side=='l' else -1.), HAND_FORWARD_CM, -HAND_LOWER_CM]
+
+
+def fit_view_shoulder(local,side,target):
+    """Protract only as needed for a reachable first-person hand target; retain bone lengths."""
+    cs=p.to_cs(local);bone='clavicle_'+side;parent=p.PARENT[bone]
+    axis=check.frame(cs,'spine_05')[2];rotation=cs[bone][0]
+    inverse=p.qconj(cs[parent][0])
+    def reachable(angle):
+        turn=p.qaxis(axis,angle*(1. if side=='l' else -1.))
+        local[bone]=(p.qnorm(p.qmul(inverse,p.qmul(turn,rotation))),local[bone][1])
+        posed=p.to_cs(local);shoulder=posed['upperarm_'+side][1]
+        reach=p.length(p.sub(posed['lowerarm_'+side][1],shoulder))+p.length(p.sub(posed['hand_'+side][1],posed['lowerarm_'+side][1]))
+        return p.length(p.sub(target,shoulder))<=reach-.1
+    if reachable(0.):return
+    low,high=0.,40.
+    if reachable(high):
+        for _ in range(14):
+            middle=(low+high)*.5
+            if reachable(middle):high=middle
+            else:low=middle
+    reachable(high)
 
 
 def average(poses):
@@ -103,7 +130,7 @@ def build(source):
                 repair_chain(local,'thigh_'+side,'calf_'+side,'foot_'+side,feet[side][1],
                              p.sub(cs['calf_'+side][1],cs['thigh_'+side][1]),feet[side][0])
                 cs=p.to_cs(local)
-                hand_target=p.add(cs['hand_'+side][1],[0.,0.,-HAND_LOWER_CM])
+                hand_target=p.add(cs['hand_'+side][1],hand_offset(side))
                 repair_chain(local,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,hand_target,
                              p.sub(cs['lowerarm_'+side][1],cs['upperarm_'+side][1]))
             poses.append(follow_ik(local))
@@ -111,9 +138,10 @@ def build(source):
             for side in 'lr':
                 cs=p.to_cs(local)
                 # Keep the recorded breathing but fit resting fists to the established first-person view.
-                lowered_anchor=p.add(arm_anchor['hand_'+side][1],[0.,0.,-HAND_LOWER_CM])
-                delta=p.mul(p.sub(cs['hand_'+side][1],lowered_anchor),.3)
-                target=p.add(p.add(ref_fp['hand_'+side][1],delta),[0.,0.,-HAND_LOWER_CM])
+                adjusted_anchor=p.add(arm_anchor['hand_'+side][1],hand_offset(side))
+                delta=p.mul(p.sub(cs['hand_'+side][1],adjusted_anchor),.3)
+                target=p.add(p.add(ref_fp['hand_'+side][1],delta),hand_offset(side))
+                fit_view_shoulder(view,side,target)
                 vcs=p.to_cs(view)
                 repair_chain(view,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,target,
                              p.sub(ref_fp['lowerarm_'+side][1],ref_fp['upperarm_'+side][1]),ref_fp['hand_'+side][0])
@@ -130,6 +158,7 @@ def build(source):
                           reference_range_seconds=[6.5,11.5],heading_degrees=heading,
                           reference_foot_spans_cm=views,footprint_cm=footprint,
                           hand_lower_cm=HAND_LOWER_CM,
+                          hand_forward_cm=HAND_FORWARD_CM,hand_spread_total_cm=HAND_SPREAD_CM,
                           removed_reference_turns=True,planted_feet=True)
     return result
 
