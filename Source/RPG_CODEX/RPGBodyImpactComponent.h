@@ -62,7 +62,7 @@ public:
 	FName LastGetUpStyle;
 	bool IsGetUpAligning() const { return bGetUpAwaitingPhysics; }
 
-	/** Stand Character up where its ragdoll lies: picks a compatible custom get-up by pose and intent,
+	/** Stand Character up where its ragdoll lies: picks between the two mocap get-ups by pose and intent,
 	 *  using one best start frame per clip and avoiding repeated recovery styles among safe near-equal matches,
 	 *  turns and places the capsule so the clip's first frame lies on the body, plays it at Rate.
 	 *  Returns the montage (null if none could play) and its duration. Shared by NPC knockdowns and the player. */

@@ -145,12 +145,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy")
 	FString DisplayLabel;
 
-	/** Get-up clips (from GASP), played where the body lies after a knockdown: lying face down / face up. Soft references,
-	 *  loaded when first used: GASP clips pull in GASP Blueprints that need plugins not loaded yet at startup. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	TSoftObjectPtr<UAnimSequence> GetUpFaceDown;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	TSoftObjectPtr<UAnimSequence> GetUpFaceUp;
 	/** Stagger: a step or two back (GASP's backward walk-to-stop; the clip's own root motion carries the body, so the
 	 *  feet stay planted), then it stands dazed for StaggerDazedTime before it walks on. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger")
@@ -168,21 +162,6 @@ public:
 	 *  one. StaggerBackAnimation is the fallback. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Stagger", meta = (ClampMin = "0"))
 	float StaggerHeavyDisplacement = 45.f;
-	/** Where each clip's first frame lies in its own component space: pelvis X / Y (cm) and the pelvis-to-head direction
-	 *  (degrees about up), measured from the clips. The dummy is turned and placed so that frame lands on the ragdoll. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	FVector GetUpFaceDownStart = FVector(2.8f, -1.0f, 84.6f);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	FVector GetUpFaceUpStart = FVector(0.1f, -35.0f, -92.1f);
-	/** Lying on its left / right side. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	TSoftObjectPtr<UAnimSequence> GetUpLeftSide;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	TSoftObjectPtr<UAnimSequence> GetUpRightSide;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	FVector GetUpLeftSideStart = FVector(-5.9f, -5.5f, -7.0f);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up")
-	FVector GetUpRightSideStart = FVector(-4.7f, -13.6f, 160.6f);
 	/** Get-up speed: this play rate at full health, down to GetUpHurtRate near 0 (and when knocked out). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up", meta = (ClampMin = "0.1"))
 	float GetUpHealthyRate = 1.15f;

@@ -16,6 +16,11 @@ report = {}
 # third-person assets untouched).
 ONLY = os.environ.get('RPG_IMPORT_ONLY', '')
 for name, clip in clips.items():
+    # Retired procedural recoveries must not be recreated by an older manifest.
+    if name.startswith('RPG_GetUp_') and name not in {
+            'RPG_GetUp_FaceDown_Capture8614', 'RPG_GetUp_FaceUp_Capture8611'}:
+        unreal.log('Skipping retired get-up: ' + name)
+        continue
     if ONLY and not name.startswith(ONLY):
         continue
     path = FOLDER + '/' + name

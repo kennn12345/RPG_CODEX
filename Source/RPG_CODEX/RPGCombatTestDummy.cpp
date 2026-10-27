@@ -15,6 +15,8 @@
 #include "TimerManager.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/Skeleton.h"
+#include "Animation/AnimTypes.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Animation/BlendSpace.h"
 #include "Engine/World.h"
@@ -66,10 +68,6 @@ ARPGCombatTestDummy::ARPGCombatTestDummy()
 	if (Idle.Succeeded()) IdleAnimation = Idle.Object;
 	static ConstructorHelpers::FObjectFinder<UBlendSpace> Locomotion(TEXT("/Game/RPG/Combat/GASP/BS_GASP_Dummy_IdleWalk.BS_GASP_Dummy_IdleWalk"));
 	if (Locomotion.Succeeded()) LocomotionBlendSpace = Locomotion.Object;
-	GetUpFaceDown = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F.M_ragdoll_getup_stand_F"));
-	GetUpFaceUp = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B.M_ragdoll_getup_stand_B"));
-	GetUpLeftSide = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_L.M_ragdoll_getup_stand_L"));
-	GetUpRightSide = FSoftObjectPath(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_R.M_ragdoll_getup_stand_R"));
 	StaggerBackAnimation = FSoftObjectPath(TEXT("/Game/RPG/Combat/GASP/M_Dummy_StaggerBack.M_Dummy_StaggerBack"));
 
 	PhysicsReaction = CreateDefaultSubobject<URPGPhysicsReactionComponent>(TEXT("PhysicsReaction"));
@@ -565,19 +563,30 @@ void ARPGCombatTestDummy::HandleLimpEnding()
 	else
 	{
 		const FVector Before = GetActorLocation();
-		// How the body lies (the chest's front and the hips' left, from the spine and thighs): face down, on its back,
-		// or on a side, whichever is nearest. Then turn and place the actor so that get-up clip's first frame lies where
-		// the body does; the fade back to animation then blends into that frame.
+		// Choose the recorded front/back recovery from chest facing, including side landings.
+		// Turn and place the actor so the recorded first frame lies on the ragdoll.
 		const FVector Left = (Mesh->GetBoneLocation(TEXT("thigh_l")) - Mesh->GetBoneLocation(TEXT("thigh_r"))).GetSafeNormal();
 		const FVector Front = FVector::CrossProduct(Mesh->GetBoneLocation(TEXT("spine_05")) - Pelvis, Left).GetSafeNormal();
-		const bool bOnSide = FMath::Abs(Left.Z) > FMath::Abs(Front.Z);
-		const bool bFaceDown = !bOnSide && Front.Z < 0.f;
-		const bool bLeftDown = bOnSide && Left.Z < 0.f;
-		const TSoftObjectPtr<UAnimSequence>& Pick = bOnSide ? (bLeftDown ? GetUpLeftSide : GetUpRightSide) : (bFaceDown ? GetUpFaceDown : GetUpFaceUp);
-		UAnimSequence* GetUp = Pick.LoadSynchronous();
+		const bool bFaceDown = Front.Z < 0.f;
+		const TCHAR* Name=bFaceDown?TEXT("RPG_GetUp_FaceDown_Capture8614"):TEXT("RPG_GetUp_FaceUp_Capture8611");
+		const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/SK_UEFN_Mannequin/%s.%s"),Name,Name);
+		UAnimSequence* GetUp=LoadObject<UAnimSequence>(nullptr,*Path);
 		if (GetUp)
 		{
-			const FVector Start = bOnSide ? (bLeftDown ? GetUpLeftSideStart : GetUpRightSideStart) : (bFaceDown ? GetUpFaceDownStart : GetUpFaceUpStart);
+			// Measure the actual recorded first frame; retired stock clips' placement offsets no longer apply.
+			const FReferenceSkeleton& Ref=GetUp->GetSkeleton()->GetReferenceSkeleton();
+			auto BoneAtStart=[&](const TCHAR* BoneName)
+			{
+				FTransform Bone=FTransform::Identity;
+				for (int32 I=Ref.FindBoneIndex(BoneName);I!=INDEX_NONE;I=Ref.GetParentIndex(I))
+				{
+					FTransform Local;GetUp->GetBoneTransform(Local,FSkeletonPoseBoneIndex(I),FAnimExtractContext(0.),false);Bone=Bone*Local;
+				}
+				return Bone.GetLocation();
+			};
+			const FVector ClipPelvis=BoneAtStart(TEXT("pelvis"));
+			const FVector ClipHead=BoneAtStart(TEXT("head"))-ClipPelvis;
+			const FVector Start(ClipPelvis.X,ClipPelvis.Y,FMath::RadiansToDegrees(FMath::Atan2(ClipHead.Y,ClipHead.X)));
 			const FVector Head = Mesh->GetBoneLocation(TEXT("head")) - Pelvis;
 			const float MeshYaw = FMath::RadiansToDegrees(FMath::Atan2(Head.Y, Head.X)) - Start.Z;
 			const FVector Offset = FRotator(0.f, MeshYaw, 0.f).RotateVector(FVector(Start.X, Start.Y, 0.f));
@@ -606,7 +615,7 @@ void ARPGCombatTestDummy::HandleLimpEnding()
 			Speed = 0.f;
 			GetUpDuration = GetUpTimeLeft = GetUp->GetPlayLength() / Rate;
 			UE_LOG(LogRPGInput, Log, TEXT("%s gets up %s (%s) at %.2fx, slope tilt %.0f deg"), *GetActorNameOrLabel(),
-				bOnSide ? (bLeftDown ? TEXT("from its left side") : TEXT("from its right side")) : (bFaceDown ? TEXT("from face down") : TEXT("from its back")),
+				bFaceDown ? TEXT("from face down") : TEXT("from its back"),
 				*GetUp->GetName(), Rate, FMath::RadiansToDegrees(GetUpTilt.GetAngle()));
 		}
 		else SetActorLocation(Target, false, nullptr, ETeleportType::None);

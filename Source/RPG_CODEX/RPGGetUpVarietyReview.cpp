@@ -114,14 +114,15 @@ namespace
 				static const FVector Throws[]={FVector(-320,0,90),FVector(0,320,80),FVector(-260,-200,75),FVector(220,-260,80)};
 				Npc->BodyImpact->KnockDown(Throws[Episode],Npc->GetMesh()->GetBoneLocation(TEXT("spine_05")));
 
-				EpisodeStart=Now;bWaiting=false;bSawLimp=false;
+				EpisodeStart=Now;bWaiting=false;bSawLimp=false;bSeededCapture=false;
 			}
-					if (!bWaiting && Episode==0 && !bSeededCapture && Now-EpisodeStart>.25f && Npc->PhysicsReaction->GetReactionState()==ERPGPhysicsReactionState::Limp && !FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_CAPTURE_REVIEW")).IsEmpty())
+					const FString CaptureReview=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_CAPTURE_REVIEW"));
+					if (!bWaiting && (Episode==0 || CaptureReview==TEXT("both")) && !bSeededCapture && Now-EpisodeStart>.25f && Npc->PhysicsReaction->GetReactionState()==ERPGPhysicsReactionState::Limp && !CaptureReview.IsEmpty())
 					{
 						bSeededCapture=true;
 						// Seed after the PhysicsControl movement-type change has reached Chaos.
 						// Test-only matching landing. The production selector still chooses the recovery normally.
-						const TCHAR* CaptureName=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_CAPTURE_REVIEW"))==TEXT("8611")?TEXT("RPG_GetUp_FaceUp_Capture8611"):TEXT("RPG_GetUp_FaceDown_Capture8614");
+						const TCHAR* CaptureName=(CaptureReview==TEXT("8611") || (CaptureReview==TEXT("both") && Episode%2==1))?TEXT("RPG_GetUp_FaceUp_Capture8611"):TEXT("RPG_GetUp_FaceDown_Capture8614");
 						const FString CapturePath=FString::Printf(TEXT("/Game/RPG/Animations/SK_UEFN_Mannequin/%s.%s"),CaptureName,CaptureName);
 						UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,*CapturePath);
 						if (!Clip) {Test->AddError(TEXT("Missing recorded get-up for landing review"));Save();return true;}
@@ -152,6 +153,9 @@ namespace
 						const FName ExpectedCapture=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_CAPTURE_REVIEW"))==TEXT("8611")?FName(TEXT("RPG_GetUp_FaceUp_Capture8611")):FName(TEXT("RPG_GetUp_FaceDown_Capture8614"));
 						bSawCapture|=Clip==ExpectedCapture;
 					Test->TestFalse(TEXT("A real landing selected a custom get-up"),Clip.IsNone());
+					Test->TestTrue(TEXT("Real falls only select the two recorded recoveries"),Clip==TEXT("RPG_GetUp_FaceDown_Capture8614") || Clip==TEXT("RPG_GetUp_FaceUp_Capture8611"));
+					if (CaptureReview==TEXT("both"))
+						Test->TestEqual(TEXT("Matching recorded landing chooses its own capture"),Clip,FName(Episode%2==0?TEXT("RPG_GetUp_FaceDown_Capture8614"):TEXT("RPG_GetUp_FaceUp_Capture8611")));
 					Styles.Add(Style);Clips.Add(Clip);
 					Rows+=FString::Printf(TEXT("%d,%s,%s,%.4f,%.3f\n"),Episode,*Clip.ToString(),*Style.ToString(),Now-EpisodeStart,Npc->GetMesh()->GetBoneLocation(TEXT("pelvis")).Z);
 					UE_LOG(LogRPGInput,Display,TEXT("GETUP REPEAT episode=%d clip=%s style=%s duration=%.2f"),Episode,*Clip.ToString(),*Style.ToString(),Now-EpisodeStart);
@@ -163,8 +167,13 @@ namespace
 						if (FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_INTERRUPT"))==TEXT("1"))
 							Test->TestTrue(TEXT("A new knockdown interrupted the held get-up"),bInterrupted);
 						Test->TestTrue(TEXT("Actual get-ups aligned before authored motion resumed"),bSawAligning);
-						Test->TestTrue(TEXT("Repeated real falls exercise more than one recovery style"),Styles.Num()>=2);
-						Test->TestTrue(TEXT("Repeated real falls play more than one clip"),Clips.Num()>=2);
+						Test->TestTrue(TEXT("Repeated falls stay within the two recorded styles"),Styles.Num()>=1 && Styles.Num()<=2);
+						Test->TestTrue(TEXT("Repeated falls stay within the two recorded clips"),Clips.Num()>=1 && Clips.Num()<=2);
+						if (CaptureReview==TEXT("both"))
+						{
+							Test->TestEqual(TEXT("Both mocap clips completed on the actual NPC"),Clips.Num(),2);
+							Test->TestEqual(TEXT("Both mocap styles completed on the actual NPC"),Styles.Num(),2);
+						}
 						Save();return true;
 					}
 				}

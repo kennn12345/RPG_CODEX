@@ -22,38 +22,10 @@
 
 namespace
 {
-	/** Our own get-ups (Tools/ProtoAnim/getups.py: face down, face up, on either side, and start variants of them, each
-	 *  ending in the standing idle)
-	 *  and their kind (stand up, crouch scramble, roll then stand, up into a run). Only standing ones so far. */
+	/** The two recorded recoveries are the entire gameplay pool. */
 	enum class EGetUpKind : uint8 { Stand, Crouch, Roll, Run };
-	struct FGetUp { const TCHAR* Name; EGetUpKind Kind; const TCHAR* Style = TEXT("RightKnee"); };
+	struct FGetUp { const TCHAR* Name; EGetUpKind Kind; const TCHAR* Style; };
 	const FGetUp GetUps[] = {
-		{ TEXT("FaceDown"), EGetUpKind::Stand }, { TEXT("FaceUp"), EGetUpKind::Stand },
-		{ TEXT("SideL"), EGetUpKind::Stand }, { TEXT("SideR"), EGetUpKind::Stand },
-		// the same get-ups from other ways a body lands (closer starts: less of a blend from the ragdoll)
-		{ TEXT("FaceDownArmsSide"), EGetUpKind::Stand }, { TEXT("FaceDownArmsUp"), EGetUpKind::Stand },
-		{ TEXT("FaceDownFrog"), EGetUpKind::Stand }, { TEXT("FaceUpArmsOut"), EGetUpKind::Stand },
-		{ TEXT("FaceUpArmsUp"), EGetUpKind::Stand }, { TEXT("SideLCurled"), EGetUpKind::Stand },
-		{ TEXT("SideRCurled"), EGetUpKind::Stand },
-		// from recorded landings no start was close to (Saved/GetUpMisses.csv)
-		{ TEXT("FaceDownSprawl"), EGetUpKind::Stand }, { TEXT("FaceUpArmsV"), EGetUpKind::Stand }, { TEXT("FaceUpKneeOut"), EGetUpKind::Stand },
-		// Same matching starts, genuinely different opposite-knee recovery and closing steps.
-		{ TEXT("FaceDown_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceUp_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("SideL_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("SideR_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceDownArmsSide_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceDownArmsUp_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceDownFrog_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceUpArmsOut_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceUpArmsUp_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("SideLCurled_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("SideRCurled_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceDownSprawl_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceUpArmsV_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceUpKneeOut_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
-		{ TEXT("FaceUp_RollRight"), EGetUpKind::Roll, TEXT("RightRoll") },
-		// Approved phone capture: natural push, knee tuck and rise, retargeted to the gameplay skeleton.
 		{ TEXT("FaceDown_Capture8614"), EGetUpKind::Stand, TEXT("CapturedPush") },
 		{ TEXT("FaceUp_Capture8611"), EGetUpKind::Stand, TEXT("CapturedSitTurn") },
 	};
@@ -441,29 +413,44 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGGetUpVarietyTest,"RPG.Npc.GetUpVariety",EAu
 bool FRPGGetUpVarietyTest::RunTest(const FString&)
 {
 	const auto& Samples=GetUpSamples();
+	const TSet<FName> Allowed={FName(TEXT("RPG_GetUp_FaceDown_Capture8614")),FName(TEXT("RPG_GetUp_FaceUp_Capture8611"))};
 	TSet<FName> Loaded,Styles;
-	for (const auto& S:Samples) { Loaded.Add(S.Clip->GetFName()); Styles.Add(FName(S.GetUp->Style)); }
-	TestEqual(TEXT("All 31 custom recovery clips loaded"),Loaded.Num(),31);
-	TestEqual(TEXT("Five visibly different recovery styles"),Styles.Num(),5);
+	for (const auto& S:Samples)
+	{
+		Loaded.Add(S.Clip->GetFName()); Styles.Add(FName(S.GetUp->Style));
+		TestTrue(TEXT("Every recovery candidate belongs to the two mocap clips"),Allowed.Contains(S.Clip->GetFName()));
+	}
+	TestEqual(TEXT("Only the two mocap recoveries are loaded"),Loaded.Num(),2);
+	TestEqual(TEXT("Both recorded styles are present"),Styles.Num(),2);
 	int32 Poses=0,Selections=0;
 	for (const auto& Source:Samples)
 	{
-		if (Source.Time!=0.f || FName(Source.GetUp->Style)!=TEXT("RightKnee")) continue;
-		++Poses; FName LastStyle,LastClip;
-		for (int32 I=0;I<6;++I)
+		if (Source.Time!=0.f) continue;
+		++Poses;
+		for (const float Roll:{0.f,-90.f,90.f})
 		{
-			int32 Count=0;bool bFadeable=false;
-			const auto* Pick=ChooseGetUp(Source.Features,false,LastStyle,LastClip,Count,bFadeable);
-			if (!TestNotNull(TEXT("Compatible recovery found"),Pick)) continue;
-			TestTrue(TEXT("Limb-turn safety retained"),bFadeable && LargestSegmentTurn(Source.Features,Pick->Features)<=MaxSegmentTurn);
-			TestTrue(TEXT("Torso-turn safety retained"),ChestTurn(Source.Features,Pick->Features)<=MaxSegmentTurn);
-			TestTrue(TEXT("Original start has a compatible alternate style"),Count>=2);
-			if (!LastStyle.IsNone()) TestTrue(TEXT("Repeated identical landing changes recovery style"),FName(Pick->GetUp->Style)!=LastStyle);
-			LastStyle=FName(Pick->GetUp->Style); LastClip=Pick->Clip->GetFName(); ++Selections;
+			FPoseFeatures Landing=Source.Features;
+			const FQuat Tilt(FVector::ForwardVector,FMath::DegreesToRadians(Roll));
+			for (FVector& Point:Landing.Points) Point=Tilt.RotateVector(Point);
+			Landing.ChestFacing=Tilt.RotateVector(Landing.ChestFacing);
+			for (const bool bMove:{false,true})
+			{
+				int32 Count=0;bool bFadeable=false;
+				const auto* Pick=ChooseGetUp(Landing,bMove,FName(Source.GetUp->Style),Source.Clip->GetFName(),Count,bFadeable);
+				if (!TestNotNull(TEXT("Front/back/side landing can recover with the mocap-only pool"),Pick)) continue;
+				TestTrue(TEXT("Moving intent and history cannot select a retired clip"),Allowed.Contains(Pick->Clip->GetFName()));
+				if (bFadeable)
+				{
+					TestTrue(TEXT("Compatible selection retains limb-turn safety"),LargestSegmentTurn(Landing,Pick->Features)<=MaxSegmentTurn);
+					TestTrue(TEXT("Compatible selection retains torso-turn safety"),ChestTurn(Landing,Pick->Features)<=MaxSegmentTurn);
+				}
+				if (Roll==0.f) TestEqual(TEXT("History does not force the opposite-facing capture for variety"),Pick->Clip->GetFName(),Source.Clip->GetFName());
+				++Selections;
+			}
 		}
 	}
-	TestEqual(TEXT("Every original landing variant covered"),Poses,14);
-	UE_LOG(LogRPGInput,Display,TEXT("GETUP VARIETY loaded=%d styles=%d sourcePoses=%d safeSelections=%d"),Loaded.Num(),Styles.Num(),Poses,Selections);
+	TestEqual(TEXT("Both recorded starting poses tested"),Poses,2);
+	UE_LOG(LogRPGInput,Display,TEXT("GETUP MOCAP ONLY loaded=%d styles=%d sourcePoses=%d selections=%d"),Loaded.Num(),Styles.Num(),Poses,Selections);
 	return true;
 }
 

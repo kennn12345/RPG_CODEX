@@ -67,6 +67,7 @@ def right_roll(name, source):
 
 
 if __name__ == '__main__':
+    raise SystemExit('Procedural get-up variants are retired; gameplay uses only Capture8614 and Capture8611.')
     if pa.SP.NAME != 'uefn': raise SystemExit('These contact targets require RPG_SKEL=uefn')
     from preview import render
     baseline=json.load(open(pa.SP.path('clips','.json')))

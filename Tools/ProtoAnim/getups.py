@@ -278,6 +278,7 @@ def report(name, clip):
     print('   into the floor:', ', '.join(under) if under else 'nothing')
 
 if __name__ == '__main__':
+    raise SystemExit('Procedural get-ups are retired. Use capture_getups.py or capture8611_getups.py for the two mocap recoveries.')
     from preview import render
     want = sys.argv[1:]
     path = pa.SP.path('clips', '.json')
