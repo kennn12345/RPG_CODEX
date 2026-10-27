@@ -36,9 +36,13 @@ The user resumed this work with Claude: "make these punches look as close to the
 - Build output is written to `ReferencePunchCalibration.inl` by the generator; the generator now writes
   `reference1027_uefn.json` via a temp file (direct writes failed intermittently with Errno 22).
 
+## Version I (committed 2ddaf0a, installed)
+All checks pass: authoring 39/39, contact 24/24, controls 4/4, stance/locomotion 2/2, visual 2/2 (fixed 60 Hz).
+Review: `Saved/PunchReview/Punches-I-comparison.png` (film / AG / I through the calibrated camera, same moments) and
+`Saved/PunchReview/Punches-I.mp4` (gameplay, both views, all hands and tiers).
+
 ## Next
-1. Read the version-I test results (Saved/ReferenceCombat1027/claude/*-I.log); if all pass, commit I.
-2. Calibrated audit + side-by-side with the film (`Visual.ReferenceCombat1027Audit` with RPG_REFERENCE_AUDIT_FITTED=1,
-   CALIBRATED=1, TAG) and a review video (`export_reference1027_preview.py`).
-3. Remaining visible gaps: the cross load (f88) right elbow sits ~19 cm low (shoulder held down by the cap);
-   reference mesh bulk; charged tiers are adaptations (not filmed).
+- Wait for the user's in-game feedback on I before further changes.
+- Remaining visible gaps: the cross load (f88) right elbow sits ~19 cm low (shoulder held down by the cap; allowing
+  more brings back the hiked look the user rejected); the film's bulkier mesh and closer camera; charged tiers are
+  adaptations (not filmed); the jab's filmed wind-up burst is fast (peak 41 cm/frame).
