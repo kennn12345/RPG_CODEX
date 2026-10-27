@@ -41,7 +41,8 @@ public:
             Floor->SetMobility(EComponentMobility::Movable);Floor->GetStaticMeshComponent()->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
             Floor->SetActorScale3D(FVector(30,30,.1));Floor->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
             Body=W->SpawnActor<ASkeletalMeshActor>(Origin,FRotator::ZeroRotator);
-            bTarget=!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_TARGET")).IsEmpty();
+            bFitted=!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_FITTED")).IsEmpty();
+            bTarget=bFitted || !FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_TARGET")).IsEmpty();
             auto* Mesh=LoadObject<USkeletalMesh>(nullptr,bTarget?
                 TEXT("/Game/Characters/UEFN_Mannequin/Meshes/SKM_UEFN_Mannequin.SKM_UEFN_Mannequin"):
                 TEXT("/Game/RamsterZ_FreeAnims_Volume1/Demo/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin"));
@@ -53,7 +54,7 @@ public:
             Camera->GetCameraComponent()->bConstrainAspectRatio=false;
             Camera->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount=true;Camera->GetCameraComponent()->PostProcessSettings.MotionBlurAmount=0;
             PC->bAutoManageActiveCameraTarget=false;PC->SetViewTarget(Camera);
-            Dir=FPaths::ProjectSavedDir()/(bTarget?TEXT("ReferenceCombat1027/SourceAuditUEFN"):TEXT("ReferenceCombat1027/SourceAuditNative"));IFileManager::Get().MakeDirectory(*Dir,true);
+            Dir=FPaths::ProjectSavedDir()/(bFitted?TEXT("ReferenceCombat1027/FittedAuditUEFN"):bTarget?TEXT("ReferenceCombat1027/SourceAuditUEFN"):TEXT("ReferenceCombat1027/SourceAuditNative"));IFileManager::Get().MakeDirectory(*Dir,true);
             const FString Yaw=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_YAW"));
             if(!Yaw.IsEmpty())
             {
@@ -70,16 +71,17 @@ public:
             PendingFile.Empty();
         }
         const TCHAR* Names[]={TEXT("H2H_Idle"),TEXT("H2H_PunchCombo01"),TEXT("H2H_PunchCombo02"),TEXT("H2H_PunchCombo03")};
+        const TCHAR* FittedNames[]={TEXT("RPG_CombatStance_Reference1027"),TEXT("RPG_Punch_L_Light_Reference1027_V1"),TEXT("RPG_Punch_R_Light_Reference1027_V1"),TEXT("RPG_Reference1027_PairReview")};
         if(ClipIndex==4)
         {
             FFileHelper::SaveStringToFile(CSV,*(Dir/TEXT("captures.csv")));
-            Test->AddInfo(TEXT("Native UE4 stance and three punch combos audited in two reference views; no assets or levels saved"));return true;
+            Test->AddInfo(bFitted?TEXT("Fitted player stance, isolated left/right and reference pair audited; no assets or levels saved"):TEXT("Native UE4 stance and three punch combos audited in two reference views; no assets or levels saved"));return true;
         }
         auto* Mesh=Body->GetSkeletalMeshComponent();
         if(Stage==0)
         {
-            const FString Name=FString(Names[ClipIndex])+(bTarget?TEXT("_UEFNReference1027"):TEXT(""));
-            const FString Path=(bTarget?TEXT("/Game/RPG/Animations/Retarget/Reference1027Work/"):TEXT("/Game/RamsterZ_FreeAnims_Volume1/AnimationSequence/H2H/"))+Name+TEXT(".")+Name;
+            const FString Name=bFitted?FittedNames[ClipIndex]:FString(Names[ClipIndex])+(bTarget?TEXT("_UEFNReference1027"):TEXT(""));
+            const FString Path=(bFitted?TEXT("/Game/RPG/Animations/ReferenceCombat1027/"):bTarget?TEXT("/Game/RPG/Animations/Retarget/Reference1027Work/"):TEXT("/Game/RamsterZ_FreeAnims_Volume1/AnimationSequence/H2H/"))+Name+TEXT(".")+Name;
             auto* Clip=LoadObject<UAnimSequence>(nullptr,*Path);
             if(!Clip || Clip->GetSkeleton()!=Mesh->GetSkeletalMeshAsset()->GetSkeleton()){Test->AddError(TEXT("Source animation/skeleton mismatch"));return true;}
             Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);Mesh->PlayAnimation(Clip,false);Mesh->SetPlayRate(0);
@@ -99,7 +101,7 @@ public:
         const FString File=FString::Printf(TEXT("frame_%05d.png"),Frame);
         PendingFile=Dir/File;
         FScreenshotRequest::RequestScreenshot(PendingFile,false,false);
-        CSV+=FString::Printf(TEXT("%d,%s,%d,%.6f\n"),Frame++,Names[ClipIndex],View,Time);
+        CSV+=FString::Printf(TEXT("%d,%s,%d,%.6f\n"),Frame++,bFitted?FittedNames[ClipIndex]:Names[ClipIndex],View,Time);
         Stage=0;
         if(++Shot>=(ClipIndex==0?6:36))
         {Shot=0;if(++View==2){View=0;++ClipIndex;}}
@@ -107,7 +109,7 @@ public:
     }
 private:
     FAutomationTestBase* Test;TObjectPtr<ASkeletalMeshActor> Body;TObjectPtr<ACameraActor> Camera;
-    FVector Origin;int32 Wait=0,ClipIndex=0,View=0,Shot=0,Stage=0,Frame=0;FString Dir,CSV,PendingFile;bool bTarget=false;float AuditYaw=-1.f;
+    FVector Origin;int32 Wait=0,ClipIndex=0,View=0,Shot=0,Stage=0,Frame=0;FString Dir,CSV,PendingFile;bool bTarget=false,bFitted=false;float AuditYaw=-1.f;
 };
 }
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FReferenceAuditTest,"Visual.ReferenceCombat1027Audit",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)

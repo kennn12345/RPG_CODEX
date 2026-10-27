@@ -72,5 +72,5 @@ for name, clip in clips.items():
                     'root_lock': str(seq.get_editor_property('root_motion_root_lock')),
                     'root_motion': seq.get_editor_property('enable_root_motion'), 'target_rate': seq.get_editor_property('platform_target_frame_rate').export_text(), 'samples': rows}
 
-json.dump(report, open(SP.path('ue_import_report', '.json'), 'w'), indent=1)
+json.dump(report, open(os.environ.get('RPG_IMPORT_REPORT', SP.path('ue_import_report', '.json')), 'w'), indent=1)
 unreal.log('PROTOTYPE IMPORT OK: ' + ', '.join(report))

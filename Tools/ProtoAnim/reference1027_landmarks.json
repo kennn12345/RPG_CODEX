@@ -1,0 +1,19 @@
+{
+  "source": "ScreenRecording_10-27-2026 05-26-11_1.mov",
+  "method": "Manual visible blue-player joint centres in the original 816x1242 frames. Approximate 8-20px annotation uncertainty; occluded joints deliberately omitted. These are review measurements, not mocap ground truth.",
+  "excluded_frames": "0-71: defensive section; not authored",
+  "frames": {
+    "72": {"head_centre":[345,239],"pelvis":[398,664],"upperarm_r":[342,355],"lowerarm_r":[416,532],"hand_r":[516,437],"lowerarm_l":[150,466],"hand_l":[224,515],"calf_r":[493,887],"foot_r":[360,1094],"foot_l":[522,860]},
+    "76": {"head_centre":[349,238],"pelvis":[335,665],"upperarm_r":[360,355],"lowerarm_r":[386,523],"hand_r":[538,448],"lowerarm_l":[88,412],"hand_l":[154,390],"calf_r":[388,937],"foot_l":[455,890]},
+    "80": {"head_centre":[383,295],"pelvis":[263,683],"upperarm_r":[219,355],"lowerarm_r":[147,500],"hand_r":[355,470],"upperarm_l":[418,372],"lowerarm_l":[482,349],"hand_l":[575,337],"calf_r":[229,969],"calf_l":[414,750],"foot_l":[355,941]},
+    "84": {"head_centre":[371,301],"pelvis":[252,686],"upperarm_r":[190,350],"lowerarm_r":[60,445],"hand_r":[265,459],"lowerarm_l":[473,347],"hand_l":[544,338],"calf_r":[217,962],"calf_l":[408,746],"foot_l":[350,936]},
+    "88": {"head_centre":[362,241],"pelvis":[245,642],"upperarm_r":[211,284],"lowerarm_r":[8,354],"hand_r":[194,352],"lowerarm_l":[459,347],"hand_l":[538,326],"calf_r":[226,916],"calf_l":[406,708],"foot_l":[343,879]},
+    "92": {"head_centre":[357,235],"pelvis":[263,675],"upperarm_r":[265,294],"lowerarm_r":[151,307],"hand_r":[398,277],"hand_l":[459,355],"calf_r":[250,986],"calf_l":[413,735],"foot_l":[364,944]},
+    "96": {"head_centre":[366,241],"pelvis":[337,681],"upperarm_r":[487,308],"lowerarm_r":[552,323],"hand_r":[664,295],"upperarm_l":[227,348],"lowerarm_l":[177,503],"hand_l":[227,453],"calf_r":[349,985],"foot_l":[445,963]},
+    "100": {"head_centre":[409,173],"pelvis":[413,611],"upperarm_r":[534,238],"lowerarm_r":[610,255],"hand_r":[723,209],"upperarm_l":[272,276],"lowerarm_l":[218,445],"calf_r":[487,910],"foot_l":[536,890]},
+    "104": {"head_centre":[372,240],"pelvis":[345,684],"upperarm_r":[499,312],"lowerarm_r":[568,356],"hand_r":[692,335],"upperarm_l":[240,354],"lowerarm_l":[185,509],"calf_r":[411,981],"foot_l":[478,954]},
+    "112": {"head_centre":[384,249],"pelvis":[285,692],"upperarm_r":[415,357],"lowerarm_r":[490,485],"hand_r":[548,400],"lowerarm_l":[190,485],"calf_r":[308,992],"foot_l":[394,959]},
+    "120": {"head_centre":[390,253],"pelvis":[251,683],"upperarm_r":[297,361],"lowerarm_r":[387,527],"hand_r":[468,399],"hand_l":[427,388],"calf_r":[284,960],"foot_l":[379,943]},
+    "128": {"head_centre":[381,245],"pelvis":[244,670],"upperarm_r":[283,362],"lowerarm_r":[370,518],"hand_r":[454,400],"hand_l":[420,391],"calf_r":[294,941],"foot_l":[373,925]}
+  }
+}
