@@ -21,10 +21,28 @@ FPS = 60
 HAND_LOWER_CM = 5.0
 HAND_FORWARD_CM = 5.0
 HAND_SPREAD_CM = 5.0  # Total additional spacing; half per hand.
+FOOT_WIDTH_EXTRA_CM = 8.0  # Four centimeters outward per foot.
+FOOT_STAGGER_CM = 2.0
+FOOT_TOE_OUT_DEGREES = 10.0
+ELBOW_BACK_CM = 3.0
 
 
 def hand_offset(side):
     return [HAND_SPREAD_CM*.5*(1. if side=='l' else -1.), HAND_FORWARD_CM, -HAND_LOWER_CM]
+
+
+def bring_elbow_back(local,side):
+    """Retract the elbow without stretching either arm segment; let the wrist follow minimally."""
+    cs=p.to_cs(local);upper='upperarm_'+side;lower='lowerarm_'+side;hand='hand_'+side
+    shoulder=cs[upper][1];elbow=cs[lower][1];wrist=cs[hand][1]
+    delta=p.sub(elbow,shoulder);length=p.length(delta)
+    y=max(-length+.01,min(length-.01,delta[1]-ELBOW_BACK_CM))
+    across=math.hypot(delta[0],delta[2]);radius=math.sqrt(max(0.,length*length-y*y))
+    scale=radius/max(across,1.e-7)
+    retracted=p.add(shoulder,[delta[0]*scale,y,delta[2]*scale])
+    forearm=p.length(p.sub(wrist,elbow))
+    target=p.add(retracted,p.mul(p.norm(p.sub(wrist,retracted)),forearm))
+    repair_chain(local,upper,lower,hand,target,p.sub(retracted,shoulder),cs[hand][0])
 
 
 def fit_view_shoulder(local,side,target):
@@ -99,13 +117,19 @@ def build(source):
             align=p.qaxis([0,0,1],90.-math.degrees(math.atan2(f[1],f[0])))
             spans.append(p.qrot(align,p.sub(cs['foot_l'][1],cs['foot_r'][1])))
         views[label]=[statistics.median(v[i] for v in spans) for i in range(2)]
-    footprint=[statistics.median(v[i] for v in views.values()) for i in range(2)]
+    reference_footprint=[statistics.median(v[i] for v in views.values()) for i in range(2)]
+    footprint=[reference_footprint[0]+FOOT_WIDTH_EXTRA_CM,FOOT_STAGGER_CM]
     current=p.sub(anchor['foot_l'][1],anchor['foot_r'][1])
     feet = {}
     for side in 'lr':
         q,t = anchor['foot_'+side];t=list(t)
         for axis in range(2): t[axis]+=(.5 if side=='l' else -.5)*(footprint[axis]-current[axis])
-        t[2] += max(0., 3.2-anchor['ball_'+side][1][2], 4.-t[2])
+        toe=p.sub(anchor['ball_'+side][1],anchor['foot_'+side][1])
+        heading=math.degrees(math.atan2(toe[1],toe[0]))
+        desired=90.+(-FOOT_TOE_OUT_DEGREES if side=='l' else FOOT_TOE_OUT_DEGREES)
+        q=p.qnorm(p.qmul(p.qaxis([0.,0.,1.],desired-heading),q))
+        toe_z=p.add(t,p.qrot(q,normalized[0]['ball_'+side][1]))[2]
+        t[2] += max(0.,3.2-toe_z,4.-t[2])
         feet[side] = (q,t)
     # Blend the last .6 s back into the first .6 s, then loop the remaining 4.4 s.
     seam = round(.6*sfps)
@@ -133,6 +157,7 @@ def build(source):
                 hand_target=p.add(cs['hand_'+side][1],hand_offset(side))
                 repair_chain(local,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,hand_target,
                              p.sub(cs['lowerarm_'+side][1],cs['upperarm_'+side][1]))
+                bring_elbow_back(local,side)
             poses.append(follow_ik(local))
             view = copy.deepcopy(local)
             for side in 'lr':
@@ -145,6 +170,7 @@ def build(source):
                 vcs=p.to_cs(view)
                 repair_chain(view,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,target,
                              p.sub(ref_fp['lowerarm_'+side][1],ref_fp['upperarm_'+side][1]),ref_fp['hand_'+side][0])
+                bring_elbow_back(view,side)
             fp_poses.append(follow_ik(view))
     finally:
         p.SOFT_IK,p.SOFT_IK_ARM=old
@@ -156,7 +182,9 @@ def build(source):
                           keys=[0.,length*.25,length*.5,length*.75,length],
                           source='IMG_8619.mov; steady front guard; other headings retained for reference',
                           reference_range_seconds=[6.5,11.5],heading_degrees=heading,
-                          reference_foot_spans_cm=views,footprint_cm=footprint,
+                          reference_foot_spans_cm=views,reference_footprint_cm=reference_footprint,footprint_cm=footprint,
+                          foot_width_extra_cm=FOOT_WIDTH_EXTRA_CM,foot_stagger_cm=FOOT_STAGGER_CM,
+                          foot_toe_out_degrees=FOOT_TOE_OUT_DEGREES,elbow_back_cm=ELBOW_BACK_CM,
                           hand_lower_cm=HAND_LOWER_CM,
                           hand_forward_cm=HAND_FORWARD_CM,hand_spread_total_cm=HAND_SPREAD_CM,
                           removed_reference_turns=True,planted_feet=True)
