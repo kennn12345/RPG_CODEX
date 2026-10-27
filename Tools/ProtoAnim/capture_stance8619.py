@@ -18,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 TP = 'RPG_CombatStance_Capture8619'
 FP = 'RPG_FP_CombatStance_Capture8619'
 FPS = 60
+HAND_LOWER_CM = 5.0
 
 
 def average(poses):
@@ -102,15 +103,17 @@ def build(source):
                 repair_chain(local,'thigh_'+side,'calf_'+side,'foot_'+side,feet[side][1],
                              p.sub(cs['calf_'+side][1],cs['thigh_'+side][1]),feet[side][0])
                 cs=p.to_cs(local)
-                repair_chain(local,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,cs['hand_'+side][1],
+                hand_target=p.add(cs['hand_'+side][1],[0.,0.,-HAND_LOWER_CM])
+                repair_chain(local,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,hand_target,
                              p.sub(cs['lowerarm_'+side][1],cs['upperarm_'+side][1]))
             poses.append(follow_ik(local))
             view = copy.deepcopy(local)
             for side in 'lr':
                 cs=p.to_cs(local)
                 # Keep the recorded breathing but fit resting fists to the established first-person view.
-                delta=p.mul(p.sub(cs['hand_'+side][1],arm_anchor['hand_'+side][1]),.3)
-                target=p.add(ref_fp['hand_'+side][1],delta)
+                lowered_anchor=p.add(arm_anchor['hand_'+side][1],[0.,0.,-HAND_LOWER_CM])
+                delta=p.mul(p.sub(cs['hand_'+side][1],lowered_anchor),.3)
+                target=p.add(p.add(ref_fp['hand_'+side][1],delta),[0.,0.,-HAND_LOWER_CM])
                 vcs=p.to_cs(view)
                 repair_chain(view,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,target,
                              p.sub(ref_fp['lowerarm_'+side][1],ref_fp['upperarm_'+side][1]),ref_fp['hand_'+side][0])
@@ -126,6 +129,7 @@ def build(source):
                           source='IMG_8619.mov; steady front guard; other headings retained for reference',
                           reference_range_seconds=[6.5,11.5],heading_degrees=heading,
                           reference_foot_spans_cm=views,footprint_cm=footprint,
+                          hand_lower_cm=HAND_LOWER_CM,
                           removed_reference_turns=True,planted_feet=True)
     return result
 

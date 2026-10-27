@@ -58,3 +58,10 @@ captured_stance=1
 
 
 Preview: `FightStance-IMG8619-in-game.mp4`, 247 verified frames, 8.233 seconds, [1116, 728]. Full-body guard, real right punch, and return to the recorded stance were visually checked.
+## Hand-height adjustment — October 27, 2026
+
+At the user's request, lowered both stance fists by 5 cm in third person and approximately 5 cm in first person. `HAND_LOWER_CM=5.0` in `capture_stance8619.py` makes the adjustment reproducible. Arm IK follows the lowered targets; pelvis, feet, facing and loop timing are preserved. Guard/block and attack assets were not changed.
+
+`LowerHands-Structure.log`: both bakes pass the existing structure and anatomy checks. Comparing every frame against the prior bake gives exactly 5 cm lower third-person hands, and 4.987–5 cm lower first-person hands. `LowerHands-Import.log` confirms both updated assets imported. The full import report still has 44 entries.
+
+`LowerHands-Gameplay.log`: CapturedStance, CapturedStanceFirstPerson, FirstPersonSteadiness and Visual.CapturedStance all PASS. Third-person maximum actor yaw variation 0.3493 degrees with zero travel; first person zero yaw/travel. Rendered stance, planted feet and punch return were visually checked. Updated preview: `FightStance-IMG8619-lowered-hands.mp4`.
