@@ -54,6 +54,12 @@ public:
             Camera->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount=true;Camera->GetCameraComponent()->PostProcessSettings.MotionBlurAmount=0;
             PC->bAutoManageActiveCameraTarget=false;PC->SetViewTarget(Camera);
             Dir=FPaths::ProjectSavedDir()/(bTarget?TEXT("ReferenceCombat1027/SourceAuditUEFN"):TEXT("ReferenceCombat1027/SourceAuditNative"));IFileManager::Get().MakeDirectory(*Dir,true);
+            const FString Yaw=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_YAW"));
+            if(!Yaw.IsEmpty())
+            {
+                AuditYaw=FMath::Clamp(FCString::Atof(*Yaw),5.f,85.f);
+                Dir+=FString::Printf(TEXT("_Yaw%.0f"),AuditYaw);IFileManager::Get().MakeDirectory(*Dir,true);
+            }
             CSV=TEXT("frame,clip,view,time\n");
             return false;
         }
@@ -81,7 +87,10 @@ public:
             Mesh->SetPosition(Time,false);Mesh->TickAnimation(0,false);Mesh->RefreshBoneTransforms();
             const FVector Root=Mesh->GetBoneLocation(TEXT("root"));
             const FVector Focus(Root.X,Root.Y,Origin.Z+85);
-            const FVector Eye=Focus+(View==0?FVector(-260,-360,155):FVector(260,-360,155));
+            const float Side=View==0?-1.f:1.f;
+            const FVector Offset=AuditYaw<0?FVector(Side*260,-360,155):
+                FVector(Side*444*FMath::Sin(FMath::DegreesToRadians(AuditYaw)),-444*FMath::Cos(FMath::DegreesToRadians(AuditYaw)),155);
+            const FVector Eye=Focus+Offset;
             Camera->SetActorLocationAndRotation(Eye,(Focus-Eye).Rotation());
             Stage=1;return false;
         }
@@ -98,7 +107,7 @@ public:
     }
 private:
     FAutomationTestBase* Test;TObjectPtr<ASkeletalMeshActor> Body;TObjectPtr<ACameraActor> Camera;
-    FVector Origin;int32 Wait=0,ClipIndex=0,View=0,Shot=0,Stage=0,Frame=0;FString Dir,CSV,PendingFile;bool bTarget=false;
+    FVector Origin;int32 Wait=0,ClipIndex=0,View=0,Shot=0,Stage=0,Frame=0;FString Dir,CSV,PendingFile;bool bTarget=false;float AuditYaw=-1.f;
 };
 }
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FReferenceAuditTest,"Visual.ReferenceCombat1027Audit",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)
