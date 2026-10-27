@@ -1,3 +1,5 @@
+USER STOPPED WORK on 2026-10-27. Automatic continuation match-rpg-player-punches-to-video-reference was DELETED. Do not resume refinement without a new explicit user instruction. Stable gameplay remains AG/66575c6; candidate21a6740 and handoff are preserved. This stop overrides older ACTIVE/resume statements below.
+
 
 ## AUTHORITATIVE RESUME STATE — 2026-10-27 21:50 UTC
 
