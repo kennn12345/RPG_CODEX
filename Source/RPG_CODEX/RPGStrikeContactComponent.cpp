@@ -320,7 +320,10 @@ void URPGStrikeContactComponent::PushPlanes()
 	Character->GetComponents<USkeletalMeshComponent>(Meshes);
 	const auto* Animation=Character->FindComponentByClass<URPGPrototypeAnimationComponent>();
 	const bool SmoothFist=Animation && (Animation->IsCapturedStandardPunchPlaying() || Animation->IsReferencePunchPlaying());
-	float UnloadTime=SmoothFist?FMath::Max(ReleaseTime,.2f):ReleaseTime;
+	// A charged reference drive into a close target builds a correction up to ~45 cm; unwinding that over .2 s let go
+	// at up to 6.5 cm a frame. Give charged releases .3 s.
+	const bool Charged=Animation && Animation->IsReferenceChargedPunchPlaying();
+	float UnloadTime=SmoothFist?FMath::Max(ReleaseTime,Charged?.3f:.2f):ReleaseTime;
 	if(ReferenceReleaseRemaining>0.f && !(Animation && Animation->IsReferencePunchPlaying()))
 		for(const auto& LimbState:Limbs)
 			if(LimbState.Correction.SizeSquared()>400.f)UnloadTime=FMath::Max(UnloadTime,.12f);
@@ -332,6 +335,7 @@ void URPGStrikeContactComponent::PushPlanes()
 			// Keep immediate push-out; unload reference full-body punches gradually as their body drive withdraws.
 			// This avoids small pressure reversals while preserving the same surface and compression limits.
 			Anim->ContactReleaseTime = UnloadTime;
+			Anim->bReferenceArmContact=(Animation && Animation->IsReferencePunchPlaying()) || ReferenceReleaseRemaining>0.f;
 			// Keep impact pressure through a brief head rebound instead of
 			// alternating withdrawal/re-contact over consecutive60Hz poses,
 			// including brief gaps between neighboring surface contacts.

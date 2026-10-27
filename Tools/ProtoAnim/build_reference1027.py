@@ -3,7 +3,7 @@
 The paired review preserves the visible filmed sequence. Single strikes adapt its
 boundaries for RT/LT release controls; no automatic second punch or defensive weave.
 """
-import copy,json,math
+import copy,json,math,os
 from pathlib import Path
 import protoanim as p
 import getupcheck as g
@@ -62,6 +62,27 @@ def level_bank(local,bone,limit):
     world=p.qmul(turn,cs[bone][0]);parent=cs[p.PARENT[bone]][0]
     local[bone]=(p.qnorm(p.qmul(p.qconj(parent),world)),local[bone][1])
 
+def side_lean(cs):
+    """Sideways (toward the chest's right) lean of the hips-to-chest line, degrees, and the chest's level facing."""
+    d=p.norm(p.sub(cs['spine_05'][1],cs['pelvis'][1]));left,forward,_=g.frame(cs,'spine_05')
+    fh=p.norm([forward[0],forward[1],0.]);lh=p.norm([left[0],left[1],0.])
+    return math.degrees(math.atan2(-p.dot(d,lh),d[2])),fh
+
+# The fit leaves the chest sitting well off to one side of the hips (13.6 deg in guard, the RamsterZ mocap 3.6):
+# the unlevel stance. Keep the hips-to-chest line within SIDE_LEAN across the chest. (Forward lean along the chest's
+# facing or the camera's line of sight both pulled the head off the filmed head: the marks hold it.)
+SIDE_LEAN=4.
+
+def posture(local):
+    cs=p.to_cs(local);side,fh=side_lean(cs)
+    roll=max(-SIDE_LEAN,min(SIDE_LEAN,side))-side   # set, not add: finish() may run on a pose more than once
+    if abs(roll)<.05:return
+    # The lower spine rolls the chest back over the hips and the upper chest turns back by as much, so the chest
+    # moves across without banking. (About +forward, + turns up toward the left.)
+    for bone,share in [('spine_01',.5),('spine_03',.5),('spine_05',-1.)]:
+        cs=p.to_cs(local);q=p.qmul(p.qaxis(fh,-roll*share),cs[bone][0])
+        local[bone]=(p.qnorm(p.qmul(p.qconj(cs[p.PARENT[bone]][0]),q)),local[bone][1])
+
 def repair_reference_arm(local,s,target,pole,rotation):
     # A punch can look fully extended without entering the straight-chain
     # singularity that makes its elbow plane/mesh roll undefined.
@@ -73,6 +94,10 @@ def repair_reference_arm(local,s,target,pole,rotation):
     p.two_bone(cs,local,upper,lower,end,target,pole,end_rot=rotation,max_reach=.998)
     for bone in [upper,lower,end]:
         local[bone]=(p.qnorm(p.qmul(p.qconj(cs[p.PARENT[bone]][0]),cs[bone][0])),local[bone][1])
+
+def shoulder_cap(local,guard):
+    """How far the right shoulder may sit above the left (cm)."""
+    return 1.5 if guard else 4.
 
 def settle_right_shoulder(local,limit):
     cs=p.to_cs(local);excess=cs['upperarm_r'][1][2]-cs['upperarm_l'][1][2]-limit
@@ -86,11 +111,31 @@ def settle_right_shoulder(local,limit):
     local[clav]=(p.qnorm(p.qmul(p.qconj(parent),q)),local[clav][1])
     now=p.to_cs(local);view_arm(local,'r',target,rotation,p.sub(elbow,now['upperarm_r'][1]))
 
-def at(keys,t):
+def key_progress(times,stops,t):
+    """Fractional key index at time t on one C1 curve through the keys: zero speed only at `stops` (where the filmed
+    motion turns round: guard, the back of a wind-up, full extension), passing through every other key at speed.
+    Easing every key to rest stopped the fist mid-swing at each in-between key (stop-and-go)."""
+    n=len(times);slopes=[1./(times[k+1]-times[k]) for k in range(n-1)]
+    tangent=[0.]*n
+    for k in range(1,n-1):
+        if times[k] in stops:continue
+        a,b=slopes[k-1],slopes[k];ha,hb=times[k]-times[k-1],times[k+1]-times[k]
+        tangent[k]=3.*(ha+hb)/((2.*hb+ha)/a+(hb+2.*ha)/b)   # Fritsch-Carlson weighted harmonic mean: monotone
+    for k in range(n-1):
+        if times[k]<=t<=times[k+1]:
+            h=times[k+1]-times[k];u=(t-times[k])/h
+            h00,h10,h01,h11=2*u**3-3*u**2+1,u**3-2*u**2+u,-2*u**3+3*u**2,u**3-u**2
+            return k+(h10*h*tangent[k]+h01+h11*h*tangent[k+1])   # (h00 multiplies 0: progress within segment k)
+    return float(n-1)
+
+def at(keys,t,stops=None):
     if t<=keys[0][0]:return copy.deepcopy(keys[0][1])
-    for (ta,a),(tb,b) in zip(keys,keys[1:]):
-        if ta<=t<=tb:return blend(a,b,ease((t-ta)/(tb-ta)))
-    return copy.deepcopy(keys[-1][1])
+    if t>=keys[-1][0]:return copy.deepcopy(keys[-1][1])
+    if stops is None:
+        for (ta,a),(tb,b) in zip(keys,keys[1:]):
+            if ta<=t<=tb:return blend(a,b,ease((t-ta)/(tb-ta)))
+    s=key_progress([k[0] for k in keys],stops,t);i=min(int(s),len(keys)-2)
+    return blend(keys[i][1],keys[i+1][1],min(1.,max(0.,s-i)))
 
 def straight_wrist(local,s):
     cs=p.to_cs(local);hand='hand_'+s;parent=p.PARENT[hand]
@@ -139,6 +184,7 @@ def finish(local,planted=False,guard=False):
     # Use the established target-rig fist for every guard, windup and strike frame.
     for bone,(rotation,_) in REFERENCE_FIST.items():local[bone]=(list(rotation),p.REF[bone][1])
     cs=p.to_cs(local);foot_rotations={s:cs['foot_'+s][0] for s in 'lr'}
+    posture(local)
     level_bank(local,'pelvis',.5 if guard else 3.)
     level_bank(local,'spine_05',.5 if guard else 5.)
     for s,q in foot_rotations.items():
@@ -174,7 +220,7 @@ def finish(local,planted=False,guard=False):
             local['spine_01']=(p.qnorm(p.qmul(p.qconj(q),spine)),local['spine_01'][1])
             lower_for_contacts(local,{s:v[1] for s,v in feet.items()})
             for s,(rotation,target) in feet.items():planted_leg(local,s,target,rotation)
-    settle_right_shoulder(local,1.5 if guard else 4.)
+    settle_right_shoulder(local,shoulder_cap(local,guard))
     for s in 'lr':
         cs=p.to_cs(local)
         view_arm(local,s,cs['hand_'+s][1],cs['hand_'+s][0],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]))
@@ -238,7 +284,7 @@ def first_person(local,rest,view_rest,t=0.,side=None):
         relative=p.qmul(p.qconj(rcs['hand_'+s][0]),cs['hand_'+s][0])
         rotation=p._nlerp(cs['hand_'+s][0],p.qmul(vcs0['hand_'+s][0],relative),weight)
         view_arm(view,s,target,rotation,p.sub(vs['lowerarm_'+s][1],vs['upperarm_'+s][1]))
-    settle_right_shoulder(view,1.5 if side is None else 4.)
+    settle_right_shoulder(view,shoulder_cap(view,side is None))
     return follow_ik(view)
 
 def sampled(rows,t):
@@ -388,7 +434,10 @@ def build():
                 # Slight acceleration/recovery timing changes keep the same strike and impact pose.
                 # Spatial offsets near a fully lateral shoulder can choose a different elbow solution.
                 phase=math.sin(math.pi*(t-.12)/.24)**2 if .12<t<.36 else math.sin(math.pi*(t-.36)/.69)**2 if .36<t<1.05 else 0.
-                pose=at(keys,t+offset*.0025*phase)
+                # rest only where the filmed motion turns round: guard, back of the wind-up / deepest coil (f76 / f92),
+                # full extension (f80 / f96), back in guard
+                stops={0.,.293333333,.36,1.05,.626666667 if side=='l' else .893333333}
+                pose=at(keys,t+offset*.0025*phase,stops)
                 # The source advances through the jab/cross. Keep a documented body drive
                 # when removing capsule/root travel, with planted feet owning the support.
                 drive=ease((t-.226666667)/.133333333)*(1.-ease((t-.48)/.5))
@@ -422,7 +471,14 @@ def build():
     calibration+='const FVector ReferenceGuardEye('+','.join(f'{v:.6f}' for v in eye)+');\n'
     path=HERE.parent.parent/'Source/RPG_CODEX/ReferencePunchCalibration.inl'
     if not path.exists() or path.read_text()!=calibration:path.write_text(calibration)
-    (HERE/'reference1027_uefn.json').write_text(json.dumps(result))
+    # (written beside and swapped in, retried: something briefly holding the large file - a scanner - made a direct
+    # write fail with Errno 22 now and then)
+    import time
+    out=HERE/'reference1027_uefn.json';tmp=out.with_suffix('.tmp');tmp.write_text(json.dumps(result))
+    for attempt in range(20):
+        try:os.replace(tmp,out);break
+        except OSError:time.sleep(.5)
+    else:raise RuntimeError('could not replace '+str(out))
     print('REFERENCE REVIEW ASSETS',len(result),flush=True)
     for name,c in result.items():
         if 'V2' in name or 'V3' in name:continue

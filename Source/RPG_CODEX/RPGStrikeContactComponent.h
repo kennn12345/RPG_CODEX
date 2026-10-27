@@ -109,6 +109,8 @@ struct FRPGLimbContactResult
 	/** Elbow / knee angle (180 = straight) as animated and as corrected. */
 	float AnimatedAngle = 180.f;
 	float CorrectedAngle = 180.f;
+	/** Source elbow plane carried by the corrected upper-arm bone versus its geometric bend plane. */
+	float BendPlaneError = 0.f;
 };
 
 /**
