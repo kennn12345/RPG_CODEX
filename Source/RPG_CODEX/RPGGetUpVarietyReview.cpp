@@ -6,6 +6,10 @@
 #include "RPG_CODEX.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/Skeleton.h"
+#include "Animation/AnimTypes.h"
+#include "PhysicsEngine/BodyInstance.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -109,14 +113,41 @@ namespace
 			{
 				static const FVector Throws[]={FVector(-320,0,90),FVector(0,320,80),FVector(-260,-200,75),FVector(220,-260,80)};
 				Npc->BodyImpact->KnockDown(Throws[Episode],Npc->GetMesh()->GetBoneLocation(TEXT("spine_05")));
+
 				EpisodeStart=Now;bWaiting=false;bSawLimp=false;
 			}
+					if (!bWaiting && Episode==0 && !bSeededCapture && Now-EpisodeStart>.25f && Npc->PhysicsReaction->GetReactionState()==ERPGPhysicsReactionState::Limp && FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_CAPTURE_REVIEW"))==TEXT("1"))
+					{
+						bSeededCapture=true;
+						// Seed after the PhysicsControl movement-type change has reached Chaos.
+						// Test-only matching landing. The production selector still chooses the recovery normally.
+						UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/RPG/Animations/SK_UEFN_Mannequin/RPG_GetUp_FaceDown_Capture8614.RPG_GetUp_FaceDown_Capture8614"));
+						if (!Clip) {Test->AddError(TEXT("Missing recorded get-up for landing review"));Save();return true;}
+						const FReferenceSkeleton& Ref=Clip->GetSkeleton()->GetReferenceSkeleton();
+						USkeletalMeshComponent* Mesh=Npc->GetMesh();
+						const FVector At=Npc->GetActorLocation();const FTransform Root(Mesh->GetComponentQuat(),FVector(At.X,At.Y,0.f));
+						int32 Bodies=0;
+						for (int32 B=0;B<Ref.GetNum();++B)
+							if (FBodyInstance* Body=Mesh->GetBodyInstance(Ref.GetBoneName(B)))
+							{
+								FTransform Bone=FTransform::Identity;
+								for (int32 I=B;I!=INDEX_NONE;I=Ref.GetParentIndex(I))
+								{
+									FTransform Local;Clip->GetBoneTransform(Local,FSkeletonPoseBoneIndex(I),FAnimExtractContext(0.),false);Bone=Bone*Local;
+								}
+								Body->SetBodyTransform(Bone*Root,ETeleportType::TeleportPhysics);
+								Body->SetLinearVelocity(FVector::ZeroVector,false);Body->SetAngularVelocityInRadians(FVector::ZeroVector,false);++Bodies;
+							}
+						Test->TestTrue(TEXT("Recorded landing positioned actual physics bodies"),Bodies>=12);
+						UE_LOG(LogRPGInput,Display,TEXT("GETUP CAPTURE SEEDED bodies=%d"),Bodies);
+					}
 			if (!bWaiting)
 			{
 				bSawLimp|=Npc->PhysicsReaction->GetReactionState()==ERPGPhysicsReactionState::Limp;
 				if (bSawLimp && Npc->PhysicsReaction->GetReactionState()==ERPGPhysicsReactionState::Animated && !Npc->IsBusy())
 				{
 					const FName Clip=Npc->BodyImpact->LastGetUpClip,Style=Npc->BodyImpact->LastGetUpStyle;
+						bSawCapture|=Clip==TEXT("RPG_GetUp_FaceDown_Capture8614");
 					Test->TestFalse(TEXT("A real landing selected a custom get-up"),Clip.IsNone());
 					Styles.Add(Style);Clips.Add(Clip);
 					Rows+=FString::Printf(TEXT("%d,%s,%s,%.4f,%.3f\n"),Episode,*Clip.ToString(),*Style.ToString(),Now-EpisodeStart,Npc->GetMesh()->GetBoneLocation(TEXT("pelvis")).Z);
@@ -124,6 +155,8 @@ namespace
 					++Episode;bWaiting=true;EpisodeStart=Now;
 					if (Episode==4)
 					{
+							if (FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_CAPTURE_REVIEW"))==TEXT("1"))
+								Test->TestTrue(TEXT("Actual NPC selected and completed the recorded recovery"),bSawCapture);
 						if (FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_GETUP_INTERRUPT"))==TEXT("1"))
 							Test->TestTrue(TEXT("A new knockdown interrupted the held get-up"),bInterrupted);
 						Test->TestTrue(TEXT("Actual get-ups aligned before authored motion resumed"),bSawAligning);
@@ -139,7 +172,7 @@ namespace
 	private:
 		void Save(){FFileHelper::SaveStringToFile(Rows,*(Dir/TEXT("selections.csv")));FFileHelper::SaveStringToFile(Captures,*(Dir/TEXT("captures.csv")));if(!PoseRows.IsEmpty())FFileHelper::SaveStringToFile(PoseRows,*(Dir/TEXT("arms.csv")));}
 		FAutomationTestBase* Test;
-		bool bVisual=false,bWaiting=true,bSawLimp=false,bWasAligning=false,bSawAligning=false,bReportedMovingAlign=false,bInterrupted=false;
+		bool bVisual=false,bWaiting=true,bSawLimp=false,bWasAligning=false,bSawAligning=false,bReportedMovingAlign=false,bInterrupted=false,bSawCapture=false,bSeededCapture=false;
 		TWeakObjectPtr<ARPGNpcCharacter> Npc;
 		ACameraActor* Camera=nullptr;
 		TSet<FName> Clips,Styles;

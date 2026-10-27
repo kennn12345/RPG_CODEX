@@ -13,6 +13,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Engine/SkeletalMesh.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/FileManager.h"
@@ -52,6 +53,8 @@ namespace
 		{ TEXT("FaceUpArmsV_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
 		{ TEXT("FaceUpKneeOut_LeftLead"), EGetUpKind::Stand, TEXT("LeftKnee") },
 		{ TEXT("FaceUp_RollRight"), EGetUpKind::Roll, TEXT("RightRoll") },
+		// Approved phone capture: natural push, knee tuck and rise, retargeted to the gameplay skeleton.
+		{ TEXT("FaceDown_Capture8614"), EGetUpKind::Stand, TEXT("CapturedPush") },
 	};
 
 	/** Body pose features compared between the ragdoll and the clips: where these bones are relative to the hips, in a
@@ -77,8 +80,15 @@ namespace
 	{
 		FVector Points[NumFeatures];
 		float PelvisHeight = 0.f;
+		FVector ChestFacing = FVector::ZeroVector;
 	};
-	FPoseFeatures MakeFeatures(const FVector& Pelvis, const FVector* Bones, float PelvisHeight)
+	FVector ChestFacing(const FReferenceSkeleton& Ref,const FQuat& Actual)
+	{
+		FTransform Rest=FTransform::Identity;
+		for (int32 I=Ref.FindBoneIndex(TEXT("spine_05"));I!=INDEX_NONE;I=Ref.GetParentIndex(I)) Rest=Rest*Ref.GetRefBonePose()[I];
+		return Actual.RotateVector(Rest.GetRotation().UnrotateVector(FVector::YAxisVector)).GetSafeNormal();
+	}
+	FPoseFeatures MakeFeatures(const FVector& Pelvis, const FVector* Bones, float PelvisHeight,const FVector& Facing)
 	{
 		// Bones[0] is the head: the frame turns with the hips-to-head direction (flattened), so any facing compares.
 		FVector X = FVector(Bones[0].X - Pelvis.X, Bones[0].Y - Pelvis.Y, 0.f).GetSafeNormal();
@@ -91,7 +101,12 @@ namespace
 			F.Points[I] = FVector(FVector::DotProduct(D, X), FVector::DotProduct(D, Y), D.Z);
 		}
 		F.PelvisHeight = PelvisHeight;
+		F.ChestFacing=FVector(FVector::DotProduct(Facing,X),FVector::DotProduct(Facing,Y),Facing.Z).GetSafeNormal();
 		return F;
+	}
+	float ChestTurn(const FPoseFeatures& A,const FPoseFeatures& B)
+	{
+		return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(float(FVector::DotProduct(A.ChestFacing,B.ChestFacing)),-1.f,1.f)));
 	}
 	const TCHAR* SegmentNames[] = { TEXT("upper arm L"), TEXT("forearm L"), TEXT("upper arm R"), TEXT("forearm R"),
 		TEXT("thigh L"), TEXT("shin L"), TEXT("thigh R"), TEXT("shin R") };
@@ -173,7 +188,8 @@ namespace
 				S.GetUp = &G;
 				S.Clip = Clip;
 				S.Time = T;
-				S.Features = MakeFeatures(Pelvis, Bones, float(Pelvis.Z - Root.Z));
+				const FQuat Chest=ClipBoneTransform(Clip,Ref,Ref.FindBoneIndex(TEXT("spine_05")),T).GetRotation();
+				S.Features = MakeFeatures(Pelvis, Bones, float(Pelvis.Z - Root.Z),ChestFacing(Ref,Chest));
 				S.PelvisFromRoot = FVector2D(Pelvis.X - Root.X, Pelvis.Y - Root.Y);
 				S.HeadYaw = FMath::RadiansToDegrees(FMath::Atan2(Bones[0].Y - Pelvis.Y, Bones[0].X - Pelvis.X));
 				Samples.Add(S);
@@ -188,13 +204,15 @@ namespace
 		auto Moves=[](const FGetUpSample& S){return S.GetUp->Kind==EGetUpKind::Run || S.GetUp->Kind==EGetUpKind::Crouch;};
 		const bool bOnlyMoving=bWantsToMove && Samples.ContainsByPredicate(Moves);
 		auto Kind=[&](const FGetUpSample& S){return bOnlyMoving?Moves(S):S.GetUp->Kind!=EGetUpKind::Run;};
-		bAnyFadeable=Samples.ContainsByPredicate([&](const FGetUpSample& S){return Kind(S) && LargestSegmentTurn(Now,S.Features)<=MaxSegmentTurn;});
-		auto Score=[&](const FGetUpSample& S){return PoseError(Now,S.Features)+TurnCost*FMath::Square(LargestSegmentTurn(Now,S.Features));};
+		// Limb positions alone cannot distinguish a body rolled onto its front from its back.
+		auto Compatible=[&](const FGetUpSample& S){return LargestSegmentTurn(Now,S.Features)<=MaxSegmentTurn && ChestTurn(Now,S.Features)<=MaxSegmentTurn;};
+		bAnyFadeable=Samples.ContainsByPredicate([&](const FGetUpSample& S){return Kind(S) && Compatible(S);});
+		auto Score=[&](const FGetUpSample& S){return PoseError(Now,S.Features)+TurnCost*(FMath::Square(LargestSegmentTurn(Now,S.Features))+FMath::Square(ChestTurn(Now,S.Features)));};
 		TMap<const FGetUp*,const FGetUpSample*> PerClip;
 		float Best=TNumericLimits<float>::Max();
 		for (const FGetUpSample& S:Samples)
 		{
-			if (!Kind(S) || (bAnyFadeable && LargestSegmentTurn(Now,S.Features)>MaxSegmentTurn)) continue;
+			if (!Kind(S) || (bAnyFadeable && !Compatible(S))) continue;
 			const FGetUpSample* const* Previous=PerClip.Find(S.GetUp);
 			if (!Previous || Score(S)<Score(**Previous)) PerClip.Add(S.GetUp,&S);
 			Best=FMath::Min(Best,Score(S));
@@ -358,7 +376,8 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	// near-equal matches.
 	FVector Bones[NumFeatures];
 	for (int32 I = 0; I < NumFeatures; ++I) Bones[I] = Body->GetBoneLocation(FeatureBones[I].Bone);
-	const FPoseFeatures Now = MakeFeatures(Pelvis, Bones, float(Pelvis.Z) - FloorZ);
+	const FPoseFeatures Now = MakeFeatures(Pelvis, Bones, float(Pelvis.Z) - FloorZ,
+		ChestFacing(Body->GetSkeletalMeshAsset()->GetRefSkeleton(),Body->GetBoneQuaternion(TEXT("spine_05"))));
 	URPGBodyImpactComponent* History=Character->FindComponentByClass<URPGBodyImpactComponent>();
 	int32 CloseCount=0; bool bAnyFadeable=false;
 	const FGetUpSample* Selected=ChooseGetUp(Now,bWantsToMove,History?History->LastGetUpStyle:NAME_None,History?History->LastGetUpClip:NAME_None,CloseCount,bAnyFadeable);
@@ -367,17 +386,19 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	// A start still far from the body (limbs turning a long way) fades in more slowly: limbs untwist at a human speed.
 	int32 TurnSegment = 0;
 	const float Turn = LargestSegmentTurn(Now, Pick.Features, &TurnSegment);
-	if (Turn > MaxSegmentTurn)
+	const float TorsoTurn=ChestTurn(Now,Pick.Features);
+	const float AlignmentTurn=FMath::Max(Turn,TorsoTurn);
+	if (AlignmentTurn > MaxSegmentTurn)
 	{
 		// No start close enough: the landing is written to Saved/GetUpMisses.csv (body parts relative to the hips, in
 		// the matching frame: forward = hips to head along the ground), to author a get-up that starts like it.
-		FString Row = FString::Printf(TEXT("%s,%s,%.0f,%s,%.1f"), *Character->GetActorNameOrLabel(), *Pick.Clip->GetName(), Turn, SegmentNames[TurnSegment], Now.PelvisHeight);
+		FString Row = FString::Printf(TEXT("%s,%s,%.0f,%s,%.1f"), *Character->GetActorNameOrLabel(), *Pick.Clip->GetName(), AlignmentTurn, TorsoTurn>Turn?TEXT("torso"):SegmentNames[TurnSegment], Now.PelvisHeight);
 		for (int32 I = 0; I < NumFeatures; ++I) Row += FString::Printf(TEXT(",%s,%.1f,%.1f,%.1f"), FeatureBones[I].Bone, Now.Points[I].X, Now.Points[I].Y, Now.Points[I].Z);
 		FFileHelper::SaveStringToFile(Row + LINE_TERMINATOR, *(FPaths::ProjectSavedDir() / TEXT("GetUpMisses.csv")), FFileHelper::EEncodingOptions::AutoDetect,
 			&IFileManager::Get(), FILEWRITE_Append);
 	}
 	if (URPGPhysicsReactionComponent* Reaction = Character->FindComponentByClass<URPGPhysicsReactionComponent>())
-		Reaction->NextReturnBlendTime = FMath::GetMappedRangeValueClamped(FVector2f(60.f, 150.f), FVector2f(0.5f, 1.f), Turn);
+		Reaction->NextReturnBlendTime = FMath::GetMappedRangeValueClamped(FVector2f(60.f, 150.f), FVector2f(0.5f, 1.f), AlignmentTurn);
 
 	// Turn and place the capsule so that frame lies on the body (the fade back to animation blends into it).
 	const FVector Head = Body->GetBoneLocation(TEXT("head")) - Pelvis;
@@ -421,8 +442,8 @@ bool FRPGGetUpVarietyTest::RunTest(const FString&)
 	const auto& Samples=GetUpSamples();
 	TSet<FName> Loaded,Styles;
 	for (const auto& S:Samples) { Loaded.Add(S.Clip->GetFName()); Styles.Add(FName(S.GetUp->Style)); }
-	TestEqual(TEXT("All 29 custom recovery clips loaded"),Loaded.Num(),29);
-	TestEqual(TEXT("Three visibly different recovery styles"),Styles.Num(),3);
+	TestEqual(TEXT("All 30 custom recovery clips loaded"),Loaded.Num(),30);
+	TestEqual(TEXT("Four visibly different recovery styles"),Styles.Num(),4);
 	int32 Poses=0,Selections=0;
 	for (const auto& Source:Samples)
 	{
@@ -434,6 +455,7 @@ bool FRPGGetUpVarietyTest::RunTest(const FString&)
 			const auto* Pick=ChooseGetUp(Source.Features,false,LastStyle,LastClip,Count,bFadeable);
 			if (!TestNotNull(TEXT("Compatible recovery found"),Pick)) continue;
 			TestTrue(TEXT("Limb-turn safety retained"),bFadeable && LargestSegmentTurn(Source.Features,Pick->Features)<=MaxSegmentTurn);
+			TestTrue(TEXT("Torso-turn safety retained"),ChestTurn(Source.Features,Pick->Features)<=MaxSegmentTurn);
 			TestTrue(TEXT("Original start has a compatible alternate style"),Count>=2);
 			if (!LastStyle.IsNone()) TestTrue(TEXT("Repeated identical landing changes recovery style"),FName(Pick->GetUp->Style)!=LastStyle);
 			LastStyle=FName(Pick->GetUp->Style); LastClip=Pick->Clip->GetFName(); ++Selections;
@@ -441,6 +463,48 @@ bool FRPGGetUpVarietyTest::RunTest(const FString&)
 	}
 	TestEqual(TEXT("Every original landing variant covered"),Poses,14);
 	UE_LOG(LogRPGInput,Display,TEXT("GETUP VARIETY loaded=%d styles=%d sourcePoses=%d safeSelections=%d"),Loaded.Num(),Styles.Num(),Poses,Selections);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGGetUpCaptureTest,"RPG.Npc.GetUpCapture",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)
+bool FRPGGetUpCaptureTest::RunTest(const FString&)
+{
+	const FName Name(TEXT("RPG_GetUp_FaceDown_Capture8614"));
+	const auto& Samples=GetUpSamples();
+	const FGetUpSample* Start=Samples.FindByPredicate([&](const FGetUpSample& S){return S.Clip->GetFName()==Name && S.Time==0.f;});
+	if (!TestNotNull(TEXT("Approved capture is in the production get-up table"),Start)) return false;
+	UAnimSequence* Clip=Start->Clip;
+	FPoseFeatures Opposite=Start->Features;Opposite.ChestFacing=-Opposite.ChestFacing;
+	TestTrue(TEXT("Matching limb positions do not hide an opposite-facing torso"),ChestTurn(Start->Features,Opposite)>179.f);
+	TestTrue(TEXT("Captured performance and closing steps retained"),Clip->GetPlayLength()>7.f && Clip->GetPlayLength()<9.f);
+	int32 Close=0;bool bFadeable=false;
+	const FGetUpSample* Pick=ChooseGetUp(Start->Features,false,NAME_None,NAME_None,Close,bFadeable);
+	if (TestNotNull(TEXT("Matching prone landing has a recovery"),Pick))
+	{
+		TestEqual(TEXT("Matching capture start selects the recorded recovery"),Pick->Clip->GetFName(),Name);
+		TestTrue(TEXT("Capture selection keeps the limb-turn bound"),bFadeable && LargestSegmentTurn(Start->Features,Pick->Features)<=MaxSegmentTurn);
+	}
+	const FReferenceSkeleton& Ref=Clip->GetSkeleton()->GetReferenceSkeleton();
+	for (double T=0.;T<=Clip->GetPlayLength();T+=1./60.)
+	{
+		const FTransform Root=ClipBoneTransform(Clip,Ref,0,T);
+		if (!Root.GetLocation().IsNearlyZero(.01f) || !Root.GetRotation().Equals(FQuat::Identity,.0001f))
+		{
+			AddError(TEXT("Recorded get-up moves the root; recovery placement owns displacement"));break;
+		}
+	}
+	UAnimSequence* Idle=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Stand_Idle_Loop.M_Neutral_Stand_Idle_Loop"));
+	if (TestNotNull(TEXT("GASP idle exists"),Idle))
+	{
+		TestEqual(TEXT("Capture uses the gameplay skeleton"),Clip->GetSkeleton(),Idle->GetSkeleton());
+		for (const FFeatureBone& Bone:FeatureBones)
+		{
+			const int32 Index=Ref.FindBoneIndex(Bone.Bone);
+			const FVector End=ClipBoneTransform(Clip,Ref,Index,Clip->GetPlayLength()).GetLocation();
+			const FVector Stand=ClipBoneTransform(Idle,Ref,Index,0.).GetLocation();
+			TestTrue(FString::Printf(TEXT("Capture ends in GASP idle: %s"),Bone.Bone),!End.ContainsNaN() && End.Equals(Stand,.5f));
+		}
+	}
 	return true;
 }
 #endif
