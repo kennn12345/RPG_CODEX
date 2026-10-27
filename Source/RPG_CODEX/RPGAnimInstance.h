@@ -53,6 +53,7 @@ private:
 	/** Kept between poses: Applied grows at once (never into the surface), eases off over ContactReleaseTime. */
 	FRPGLimbContactResult ContactResults[RPGStrikeContact::NumLimbs];
 	float ContactReleaseTime = 0.06f;
+	float ContactPressureHold = 0.f;
 	TArray<class UAnimSequence*> FlightClips;
 	float FlightWeight = 0.f, FlightPhase = 0.f;
     float FlightTurn = 0.f, FlightActionTime = 0.f, FlightActionWeight = 0.f;
@@ -112,6 +113,7 @@ public:
 	/** Seconds (time constant) the contact correction takes to ease off once nothing holds the limb back. */
 	UPROPERTY(Transient)
 	float ContactReleaseTime = 0.06f;
+	float ContactPressureHold = 0.f;
 
 	/** What the contact did to this limb in the current pose (component space). */
 	FRPGLimbContactResult GetContactResult(int32 Limb) const;

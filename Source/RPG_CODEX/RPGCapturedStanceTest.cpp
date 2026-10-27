@@ -21,6 +21,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "Tests/AutomationCommon.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UnrealClient.h"
@@ -51,13 +52,9 @@ public:
             if (URPGCameraModeComponent* Mode = Player->FindComponentByClass<URPGCameraModeComponent>(); Mode && Mode->bIsFirstPerson != bFirstPerson) Mode->TogglePerspective();
             Animation->CombatStanceTimeout = 30.f;
             Controller->SetControlRotation(Player->GetActorRotation());
-            if (!bFirstPerson)
-                if (const URPGCombatAimComponent* Aim=Player->FindComponentByClass<URPGCombatAimComponent>())
-                {
-                    // Aim along the strike line, so ordinary combat square-up is not mistaken for capture yaw.
-                    const FVector Forward=Player->GetMesh()->GetComponentTransform().TransformVectorNoScale(Aim->NaturalStrikePoint-Aim->StrikePivot);
-                    Controller->SetControlRotation(FRotator(0.f,Forward.Rotation().Yaw,0.f));
-                }
+            // Isolate recorded root travel/turns from ordinary gameplay aim square-up.
+            // Aim remains enabled in the punch/contact/locomotion integration tests.
+            if (auto* Aim=Player->FindComponentByClass<URPGCombatAimComponent>())Aim->SetComponentTickEnabled(false);
             Rotation = Player->GetActorRotation(); Location = Player->GetActorLocation();
             Press(Player, Controller, true);
             if (bVisual)
@@ -91,9 +88,12 @@ public:
                             if (Segment.GetAnimReference())
                             {
                                 const FString Name=Segment.GetAnimReference()->GetName();
-                                const FString Expected=bFirstPerson?TEXT("RPG_FP_CombatStance_Capture8619"):TEXT("RPG_CombatStance_Capture8619");
+                                const auto* Reference=IConsoleManager::Get().FindConsoleVariable(TEXT("rpg.ReferencePunches"));
+                                const bool bReference=Reference && Reference->GetInt()!=0;
+                                const FString Expected=FString::Printf(TEXT("RPG_%sCombatStance_%s"),bFirstPerson?TEXT("FP_"):TEXT(""),bReference?TEXT("Reference1027"):TEXT("Capture8619"));
+                                const FString PunchPrefix=FString::Printf(TEXT("RPG_%sPunch_R_Light_%s"),bFirstPerson?TEXT("FP_"):TEXT(""),bReference?TEXT("Reference1027_V"):TEXT("V"));
                                 if (Name==Expected) { bSawCapture=true; if (T>6.f) bSawReturn=true; }
-                                if (Name.StartsWith(bFirstPerson?TEXT("RPG_FP_Punch_R_Light_V"):TEXT("RPG_Punch_R_Light_V"))) bSawPunch=true;
+                                if (Name.StartsWith(PunchPrefix)) bSawPunch=true;
                             }
         }
         if (bVisual && T-LastShot >= 1.f/30.f)

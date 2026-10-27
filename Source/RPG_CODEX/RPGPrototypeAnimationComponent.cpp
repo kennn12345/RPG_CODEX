@@ -34,8 +34,9 @@
 
 namespace
 {
-    // Opt-in review only until reference/body/contact comparisons are accepted.
-    TAutoConsoleVariable<int32> CVarReferencePunches(TEXT("rpg.ReferencePunches"),0,TEXT("Review the Reference1027 player punch/stance candidates."));
+#include "ReferencePunchCalibration.inl"
+    // Keep the previous captured set available for local comparisons/fallback.
+    TAutoConsoleVariable<int32> CVarReferencePunches(TEXT("rpg.ReferencePunches"),1,TEXT("Reference1027 player punch/stance family; 0 restores the previous captured set."));
     const FName PrototypeSlot(TEXT("DefaultSlot"));
     /** Layered from spine_01 up, so the legs keep the locomotion underneath. Already defined on SK_Mannequin. */
     const FName UpperBodySlot(TEXT("UpperBody"));
@@ -587,18 +588,35 @@ void URPGPrototypeAnimationComponent::UpdateCharge(UAnimInstance* Instance, floa
 UAnimSequence* URPGPrototypeAnimationComponent::CapturedPunchClip(bool bLeft,int32 Tier,int32 Variant,const USkeleton* Skeleton) const
 {
     if (!Skeleton || Skeleton->GetName()!=TEXT("SK_UEFN_Mannequin")) return nullptr;
-    if (Tier==0 && CVarReferencePunches.GetValueOnGameThread()!=0)
+    const TCHAR* Tiers[]={TEXT("Light"),TEXT("Heavy"),TEXT("Power")};
+    if (CVarReferencePunches.GetValueOnGameThread()!=0)
     {
-        const FString Name=FString::Printf(TEXT("RPG_Punch_%s_Light_Reference1027_V%d"),bLeft?TEXT("L"):TEXT("R"),FMath::Clamp(Variant,0,2)+1);
+        const FString Name=FString::Printf(TEXT("RPG_Punch_%s_%s_Reference1027_V%d"),bLeft?TEXT("L"):TEXT("R"),Tiers[FMath::Clamp(Tier,0,2)],FMath::Clamp(Variant,0,2)+1);
         const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/ReferenceCombat1027/%s.%s"),*Name,*Name);
         UAnimSequence* Reference=LoadObject<UAnimSequence>(nullptr,*Path);
         return Reference && Reference->GetSkeleton()==Skeleton?Reference:nullptr;
     }
-    const TCHAR* Tiers[]={TEXT("Light"),TEXT("Heavy"),TEXT("Power")};
     const FString Name=FString::Printf(TEXT("RPG_Punch_%s_%s_V%d"),bLeft?TEXT("L"):TEXT("R"),Tiers[FMath::Clamp(Tier,0,2)],FMath::Clamp(Variant,0,2)+1);
     const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/CapturedPunches/%s.%s"),*Name,*Name);
     UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,*Path);
     return Clip && Clip->GetSkeleton()==Skeleton?Clip:nullptr;
+}
+
+bool URPGPrototypeAnimationComponent::IsReferencePunchPlaying() const
+{
+    // Includes a first-ever held charge, before LastCapturedPunch is assigned on release.
+    return CVarReferencePunches.GetValueOnGameThread()!=0 && bCapturedPunch && !bChargeIsKick;
+}
+
+bool URPGPrototypeAnimationComponent::GetReferenceStrikePoint(FVector& OutPoint) const
+{
+    if (CVarReferencePunches.GetValueOnGameThread()==0) return false;
+    const auto* Character=Cast<ACharacter>(GetOwner());
+    const auto* Instance=Character && Character->GetMesh()?Character->GetMesh()->GetAnimInstance():nullptr;
+    if (!Instance || !Instance->CurrentSkeleton || Instance->CurrentSkeleton->GetName()!=TEXT("SK_UEFN_Mannequin")) return false;
+    const int32 Hand=bCapturedPunch && ChargeHand==ERPGHand::Left?0:1;
+    const int32 Tier=bCapturedPunch && bChargeLoops?(ChargedPlaying && ChargedPlaying->GetName().Contains(TEXT("_Power_"))?2:1):0;
+    OutPoint=ReferenceImpactPoints[Hand][Tier];return true;
 }
 
 bool URPGPrototypeAnimationComponent::ReleaseCapturedPunch(UAnimInstance* Instance,const FRPGPlayerActionInfo& Info)

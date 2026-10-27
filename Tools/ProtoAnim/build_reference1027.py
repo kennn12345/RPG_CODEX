@@ -130,13 +130,15 @@ def camera_torso(local,weight):
     # A forward camera cannot see fists held against the60-degree bladed chest.
     # Square the presentation torso in guard; return exactly
     # to the body performance before the strike/hit interval.
+    available=max(0.,g.relative(p.to_cs(local),'spine_05','pelvis')[2]+37.)
+    turn=min(55.*weight,available)
     for bone,share in [('spine_01',.2),('spine_03',.3),('spine_05',.5)]:
-        cs=p.to_cs(local);q=p.qmul(p.qaxis([0.,0.,1.],-55.*weight*share),cs[bone][0])
+        cs=p.to_cs(local);q=p.qmul(p.qaxis([0.,0.,1.],-turn*share),cs[bone][0])
         local[bone]=(p.qnorm(p.qmul(p.qconj(cs[p.PARENT[bone]][0]),q)),local[bone][1])
 
 def first_person(local,rest,view_rest,t=0.,side=None):
     view=copy.deepcopy(local);rcs=p.to_cs(rest);vcs0=p.to_cs(view_rest)
-    presentation=1. if side is None else 1.-ease(t/.08) if t<.36 else ease((t-.66)/.39)
+    presentation=1. if side is None else 1.-ease(t/.08) if t<.36 else ease((t-.78)/.27)
     camera_torso(view,presentation)
     for s in 'lr':
         cs=p.to_cs(local)
@@ -148,6 +150,82 @@ def first_person(local,rest,view_rest,t=0.,side=None):
         rotation=p._nlerp(cs['hand_'+s][0],p.qmul(vcs0['hand_'+s][0],relative),weight)
         view_arm(view,s,target,rotation,p.sub(vs['lowerarm_'+s][1],vs['upperarm_'+s][1]))
     return follow_ik(view)
+
+def sampled(rows,t):
+    f=max(0.,min(len(rows)-1,t*FPS));a=int(f);b=min(a+1,len(rows)-1)
+    return blend(rows[a],rows[b],f-a)
+
+def lean_forward(local,angle):
+    for bone,share in [('spine_01',.2),('spine_03',.3),('spine_05',.5)]:
+        cs=p.to_cs(local);q=p.qmul(p.qaxis([1.,0.,0.],-angle*share),cs[bone][0])
+        local[bone]=(p.qnorm(p.qmul(p.qconj(cs[p.PARENT[bone]][0]),q)),local[bone][1])
+
+def view_coil(coil,view_rest,side):
+    view=copy.deepcopy(coil);camera_torso(view,1.);anchor=p.to_cs(view_rest)
+    shift=p.mul(p.sub(p.to_cs(coil)['pelvis'][1],p.to_cs(STANCE)['pelvis'][1]),.3)
+    for s in 'lr':
+        target=p.add(anchor['hand_'+s][1],shift)
+        if s==side:target=p.add(target,[3. if s=='l' else -3.,-10.,-2.])
+        fit_punch_shoulder(view,s,target);cs=p.to_cs(view);target=elbow_clearance(cs,s,target)
+        view_arm(view,s,target,anchor['hand_'+s][0],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]))
+    return finish(view,True)
+
+def charged_family(result,view_rest):
+    """Unseen charged attacks are explicit style adaptations of the visible single strikes.
+
+    Preserve the existing hold/release contract; grade the same body/arm action,
+    rather than grafting an unrelated hook onto the new standard cross/jab.
+    """
+    for side in 'lr':
+        standard=result[f'RPG_Punch_{side.upper()}_Light_Reference1027_V1']['poses']
+        load=sampled(standard,.12);coil=copy.deepcopy(load)
+        coil['pelvis']=(coil['pelvis'][0],p.add(coil['pelvis'][1],[0.,-3.,-2.]))
+        hand='hand_'+side
+        coil=finish(coil,True)
+        fp_coil=view_coil(coil,view_rest,side)
+        fp_load=sampled(result[f'RPG_FP_Punch_{side.upper()}_Light_Reference1027_V1']['poses'],.12)
+        for tier,strength,duration in [('Heavy',1.,2.2),('Power',2.,2.4)]:
+            for variant,offset in enumerate([0.,1.,-1.],1):
+                rows=[];views=[]
+                for i in range(round(duration*FPS)+1):
+                    t=i/FPS
+                    if t<=.12:
+                        pose=sampled(standard,t);phase=t
+                    elif t<=1.2:
+                        pose=blend(load,coil,ease((t-.12)/.48));phase=.12
+                    else:
+                        phase=.12+(.24*(t-1.2)/.3) if t<=1.5 else .36+(.30*(t-1.5)/.3) if t<=1.8 else .66+.39*(t-1.8)/(duration-1.8)
+                        timing=math.sin(math.pi*(phase-.12)/.24)**2 if phase<.36 else math.sin(math.pi*(phase-.36)/.69)**2
+                        pose=sampled(standard,phase+offset*.004*timing)
+                        if t<1.38:pose=blend(coil,pose,ease((t-1.2)/.18))
+                        drive=ease((t-1.2)/.3)*(1.-ease((t-1.7)/(duration-1.7)))
+                        original_height=p.to_cs(pose)[hand][1][2]
+                        pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],[0.,8.*strength*drive,0.]))
+                        lean_forward(pose,6.*strength*drive)
+                        pose=finish(pose,True)
+                        extension=drive*(1.-ease((t-1.58)/.17))
+                        if extension>1.e-6:
+                            cs=p.to_cs(pose);target=p.add(cs[hand][1],[0.,4.*strength*extension,2.*strength*extension]);rotation=cs[hand][0]
+                            # Knees/hips absorb the larger drive, but the fist still delivers
+                            # the same head-height straight punch instead of dropping to the waist.
+                            target[2]+=(original_height-cs[hand][1][2])*extension
+                            fit_punch_shoulder(pose,side,target);cs=p.to_cs(pose);target=elbow_clearance(cs,side,target)
+                            pole=p.sub(cs['lowerarm_'+side][1],cs['upperarm_'+side][1])
+                            if side=='l':pole=p.add(pole,p.mul(g.frame(cs,'spine_05')[0],30.*extension))
+                            view_arm(pose,side,target,rotation,pole)
+                    pose=finish(pose,True);rows.append(pose)
+                    if .12<t<=1.2:view=finish(blend(fp_load,fp_coil,ease((t-.12)/.48)),True)
+                    else:
+                        view=first_person(pose,STANCE,view_rest,phase,side)
+                        if 1.2<t<1.4:view=finish(blend(fp_coil,view,ease((t-1.2)/.2)),True)
+                    views.append(view)
+                rows[0]=copy.deepcopy(STANCE);rows[-1]=copy.deepcopy(STANCE)
+                views[0]=copy.deepcopy(view_rest);views[-1]=copy.deepcopy(view_rest)
+                for first,poses in [(False,rows),(True,views)]:
+                    name=f'RPG_{"FP_" if first else ""}Punch_{side.upper()}_{tier}_Reference1027_V{variant}'
+                    result[name]=clip(name,poses,[0.,.12,.6,1.2,1.5,1.8,duration],impact=1.5,hand=side,tier=tier,variant=variant-1,
+                        charge_switch=.12,hold_start=.6,hold_end=1.2,
+                        adaptation='Charged style adaptation; not present in the short reference. Shared coil/hold, graded hip drive, torso extension and reach; same single-strike family.')
 
 def build():
     global STANCE
@@ -227,6 +305,20 @@ def build():
             name=name.replace('RPG_Punch_','RPG_FP_Punch_')
             result[name]=clip(name,views,[a for a,_ in keys],impact=.36,hand=side,tier='Light',variant=variant-1,
                              presentation='Camera guard outside the hit interval; shared striking-hand path through impact and initial withdrawal')
+    charged_family(result,view_rest)
+    # Runtime aim calibration follows each authored fist, not the previous family's reach/height.
+    lines=['// Generated by Tools/ProtoAnim/build_reference1027.py; component-space fist centres.',
+           'const FVector ReferenceImpactPoints[2][3] = {']
+    for side in 'lr':
+        points=[]
+        for tier in ['Light','Heavy','Power']:
+            c=result[f'RPG_Punch_{side.upper()}_{tier}_Reference1027_V1'];cs=p.to_cs(c['poses'][round(c['impact']*FPS)])
+            point=p.lerp(cs['hand_'+side][1],cs['middle_01_'+side][1],.5)
+            points.append('FVector('+','.join(f'{v:.6f}' for v in point)+')')
+        lines.append('    {'+', '.join(points)+'},')
+    lines.append('};');calibration='\n'.join(lines)+'\n'
+    path=HERE.parent.parent/'Source/RPG_CODEX/ReferencePunchCalibration.inl'
+    if not path.exists() or path.read_text()!=calibration:path.write_text(calibration)
     (HERE/'reference1027_uefn.json').write_text(json.dumps(result))
     print('REFERENCE REVIEW ASSETS',len(result),flush=True)
     for name,c in result.items():

@@ -112,6 +112,13 @@ namespace
 			// Optional focused run of the existing ordinary close/normal cases; defaults retain the full suite.
 			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_ORDINARY")).IsEmpty()) Cases.SetNum(8);
 			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_STANDARD_PUNCHES")).IsEmpty()) Cases.SetNum(4);
+			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_ALL_PUNCH_TIERS")).IsEmpty())
+			{
+				Cases.SetNum(4);
+				for (const bool Left : {false,true}) for (const bool Power : {false,true}) for (const float Range : {100.f,72.f})
+					Cases.Add({FString::Printf(TEXT("%s %s punch, %s range"),Power?TEXT("Power"):TEXT("Heavy"),Left?TEXT("left"):TEXT("right"),Range>80?TEXT("normal"):TEXT("close")),
+						Left?TEXT("IA_Defense"):TEXT("IA_RightAttack"),Power?1.3f:.7f,Range,0.f,Left?TEXT("Charged Left Punch"):TEXT("Charged Right Punch"),Power?3.5f:2.f});
+			}
 			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_CLOSE_PUNCHES")).IsEmpty()) Cases = {Cases[1],Cases[3]};
 			else if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_CLOSE_PUNCH")).IsEmpty()) Cases = {Cases[1]};
 		}

@@ -101,6 +101,8 @@ struct FRPGLimbContactResult
 	FVector Moved = FVector::ZeroVector;
 	/** The offset the surfaces ask for (kept between poses: grows at once, eases off); Moved can be less (fold limit). */
 	FVector Applied = FVector::ZeroVector;
+	/** Time since pressure last increased; a brief dwell avoids chasing a rebounding surface. */
+	float PressureAge = 0.f;
 	/** What the limb could not take by bending (the elbow / knee at its fold limit, or the forearm / shin itself in the
 	 *  surface): the body has to back off this much. */
 	FVector Residual = FVector::ZeroVector;

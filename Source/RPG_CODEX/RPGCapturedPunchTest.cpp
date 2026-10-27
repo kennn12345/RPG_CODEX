@@ -85,7 +85,7 @@ public:
             Phase=-1;Start=Now;return false;
         }
         if (Phase==-1) {if (Now-Start<.5f)return false;Phase=0;}
-        const int32 Total=bVisual?(bReferenceReview?2:6):18;
+        const int32 Total=bVisual?(bReferenceReview && FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_VISUAL_ALL_TIERS")).IsEmpty()?2:6):18;
         const int32 Tier=Case/(bVisual?2:6),Variant=bVisual?0:(Case%6)/2;
         const bool bLeft=Case%2==1;
         if (bVisual && Case<Total && Now-LastShot>=1.f/30.f && !FScreenshotRequest::IsScreenshotRequested())
@@ -112,7 +112,7 @@ public:
             const TCHAR* Tiers[]={TEXT("Light"),TEXT("Heavy"),TEXT("Power")};
             const auto* Reference=IConsoleManager::Get().FindConsoleVariable(TEXT("rpg.ReferencePunches"));
             const bool bReference=Reference && Reference->GetInt()!=0;
-            const FString Expected=FString::Printf(TEXT("RPG_%sPunch_%s_%s%s_V%d"),bFirst?TEXT("FP_"):TEXT(""),bLeft?TEXT("L"):TEXT("R"),Tiers[Tier],bReference && Tier==0?TEXT("_Reference1027"):TEXT(""),Variant+1);
+            const FString Expected=FString::Printf(TEXT("RPG_%sPunch_%s_%s%s_V%d"),bFirst?TEXT("FP_"):TEXT(""),bLeft?TEXT("L"):TEXT("R"),Tiers[Tier],bReference?TEXT("_Reference1027"):TEXT(""),Variant+1);
             const FString Stance=FString::Printf(TEXT("RPG_%sCombatStance_%s"),bFirst?TEXT("FP_"):TEXT(""),bReference?TEXT("Reference1027"):TEXT("Capture8619"));
             if (UAnimInstance* Instance=Player->GetMesh()->GetAnimInstance())
                 for (const FAnimMontageInstance* Playing:Instance->MontageInstances)

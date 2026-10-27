@@ -241,6 +241,9 @@ public:
     int32 CapturedPunchReleaseCount = 0;
     /** Includes the loading phase; used to ease visual surface contact for the recorded standard punches. */
     bool IsCapturedStandardPunchPlaying() const { return bCapturedPunch && !bChargeLoops && !bChargeIsKick; }
+    bool IsReferencePunchPlaying() const;
+    bool IsReferenceChargedPunchPlaying() const { return IsReferencePunchPlaying() && bChargeLoops; }
+    bool GetReferenceStrikePoint(FVector& OutPoint) const;
 
     /**
      * Editor-only: makes URPGAnimInstance the parent class of ABP_Unarmed (the graph is untouched), so the attack aim can

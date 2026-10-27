@@ -300,15 +300,19 @@ void URPGStrikeContactComponent::PushPlanes()
 	TArray<USkeletalMeshComponent*> Meshes;
 	Character->GetComponents<USkeletalMeshComponent>(Meshes);
 	const auto* Animation=Character->FindComponentByClass<URPGPrototypeAnimationComponent>();
-	const float UnloadTime=Animation && Animation->IsCapturedStandardPunchPlaying()?FMath::Max(ReleaseTime,.2f):ReleaseTime;
+	const bool SmoothFist=Animation && (Animation->IsCapturedStandardPunchPlaying() || Animation->IsReferencePunchPlaying());
+	const float UnloadTime=SmoothFist?FMath::Max(ReleaseTime,.2f):ReleaseTime;
 	// The visible body and the first-person shadow body (same surfaces, so the shadow's limbs stop in the same place).
 	for (USkeletalMeshComponent* Mesh : Meshes)
 		if (URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Mesh->GetAnimInstance()))
 		{
 			for (int32 I = 0; I < NumLimbs; ++I) Anim->ContactSets[I] = Limbs[I].Set;
-			// Keep immediate push-out, but unload standard fists gradually as a struck head gives way.
+			// Keep immediate push-out; unload reference full-body punches gradually as their body drive withdraws.
 			// This avoids small pressure reversals while preserving the same surface and compression limits.
 			Anim->ContactReleaseTime = UnloadTime;
+			// Keep impact pressure through a brief head rebound instead of
+			// alternating withdrawal/re-contact over consecutive60Hz poses.
+			Anim->ContactPressureHold = Animation && Animation->IsReferencePunchPlaying()?.07f:0.f;
 		}
 }
 
@@ -320,14 +324,28 @@ void URPGStrikeContactComponent::PushBack(float DeltaTime)
 		if (S.Residual.SizeSquared() > Residual.SizeSquared()) Residual = S.Residual;
 	Residual.Z = 0.f;
 	const URPGCombatStateComponent* State = GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
-	if (State && State->StrikeId != PushbackStrikeId)
+	const auto* Animation=GetOwner()->FindComponentByClass<URPGPrototypeAnimationComponent>();
+	// A release and the following hit window are one reference charge, not two
+	// independent opportunities to consume the retreat budget.
+	const int32 BudgetKey=Animation && Animation->IsReferenceChargedPunchPlaying()
+		?-Animation->CapturedPunchReleaseCount-1:State?State->StrikeId:PushbackStrikeId;
+	if (BudgetKey != PushbackStrikeId)
 	{
-		PushbackStrikeId = State->StrikeId;
+		PushbackStrikeId = BudgetKey;
 		StrikePushback = 0.f;
 	}
-	const float Allowed = MaxPushbackPerStrike - StrikePushback;
+	const bool FullDrive=Animation && Animation->IsReferenceChargedPunchPlaying() && State
+		&& (State->AttackPhase==ERPGAttackPhase::Strike || State->AttackPhase==ERPGAttackPhase::Recovery);
+	const bool Power=FullDrive && Animation->LastCapturedPunchTier==2;
+	// A close target cannot absorb the larger reference charge's hip/shoulder drive
+	// by folding the arm alone. Let the player's existing swept back-off take it,
+	// without moving the target or changing limb radii/compression/fold limits.
+	const float StrikeLimit=FullDrive?FMath::Max(MaxPushbackPerStrike,Power?26.f:18.f):MaxPushbackPerStrike;
+	const float FrameLimit=FullDrive?FMath::Max(MaxPushbackPerFrame,Power?4.5f:3.f):MaxPushbackPerFrame;
+	const float Rate=FullDrive?FMath::Max(PushbackRate,Power?1.f:.8f):PushbackRate;
+	const float Allowed = StrikeLimit - StrikePushback;
 	if (Residual.SizeSquared() < 0.01f || Allowed <= 0.f) return;
-	const FVector Step = (Residual * PushbackRate).GetClampedToMaxSize(FMath::Min(MaxPushbackPerFrame, Allowed));
+	const FVector Step = (Residual * Rate).GetClampedToMaxSize(FMath::Min(FrameLimit, Allowed));
 	const FVector Before = GetOwner()->GetActorLocation();
 	GetOwner()->AddActorWorldOffset(Step, true);
 	const float Moved = float(FVector::Dist(Before, GetOwner()->GetActorLocation()));

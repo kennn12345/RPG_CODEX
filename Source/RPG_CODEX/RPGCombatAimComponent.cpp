@@ -94,6 +94,10 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	const bool bCombat = Animation && Animation->IsInCombat() && bGrounded;
 	const bool bAttacking = State && State->AttackPhase != ERPGAttackPhase::None;
 	const bool bKick = bAttacking && State->bAttackPhaseIsKick;
+	// A reference charge already drives the shoulders forward. Tilting that whole
+	// body about the eyes adds another forward lunge at close range; let its spine
+	// take the aim instead, as in the third-person performance.
+	const bool bEyePivot=bFirstPerson && !(Animation && Animation->IsReferenceChargedPunchPlaying());
 
 	// ---- the aim: where the reticle is, measured from the strike's own line ----
 	FVector ViewLocation;
@@ -101,13 +105,17 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	GetView(Character, ViewLocation, ViewRotation);
 	const FVector ViewDirection = ViewRotation.Vector();
 	bool bOnTarget = false;
+	FVector StrikePoint=NaturalStrikePoint;
+	// Preserve the established reach/target acquisition. Only the FPS charged tilt
+	// needs per-clip calibration after changing its anatomical pivot.
+	if (bFirstPerson && Animation && Animation->IsReferenceChargedPunchPlaying()) Animation->GetReferenceStrikePoint(StrikePoint);
 	const FVector AimPoint = FindAimPoint(Character, ViewLocation, ViewDirection, bFirstPerson, bOnTarget);
 	auto MeasureAim = [&](float& OutYaw, float& OutPitch)
 	{
 		// From the eyes in first person (the chest tilts about them), from the spine in third person.
 		const FTransform& MeshToWorld = Character->GetMesh()->GetComponentTransform();
-		const FVector From = bFirstPerson ? ViewLocation : MeshToWorld.TransformPosition(StrikePivot);
-		const FVector NaturalPoint = MeshToWorld.TransformPosition(NaturalStrikePoint);
+		const FVector From = bEyePivot ? ViewLocation : MeshToWorld.TransformPosition(StrikePivot);
+		const FVector NaturalPoint = MeshToWorld.TransformPosition(StrikePoint);
 		const FRotator Natural = (NaturalPoint - From).Rotation();
 		const FRotator Wanted = (AimPoint - From).Rotation();
 		OutYaw = FRotator::NormalizeAxis(Wanted.Yaw - Natural.Yaw);
@@ -159,13 +167,13 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	{
 		Instance->AimYaw = AppliedYaw;
 		Instance->AimPitch = AppliedPitch;
-		Instance->bPitchAboutPivot = bFirstPerson;
+		Instance->bPitchAboutPivot = bEyePivot;
 		Instance->PitchPivot = MeshToWorld.InverseTransformPosition(ViewLocation);
 	}
 	if (State)
 	{
-		const FVector From = bFirstPerson ? ViewLocation : MeshToWorld.TransformPosition(StrikePivot);
-		const FRotator Natural = (MeshToWorld.TransformPosition(NaturalStrikePoint) - From).Rotation();
+		const FVector From = bEyePivot ? ViewLocation : MeshToWorld.TransformPosition(StrikePivot);
+		const FRotator Natural = (MeshToWorld.TransformPosition(StrikePoint) - From).Rotation();
 		// Gameplay aim: the raw (clamped) aim, never the smoothed body. The visible body's own turn is published apart.
 		State->AttackAimPoint = AimPoint;
 		State->AttackAimYaw = TargetYaw;

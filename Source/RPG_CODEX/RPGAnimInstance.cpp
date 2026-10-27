@@ -86,6 +86,7 @@ void FRPGAnimInstanceProxy::PreUpdate(UAnimInstance* InAnimInstance, float Delta
 		GuardSteadyMontage = Instance->GuardSteadyMontage;
 		for (int32 I = 0; I < RPGStrikeContact::NumLimbs; ++I) ContactSets[I] = Instance->ContactSets[I];
 		ContactReleaseTime = Instance->ContactReleaseTime;
+		ContactPressureHold = Instance->ContactPressureHold;
         FlightClips.Reset();
         for (UAnimSequence* Clip : Instance->FlightClips) FlightClips.Add(Clip);
         FlightWeight = Instance->FlightWeight;
@@ -603,8 +604,10 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 			}
 		// Pushed out at once (never through the surface); eased off when the surface stops holding it.
 		FVector& Applied = Result.Applied;
-		if (Desired.SizeSquared() >= Applied.SizeSquared()) Applied = Desired;
-		else Applied = Desired + (Applied - Desired) * FMath::Exp(-DeltaTime / FMath::Max(ContactReleaseTime, 0.005f));
+		Result.PressureAge += DeltaTime;
+		if (Desired.SizeSquared() >= Applied.SizeSquared()) { Applied = Desired; Result.PressureAge = 0.f; }
+		else if (Set.Num==0 || Result.PressureAge>=ContactPressureHold)
+			Applied = Desired + (Applied - Desired) * FMath::Exp(-DeltaTime / FMath::Max(ContactReleaseTime, 0.005f));
 		Applied = Applied.GetClampedToMaxSize(MaxContactCorrection);
 		if (Applied.SizeSquared() < 1e-4f) Applied = FVector::ZeroVector;
 		FTransform NewMidCS = MidCS, NewEndCS = EndCS;
