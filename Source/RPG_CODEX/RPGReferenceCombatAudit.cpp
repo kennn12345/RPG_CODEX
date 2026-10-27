@@ -55,6 +55,8 @@ public:
             Camera->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount=true;Camera->GetCameraComponent()->PostProcessSettings.MotionBlurAmount=0;
             PC->bAutoManageActiveCameraTarget=false;PC->SetViewTarget(Camera);
             Dir=FPaths::ProjectSavedDir()/(bFitted?TEXT("ReferenceCombat1027/FittedAuditUEFN"):bTarget?TEXT("ReferenceCombat1027/SourceAuditUEFN"):TEXT("ReferenceCombat1027/SourceAuditNative"));IFileManager::Get().MakeDirectory(*Dir,true);
+            const FString Tag=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_TAG"));
+            if(!Tag.IsEmpty())Dir+=TEXT("_")+Tag;
             const FString Yaw=FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_YAW"));
             if(!Yaw.IsEmpty())
             {

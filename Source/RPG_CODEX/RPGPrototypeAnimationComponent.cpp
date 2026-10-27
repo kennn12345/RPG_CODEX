@@ -11,6 +11,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "HAL/IConsoleManager.h"
 
 #if WITH_EDITOR
 #include "Animation/AnimBlueprint.h"
@@ -33,6 +34,8 @@
 
 namespace
 {
+    // Opt-in review only until reference/body/contact comparisons are accepted.
+    TAutoConsoleVariable<int32> CVarReferencePunches(TEXT("rpg.ReferencePunches"),0,TEXT("Review the Reference1027 player punch/stance candidates."));
     const FName PrototypeSlot(TEXT("DefaultSlot"));
     /** Layered from spine_01 up, so the legs keep the locomotion underneath. Already defined on SK_Mannequin. */
     const FName UpperBodySlot(TEXT("UpperBody"));
@@ -302,6 +305,12 @@ UAnimSequence* URPGPrototypeAnimationComponent::LoadFor(const TSoftObjectPtr<UAn
     if (Skeleton && Skeleton->GetName() == TEXT("SK_UEFN_Mannequin"))
     {
         const FString Requested = Clip.GetAssetName();
+        if (CVarReferencePunches.GetValueOnGameThread()!=0 && (Requested==TEXT("RPG_Proto_CombatStance") || Requested==TEXT("RPG_FP_CombatStance")))
+        {
+            const FString Name=Requested==TEXT("RPG_FP_CombatStance")?TEXT("RPG_FP_CombatStance_Reference1027"):TEXT("RPG_CombatStance_Reference1027");
+            const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/ReferenceCombat1027/%s.%s"),*Name,*Name);
+            if (auto* Reference=LoadObject<UAnimSequence>(nullptr,*Path); Reference && Reference->GetSkeleton()==Skeleton) return Reference;
+        }
         const TCHAR* Recorded = Requested == TEXT("RPG_Proto_CombatStance") ? TEXT("RPG_CombatStance_Capture8619")
             : Requested == TEXT("RPG_FP_CombatStance") ? TEXT("RPG_FP_CombatStance_Capture8619") : nullptr;
         if (!Recorded && (Requested.StartsWith(TEXT("RPG_Proto_Punch_")) || Requested.StartsWith(TEXT("RPG_FP_Punch_"))
@@ -405,7 +414,7 @@ void URPGPrototypeAnimationComponent::BuildPresentationMap(const USkeleton* Skel
         UAnimSequence* Body=CapturedPunchClip(bLeft,Tier,Variant,Skeleton);
         if (!Body) continue;
         const FString Name=Body->GetName().Replace(TEXT("RPG_Punch_"),TEXT("RPG_FP_Punch_"));
-        const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/CapturedPunches/%s.%s"),*Name,*Name);
+        const FString Path=Body->GetPathName().Replace(*Body->GetName(),*Name);
         UAnimSequence* View=LoadObject<UAnimSequence>(nullptr,*Path);
         if (View && View->GetSkeleton()==Skeleton) FirstPersonClips.Add(Body,View);
     }
@@ -578,6 +587,13 @@ void URPGPrototypeAnimationComponent::UpdateCharge(UAnimInstance* Instance, floa
 UAnimSequence* URPGPrototypeAnimationComponent::CapturedPunchClip(bool bLeft,int32 Tier,int32 Variant,const USkeleton* Skeleton) const
 {
     if (!Skeleton || Skeleton->GetName()!=TEXT("SK_UEFN_Mannequin")) return nullptr;
+    if (Tier==0 && CVarReferencePunches.GetValueOnGameThread()!=0)
+    {
+        const FString Name=FString::Printf(TEXT("RPG_Punch_%s_Light_Reference1027_V%d"),bLeft?TEXT("L"):TEXT("R"),FMath::Clamp(Variant,0,2)+1);
+        const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/ReferenceCombat1027/%s.%s"),*Name,*Name);
+        UAnimSequence* Reference=LoadObject<UAnimSequence>(nullptr,*Path);
+        return Reference && Reference->GetSkeleton()==Skeleton?Reference:nullptr;
+    }
     const TCHAR* Tiers[]={TEXT("Light"),TEXT("Heavy"),TEXT("Power")};
     const FString Name=FString::Printf(TEXT("RPG_Punch_%s_%s_V%d"),bLeft?TEXT("L"):TEXT("R"),Tiers[FMath::Clamp(Tier,0,2)],FMath::Clamp(Variant,0,2)+1);
     const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/CapturedPunches/%s.%s"),*Name,*Name);

@@ -52,7 +52,7 @@ bool PlayingStance(UAnimInstance* Anim)
         if(Playing && Playing->Montage && !Playing->IsStopped() && Playing->GetWeight()>.01f)
             for(const auto& Track:Playing->Montage->SlotAnimTracks)
                 for(const auto& Segment:Track.AnimTrack.AnimSegments)
-                    if(Segment.GetAnimReference() && Segment.GetAnimReference()->GetName().Contains(TEXT("CombatStance_Capture8619")))return true;
+                    if(Segment.GetAnimReference() && (Segment.GetAnimReference()->GetName().Contains(TEXT("CombatStance_Capture8619")) || Segment.GetAnimReference()->GetName().Contains(TEXT("CombatStance_Reference1027"))))return true;
     return false;
 }
 class FCombatLocomotionReview:public IAutomationLatentCommand
