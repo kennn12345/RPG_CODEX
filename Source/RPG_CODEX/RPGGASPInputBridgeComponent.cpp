@@ -6,6 +6,7 @@
 #include "RPGDirectionalHoverComponent.h"
 #include "RPGMovementAbilityComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "EnhancedPlayerInput.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -49,6 +50,7 @@ void URPGGASPInputBridgeComponent::BeginPlay()
             LegacyContexts.Add(Context);
     }
     SampleContext = SampleMappingContext.LoadSynchronous();
+    MoveAction=LoadObject<UInputAction>(nullptr,TEXT("/Game/Input/IA_Move.IA_Move"));
     if (SampleContext)
     {
         LocomotionContext = DuplicateObject<UInputMappingContext>(SampleContext, this, TEXT("IMC_RPGGASPLocomotion"));
@@ -69,11 +71,12 @@ void URPGGASPInputBridgeComponent::BeginPlay()
     if (InputStateProperty)
     {
         SprintProperty = FindInputFlag(InputStateProperty->Struct, TEXT("WantsToSprint_"));
+        WalkProperty = FindInputFlag(InputStateProperty->Struct, TEXT("WantsToWalk_"));
         CrouchProperty = FindInputFlag(InputStateProperty->Struct, TEXT("WantsToCrouch_"));
         AimProperty = FindInputFlag(InputStateProperty->Struct, TEXT("WantsToAim_"));
         StrafeProperty = FindInputFlag(InputStateProperty->Struct, TEXT("WantsToStrafe_"));
     }
-    bStateReady = SprintProperty && CrouchProperty && AimProperty && StrafeProperty;
+    bStateReady = SprintProperty && WalkProperty && CrouchProperty && AimProperty && StrafeProperty;
     if (!bStateReady || !LocomotionContext)
     {
         UE_LOG(LogRPGGASP, Error, TEXT("GASP input adapter could not find the sample context or input-state fields on %s"), *GetNameSafe(GetOwner()));
@@ -147,6 +150,17 @@ void URPGGASPInputBridgeComponent::SynchronizeLocomotion()
         if(auto* Ability=Character->FindComponentByClass<URPGMovementAbilityComponent>())Ability->StopSprint();
 
     void* State = InputStateProperty->ContainerPtrToValuePtr<void>(Character);
+    // GASP normalizes its world movement vector, so read analog strength before that conversion.
+    const auto* PC=Cast<APlayerController>(Character->GetController());
+    const auto* Enhanced=PC?Cast<UEnhancedPlayerInput>(PC->PlayerInput):nullptr;
+    const float Magnitude=Enhanced && MoveAction?Enhanced->GetActionValue(MoveAction).GetMagnitude():Input.Size2D();
+    const bool bWantAnalogWalk=bGround && !Combat->bIsSprinting && Magnitude>.05f
+        && Magnitude<(WalkInputThreshold+(bAnalogWalking?.08f:-.08f));
+    if(bWantAnalogWalk && !bAnalogWalking) bWalkIntentBeforeAnalog=WalkProperty->GetPropertyValue_InContainer(State);
+    if(bWantAnalogWalk) WalkProperty->SetPropertyValue_InContainer(State,true);
+    else if(bAnalogWalking) WalkProperty->SetPropertyValue_InContainer(State,bWalkIntentBeforeAnalog);
+    bAnalogWalking=bWantAnalogWalk;
+    if(Combat->bIsSprinting) WalkProperty->SetPropertyValue_InContainer(State,false);
     SprintProperty->SetPropertyValue_InContainer(State, Combat->bIsSprinting);
     CrouchProperty->SetPropertyValue_InContainer(State, Character->GetCharacterMovement()->bWantsToCrouch);
     AimProperty->SetPropertyValue_InContainer(State, Combat->bIsAiming);

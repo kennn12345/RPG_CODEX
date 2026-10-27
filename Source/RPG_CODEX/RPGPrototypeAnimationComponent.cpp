@@ -173,26 +173,34 @@ void URPGPrototypeAnimationComponent::UpdateCombatStance(UAnimInstance* Instance
 {
     const ACharacter* Character = Cast<ACharacter>(GetOwner());
     const UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
+    const FAnimMontageInstance* Guard = GuardMontage ? Instance->GetActiveInstanceForMontage(GuardMontage) : nullptr;
+    if (Guard && !Guard->IsStopped() && GetWorld()) LastCombatActionTime=GetWorld()->GetTimeSeconds();
     const bool bInCombat = GetWorld() && GetWorld()->GetTimeSeconds() - LastCombatActionTime < CombatStanceTimeout;
     const FAnimMontageInstance* Stance = CombatStanceMontage ? Instance->GetActiveInstanceForMontage(CombatStanceMontage) : nullptr;
     if (!Stance || Stance->IsStopped()) CombatStanceMontage = nullptr;
     // Out of combat (or off the ground): relax back to the normal idle.
     if (!bInCombat || !Movement || !Movement->IsMovingOnGround())
     {
-        StopCombatStance(Instance, 0.4f);
+        StationarySince=-1.f;
+        StopCombatStance(Instance, CombatLocomotionBlendTime);
         return;
     }
-    // Standing still the stance plays full body (its wider, bladed feet); moving, upper body only so the legs keep the
-    // locomotion (a full-body stance would freeze the legs while the capsule moves).
-    const bool bWantFullBody = !IsMovingOnGround();
+    // This is a stationary stance. Walking/running own both arms and legs; a separate attack/guard may still overlay them.
+    if(IsMovingOnGround())
+    {
+        StationarySince=-1.f;
+        StopCombatStance(Instance,CombatLocomotionBlendTime);
+        return;
+    }
+    const float Now=GetWorld()->GetTimeSeconds();
+    if(StationarySince<0.f) StationarySince=Now;
+    if(Now-StationarySince<.12f) return;
     // While the guard is up it covers the upper body. Under it: standing, the full-body stance keeps playing (its legs,
     // and the pose the guard blends from and back to, so the hands never pass through the idle); moving, nothing, so
     // the legs keep the locomotion. Holding the guard counts as fighting, so the stance is still up when it's let go.
-    const FAnimMontageInstance* Guard = GuardMontage ? Instance->GetActiveInstanceForMontage(GuardMontage) : nullptr;
     if (Guard && !Guard->IsStopped())
     {
-        LastCombatActionTime = GetWorld()->GetTimeSeconds();
-        if (bWantFullBody && !CombatStanceMontage)
+        if (!CombatStanceMontage)
         {
             UAnimSequence* Sequence = LoadFor(CombatStance, Instance->CurrentSkeleton);
             if (!Sequence || Sequence->GetSkeleton() != Instance->CurrentSkeleton) return;
@@ -205,27 +213,20 @@ void URPGPrototypeAnimationComponent::UpdateCombatStance(UAnimInstance* Instance
                     && Playing->Montage->SlotAnimTracks[0].SlotName == PrototypeSlot && Playing->Montage->SlotAnimTracks[0].AnimTrack.AnimSegments.Num() > 0
                     && Playing->Montage->SlotAnimTracks[0].AnimTrack.AnimSegments[0].GetAnimReference() == Shown)
                     Fading = Playing;
-            CombatStanceMontage = PlayAlongside(Instance, Shown, PrototypeSlot, Fading ? 0.f : 0.2f, 0.4f, 1.f, 1000, Fading ? Fading->GetPosition() : 0.f);
+            CombatStanceMontage = PlayAlongside(Instance, Shown, PrototypeSlot, Fading ? 0.f : CombatLocomotionBlendTime, CombatLocomotionBlendTime, 1.f, 1000, Fading ? Fading->GetPosition() : 0.f);
             bCombatStanceFullBody = true;
         }
-        else if (!bWantFullBody && CombatStanceMontage && bCombatStanceFullBody) StopCombatStance(Instance, 0.2f);
         return;
     }
-    if (CombatStanceMontage && bCombatStanceFullBody == bWantFullBody) return;
-    // Wait until the attack / guard lets go of the body. It ends in this same stance, so the stance takes over
-    // while it blends out and the guard never drops.
+    if (CombatStanceMontage) return;
+    // Let the attack recover before blending back to the stationary stance.
     const FAnimMontageInstance* Active = ActiveMontage ? Instance->GetActiveInstanceForMontage(ActiveMontage) : nullptr;
     if (Active && !Active->IsStopped()) return;
     UAnimSequence* Sequence = LoadFor(CombatStance, Instance->CurrentSkeleton);
     if (!Sequence || Sequence->GetSkeleton() != Instance->CurrentSkeleton) return;
-    // Switching between the two: start the other one where this one is, so the breathing doesn't jump.
-    const FAnimMontageInstance* Old = CombatStanceMontage ? Instance->GetActiveInstanceForMontage(CombatStanceMontage) : nullptr;
-    const float Position = Old ? Old->GetPosition() : 0.f;
-    UAnimMontage* Previous = CombatStanceMontage;
-    const float Blend = Previous ? 0.15f : 0.2f;
-    CombatStanceMontage = Instance->PlaySlotAnimationAsDynamicMontage(Present(Sequence), bWantFullBody ? PrototypeSlot : UpperBodySlot, Blend, 0.4f, 1.f, 1000, -1.f, Position);
-    if (Previous && Previous != CombatStanceMontage) Instance->Montage_Stop(Blend, Previous);
-    bCombatStanceFullBody = bWantFullBody;
+    CombatStanceMontage = Instance->PlaySlotAnimationAsDynamicMontage(Present(Sequence), PrototypeSlot,
+        CombatLocomotionBlendTime, CombatLocomotionBlendTime, 1.f, 1000);
+    bCombatStanceFullBody = true;
 }
 
 void URPGPrototypeAnimationComponent::UpdateGuardSteady(UAnimInstance* Instance)
@@ -610,7 +611,7 @@ bool URPGPrototypeAnimationComponent::ReleaseCapturedPunch(UAnimInstance* Instan
     FullBodyPunch=bChargeUpperBody?nullptr:Clip;
     ChargedPlaying=Clip;ChargedSequence=nullptr;
     bChargeButtonHeld=false;bChargePaused=false;bWaitingAtLoad=false;bChargeLoops=Tier>0;
-    ChargeImpactTime=Tier==0?.3f:1.5f;
+    ChargeImpactTime=Tier==0?.36f:1.5f;
     ChargedHoldStart=.6f;ChargedHoldEnd=1.2f;
     NextCapturedPunch[Hand][Tier]=(Variant+1)%3;
     LastCapturedPunch=Clip->GetFName();LastCapturedPunchTier=Tier;LastCapturedPunchVariant=Variant;++CapturedPunchReleaseCount;
@@ -627,18 +628,19 @@ bool URPGPrototypeAnimationComponent::ReleaseCapturedPunch(UAnimInstance* Instan
 
 void URPGPrototypeAnimationComponent::SwitchToChargedClip(UAnimInstance* Instance, float Position)
 {
-    // Both clips are the same pose up to the load key, so a short crossfade just covers the swap.
+    // Standard captured punches now have a compact reach-back. Roll into the charged load over a longer blend.
+    const float Blend=bCapturedPunch?.14f:.06f;
     UAnimMontage* Regular = ChargeMontage;
     UAnimSequence* Charged = ChargedSequence;
     ChargedSequence = nullptr;
-    UAnimMontage* Held = Instance->PlaySlotAnimationAsDynamicMontage(Present(Charged), bChargeUpperBody ? UpperBodySlot : PrototypeSlot, 0.06f, 0.18f, 1.f, 1, -1.f, Position);
+    UAnimMontage* Held = Instance->PlaySlotAnimationAsDynamicMontage(Present(Charged), bChargeUpperBody ? UpperBodySlot : PrototypeSlot, Blend, 0.18f, 1.f, 1, -1.f, Position);
     if (!Held)
     {
         ChargeHoldTime = ChargeSwitchTime;   // fall back to stopping the tuned punch at its load key
         return;
     }
     if (const FAnimMontageInstance* Old = Instance->GetActiveInstanceForMontage(Regular); Old && !Old->IsStopped())
-        Instance->Montage_Stop(0.06f, Regular);
+        Instance->Montage_Stop(Blend, Regular);
     if (ActiveMontage == Regular) ActiveMontage = Held;
     if (KickMontage == Regular) KickMontage = Held;   // the kick's movement lock follows it
     if (FullBodyPunch) FullBodyPunch = Charged;
@@ -886,7 +888,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
             ChargedSequence = LoadFor(bLeft ? LeftPunchCharged : RightPunchCharged, Instance->CurrentSkeleton);
             if (bCapturedPunch)
             {
-                ChargeSwitchTime=.12f;ChargedHoldStart=.6f;ChargedHoldEnd=1.2f;ChargedImpactTime=1.5f;ChargeImpactTime=.3f;
+                ChargeSwitchTime=.12f;ChargedHoldStart=.6f;ChargedHoldEnd=1.2f;ChargedImpactTime=1.5f;ChargeImpactTime=.36f;
                 ChargedSequence=CapturedPunchClip(bLeft,1,PendingCapturedPunch[1],Instance->CurrentSkeleton);
             }
         }

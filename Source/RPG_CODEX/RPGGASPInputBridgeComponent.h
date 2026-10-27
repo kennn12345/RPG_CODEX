@@ -6,6 +6,7 @@
 
 class UEnhancedInputLocalPlayerSubsystem;
 class UInputMappingContext;
+class UInputAction;
 class FStructProperty;
 class FBoolProperty;
 
@@ -30,8 +31,11 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|GASP")
     bool bStateReady = false;
-    /** Camera-facing eight-way ground locomotion, using GASP's existing run databases. */
+    /** Camera-facing eight-way ground locomotion, using GASP's existing gait databases. */
     UPROPERTY(EditAnywhere,Category="RPG|GASP") bool bDirectionalGroundMovement = true;
+    /** Partial analog input walks; hysteresis avoids gait flicker near the run threshold. */
+    UPROPERTY(EditAnywhere,Category="RPG|GASP",meta=(ClampMin="0.1",ClampMax="0.9")) float WalkInputThreshold = .65f;
+    UPROPERTY(VisibleInstanceOnly,BlueprintReadOnly,Category="RPG|GASP") bool bAnalogWalking = false;
 
 private:
     void ConfigureInput();
@@ -42,6 +46,8 @@ private:
 
     UPROPERTY(Transient)
     TObjectPtr<UInputMappingContext> LocomotionContext;
+    UPROPERTY(Transient)
+    TObjectPtr<UInputAction> MoveAction;
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UInputMappingContext>> LegacyContexts;
@@ -49,9 +55,11 @@ private:
     TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> BoundSubsystem;
     FStructProperty* InputStateProperty = nullptr;
     FBoolProperty* SprintProperty = nullptr;
+    FBoolProperty* WalkProperty = nullptr;
     FBoolProperty* CrouchProperty = nullptr;
     FBoolProperty* AimProperty = nullptr;
     FBoolProperty* StrafeProperty = nullptr;
     bool bKeyboardConfigured = false;
     float DirectionalGroundHold = 0.f;
+    bool bWalkIntentBeforeAnalog = false;
 };

@@ -1,11 +1,13 @@
 """Retargeted IMG_8630 punches: one strike per clip, three variants per hand/tier.
 
-RPG_SKEL=uefn python capture_punches8630.py
+RPG_SKEL=uefn python capture_punches8630.py (standard punches only).
+Set RPG_PUNCH_TIERS=Light,Heavy,Power explicitly for a complete rebake.
 Recorded body motion is fitted to the approved stance, then given the requested graded extension.
 """
 import copy
 import json
 import math
+import os
 from pathlib import Path
 import protoanim as p
 import getupcheck as g
@@ -20,6 +22,8 @@ STANCES=json.loads((HERE/'capture_stance8619_uefn.json').read_text())
 STANCE=STANCES['RPG_CombatStance_Capture8619']['poses'][0]
 FP_STANCE=STANCES['RPG_FP_CombatStance_Capture8619']['poses'][0]
 REST=p.to_cs(STANCE);FP_REST=p.to_cs(FP_STANCE)
+AUTHORING=json.loads((HERE/'captures/IMG8630_authoring_stance.json').read_text())
+AUTHORING_STANCE=AUTHORING['body'];AUTHORING_REST=p.to_cs(AUTHORING_STANCE)
 
 
 def ease(u):
@@ -90,26 +94,26 @@ def recorded(side,time,tier,extension=0.,variation=0.):
     facing=g.frame(base_cs,'spine_05')[1]
     turn=p.qaxis([0,0,1],90.-math.degrees(math.atan2(facing[1],facing[0])))
     amount=[.65,.85,1.][tier]
-    local=copy.deepcopy(STANCE)
+    local=copy.deepcopy(AUTHORING_STANCE)
     for bone in p.BONES:
         if bone=='root' or any(k in bone for k in ('index','middle','ring','pinky','thumb','metacarpal','ik_')):continue
         delta=p.qmul(p.qconj(base[bone][0]),frame[bone][0])
-        local[bone]=(p.qnorm(p.qmul(STANCE[bone][0],p._nlerp([0,0,0,1],delta,amount))),local[bone][1])
+        local[bone]=(p.qnorm(p.qmul(AUTHORING_STANCE[bone][0],p._nlerp([0,0,0,1],delta,amount))),local[bone][1])
     hips=p.mul(p.qrot(turn,p.sub(source_cs['pelvis'][1],base_cs['pelvis'][1])),amount)
     shift=[2.,7.,14.][tier]*extension
     hips=p.add(hips,[variation*.5*extension,shift,0.])
-    local['pelvis']=(local['pelvis'][0],p.add(STANCE['pelvis'][1],hips))
+    local['pelvis']=(local['pelvis'][0],p.add(AUTHORING_STANCE['pelvis'][1],hips))
     for s in 'lr':
         cs=p.to_cs(local);foot='foot_'+s
-        target=p.add(REST[foot][1],p.mul(p.qrot(turn,p.sub(source_cs[foot][1],base_cs[foot][1])),.18*amount))
-        target[2]=REST[foot][1][2]
+        target=p.add(AUTHORING_REST[foot][1],p.mul(p.qrot(turn,p.sub(source_cs[foot][1],base_cs[foot][1])),.18*amount))
+        target[2]=AUTHORING_REST[foot][1][2]
         rotation=cs[foot][0]
         toe=p.add(target,p.qrot(rotation,local['ball_'+s][1]));target[2]+=max(0.,3.2-toe[2])
         repair_chain(local,'thigh_'+s,'calf_'+s,foot,target,p.sub(cs['calf_'+s][1],cs['thigh_'+s][1]),rotation)
     for s in 'lr':
         cs=p.to_cs(local);hand='hand_'+s;shoulder=cs['upperarm_'+s][1]
         delta=p.qrot(turn,p.sub(source_cs[hand][1],base_cs[hand][1]))
-        target=p.add(REST[hand][1],p.mul(delta,amount*(1. if s==side else .35)))
+        target=p.add(AUTHORING_REST[hand][1],p.mul(delta,amount*(1. if s==side else .35)))
         target=p.add(target,[0.,shift*(1. if s==side else .3),0.])
         if s==side:
             target[0]+=variation*1.5*extension;target[2]+=variation*1.2*extension
@@ -122,7 +126,7 @@ def recorded(side,time,tier,extension=0.,variation=0.):
             target=p.add(target,[0.,8.*extension,0.])
             if extension>0.:
                 fit_punch_shoulder(local,s,target);cs=p.to_cs(local);shoulder=cs['upperarm_'+s][1]
-        else:target[2]=max(target[2],REST[hand][1][2]-5.)
+        else:target[2]=max(target[2],AUTHORING_REST[hand][1][2]-5.)
         target=elbow_clearance(cs,s,target)
         repair_chain(local,'upperarm_'+s,'lowerarm_'+s,hand,target,p.sub(cs['lowerarm_'+s][1],shoulder))
         straight_wrist(local,s,.8 if s==side else .5)
@@ -136,15 +140,32 @@ def curve(keys,t):
     return copy.deepcopy(keys[-1][1])
 
 
+def standard_windup(side):
+    """Compact rearward load: torso counter-turn, retracting fist and elbow, opposite hand stays protective."""
+    local=copy.deepcopy(STANCE)
+    turn=-8. if side=='l' else 8.
+    for bone,share in [('spine_01',.2),('spine_02',.3),('spine_03',.5)]:
+        cs=p.to_cs(local);parent=p.PARENT[bone]
+        q=p.qmul(p.qaxis([0.,0.,1.],turn*share),cs[bone][0])
+        local[bone]=(p.qnorm(p.qmul(p.qconj(cs[parent][0]),q)),local[bone][1])
+    for s in 'lr':
+        cs=p.to_cs(local)
+        target=p.add(REST['hand_'+s][1],[(1. if s=='l' else -1.)*(1.5 if s==side else 0.),-8. if s==side else 1.,0.])
+        target=elbow_clearance(cs,s,target)
+        guide=p.add(REST['lowerarm_'+s][1],[0.,-4. if s==side else 0.,0.])
+        repair_chain(local,'upperarm_'+s,'lowerarm_'+s,'hand_'+s,target,p.sub(guide,cs['upperarm_'+s][1]),REST['hand_'+s][0])
+    return follow_ik(local)
+
+
 def build(side,tier,variant):
-    impact=.3 if tier==0 else 1.5;length=.95 if tier==0 else (2.2 if tier==1 else 2.4)
+    impact=.36 if tier==0 else 1.5;length=1.05 if tier==0 else (2.2 if tier==1 else 2.4)
     # All variants share the loading/hold frames. Selection at release cannot jump between different coils.
     normal_times=[29.55,29.79,30.00] if side=='l' else [30.14,30.42,31.04]
     charged_times=[64.23,64.70,65.03,65.36] if side=='l' else [66.70,67.03,67.35,67.78]
-    load=recorded(side,normal_times[0],0)
+    load=standard_windup(side) if tier==0 else recorded(side,normal_times[0],0)
     v=[0.,1.,-1.][variant]
     if tier==0:
-        keys=[(0.,STANCE),(.12,load),(.3,recorded(side,normal_times[1],0,1.,v)),(.58,recorded(side,normal_times[2],0)),(length,STANCE)]
+        keys=[(0.,STANCE),(.12,load),(impact,recorded(side,normal_times[1],0,1.,v)),(.66,recorded(side,normal_times[2],0)),(length,STANCE)]
     else:
         coil=recorded(side,charged_times[0],1)
         keys=[(0.,STANCE),(.12,load),(.6,coil),(1.2,coil),(impact,recorded(side,charged_times[1],tier,1.,v)),
@@ -153,12 +174,13 @@ def build(side,tier,variant):
     for i in range(round(length*FPS)+1):
         t=i/FPS;pose=curve(keys,t)
         # Sample the intervening solved video frames as well as the named timing landmarks.
-        if tier==0 and .12<t<.58:
+        if tier==0 and .12<t<.66:
             if t<=impact:
                 u=(t-.12)/(impact-.12);source_time=normal_times[0]+(normal_times[1]-normal_times[0])*u;extension=ease(u)
             else:
-                u=(t-impact)/(.58-impact);source_time=normal_times[1]+(normal_times[2]-normal_times[1])*u;extension=1.-ease(u)
+                u=(t-impact)/(.66-impact);source_time=normal_times[1]+(normal_times[2]-normal_times[1])*u;extension=1.-ease(u)
             pose=recorded(side,source_time,0,extension,v)
+            if t<impact-.10:pose=blend(load,pose,ease((t-.12)/(impact-.10-.12)))
         elif tier>0 and 1.2<t<length-.2:
             if t<=impact:
                 u=(t-1.2)/(impact-1.2);source_time=charged_times[0]+(charged_times[1]-charged_times[0])*u;extension=ease(u)
@@ -178,6 +200,10 @@ def build(side,tier,variant):
         for s in 'lr':
             # The striking hand is identical to third person across the entire gameplay hit window.
             fp_weight=ease((abs(t-impact)-.09)/.12) if s==side else 1.
+            if tier==0 and s==side and t>=impact:
+                # Withdraw along the body strike path before fitting back into the camera guard.
+                # An early forward view offset can push a recovering fist into the reacting head a second time.
+                fp_weight=ease((t-.66)/(length-.66))
             if tier>0 and s==side and t<.25:
                 prefix=ease((abs(min(t,.12)-.3)-.09)/.12)
                 fp_weight=prefix if t<=.12 else prefix+(1.-prefix)*ease((t-.12)/.13)
@@ -211,13 +237,20 @@ if __name__=='__main__':
     assert p.SP.NAME=='uefn','Use RPG_SKEL=uefn'
     old=p.SOFT_IK,p.SOFT_IK_ARM;p.SOFT_IK=p.SOFT_IK_ARM=1.e-7
     try:
-        clips={}
+        path=HERE/'capture_punches8630_uefn.json'
+        selected=[s.strip() for s in os.environ.get('RPG_PUNCH_TIERS','Light').split(',')]
+        assert selected and set(selected)<=set(TIERS),'Unknown punch tier'
+        assert path.exists() or len(selected)==3,'Partial rebake needs the existing complete manifest'
+        clips=json.loads(path.read_text()) if path.exists() and len(selected)<3 else {}
+        changed={}
         for side in 'lr':
             for tier in range(3):
-                for variant in range(3):clips.update(build(side,tier,variant))
+                if TIERS[tier] not in selected:continue
+                for variant in range(3):changed.update(build(side,tier,variant))
+        clips.update(changed)
     finally:p.SOFT_IK,p.SOFT_IK_ARM=old
     (HERE/'capture_punches8630_uefn.json').write_text(json.dumps(clips))
     from preview import render
-    for name,clip in clips.items():
+    for name,clip in changed.items():
         if not name.startswith('RPG_FP_'):render(clip,str(HERE/'previews'/f'{name}.png'),clip['keys'])
     print('CAPTURED PUNCHES',len(clips),'clips; 3 variants x 2 hands x 3 tiers x 2 views')

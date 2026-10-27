@@ -25,6 +25,9 @@ public:
      */
     UPROPERTY(EditAnywhere, Category="RPG|Prototype Animation", meta=(ClampMin="0"))
     float MovingPunchSpeed = 20.f;
+    /** Stationary guard fades to the locomotion arms when movement starts, and back after stopping. */
+    UPROPERTY(EditAnywhere,Category="RPG|Prototype Animation",meta=(ClampMin="0.1"))
+    float CombatLocomotionBlendTime = .3f;
 
     /**
      * Normal grounded kicks (Kick / Heavy / Power, not Blitz) own the whole body: movement input is ignored and the
@@ -236,6 +239,8 @@ public:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Captured Punches")
     int32 LastCapturedPunchVariant = -1;
     int32 CapturedPunchReleaseCount = 0;
+    /** Includes the loading phase; used to ease visual surface contact for the recorded standard punches. */
+    bool IsCapturedStandardPunchPlaying() const { return bCapturedPunch && !bChargeLoops && !bChargeIsKick; }
 
     /**
      * Editor-only: makes URPGAnimInstance the parent class of ABP_Unarmed (the graph is untouched), so the attack aim can
@@ -324,7 +329,8 @@ private:
     void UpdateGuardSteady(UAnimInstance* Instance);
     /** Game time of the last punch / kick / guard; the combat stance holds for CombatStanceTimeout after it. */
     float LastCombatActionTime = -1000.f;
-    /** The combat stance is playing full body (standing still: the stance's legs) rather than on the upper body. */
+    float StationarySince = -1.f;
+    /** The stationary full-body underlay for a held guard; movement fades the stance out. */
     bool bCombatStanceFullBody = false;
     UPROPERTY(Transient)
     TObjectPtr<UAnimSequence> FullBodyPunch;

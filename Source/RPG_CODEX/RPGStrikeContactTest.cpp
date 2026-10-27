@@ -111,7 +111,8 @@ namespace
 			};
 			// Optional focused run of the existing ordinary close/normal cases; defaults retain the full suite.
 			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_ORDINARY")).IsEmpty()) Cases.SetNum(8);
-			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_CLOSE_PUNCH")).IsEmpty()) Cases = {Cases[1]};
+			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_CLOSE_PUNCHES")).IsEmpty()) Cases = {Cases[1],Cases[3]};
+			else if (!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_CONTACT_CLOSE_PUNCH")).IsEmpty()) Cases = {Cases[1]};
 		}
 
 		virtual bool Update() override

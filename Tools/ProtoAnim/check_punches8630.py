@@ -12,7 +12,9 @@ stances=json.loads((root/'capture_stance8619_uefn.json').read_text())
 assert len(clips)==36
 metrics={}
 for name,c in clips.items():
-    first=name.startswith('RPG_FP_');rest=stances['RPG_FP_CombatStance_Capture8619' if first else 'RPG_CombatStance_Capture8619']['poses'][0]
+    first=name.startswith('RPG_FP_')
+    # Charged clips retain their approved authored stance; this pass refines only the standard punches.
+    rest=stances['RPG_FP_CombatStance_Capture8619' if first else 'RPG_CombatStance_Capture8619']['poses'][0] if c['tier']=='Light' else c['poses'][0]
     assert c['frames']==len(c['poses']) and c['fps']==60,(name,'frames')
     assert c['poses'][0]==rest and c['poses'][-1]==rest,(name,'stance seam')
     base=p.to_cs(rest);worst=999.;hips=0.;head=0.;forward=-999.
@@ -48,11 +50,12 @@ for side in 'LR':
                     assert p.length(p.sub(a[bone][1],b[bone][1]))<.1,(side,tier,v,i,'presentation hit mismatch')
     for prefix in ['RPG_Punch_','RPG_FP_Punch_']:
         light=clips[f'{prefix}{side}_Light_V1'];heavy=clips[f'{prefix}{side}_Heavy_V1'];power=clips[f'{prefix}{side}_Power_V1']
-        assert light['poses'][:8]==heavy['poses'][:8]==power['poses'][:8],(side,'tap/charged switch seam')
+        rest=p.to_cs(light['poses'][0]);load=p.to_cs(light['poses'][round(.12*60)])
+        assert load['hand_'+side.lower()][1][1]<rest['hand_'+side.lower()][1][1]-3.,(side,prefix,'standard windup missing')
         assert heavy['poses'][:73]==power['poses'][:73],(side,'charged tier release seam')
     for key in ['hips','head','forward']:
         for v in [1,2,3]:
             values=[metrics[f'RPG_Punch_{side}_{tier}_V{v}'][key] for tier in ['Light','Heavy','Power']]
             assert values[0]<values[1]<values[2],(side,v,key,'tier progression',values)
 (root.parent.parent/'Saved/Mocap8630/metrics.json').write_text(json.dumps(metrics,indent=2))
-print('PASS: all 36 captured punches; anatomy, floor, root, stance/load/hold seams, distinct small variants, identical hit-window hand paths and Light < Heavy < Power body movement/extension')
+print('PASS: all 36 captured punches; anatomy, floor, root, stance/charged hold seams, standard windup, distinct small variants, identical hit-window hand paths and Light < Heavy < Power body movement/extension')

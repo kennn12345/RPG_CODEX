@@ -2,6 +2,7 @@
 
 #include "RPGAnimInstance.h"
 #include "RPGCombatStateComponent.h"
+#include "RPGPrototypeAnimationComponent.h"
 #include "RPGMeleeTarget.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -298,12 +299,16 @@ void URPGStrikeContactComponent::PushPlanes()
 	if (!Character) return;
 	TArray<USkeletalMeshComponent*> Meshes;
 	Character->GetComponents<USkeletalMeshComponent>(Meshes);
+	const auto* Animation=Character->FindComponentByClass<URPGPrototypeAnimationComponent>();
+	const float UnloadTime=Animation && Animation->IsCapturedStandardPunchPlaying()?FMath::Max(ReleaseTime,.2f):ReleaseTime;
 	// The visible body and the first-person shadow body (same surfaces, so the shadow's limbs stop in the same place).
 	for (USkeletalMeshComponent* Mesh : Meshes)
 		if (URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Mesh->GetAnimInstance()))
 		{
 			for (int32 I = 0; I < NumLimbs; ++I) Anim->ContactSets[I] = Limbs[I].Set;
-			Anim->ContactReleaseTime = ReleaseTime;
+			// Keep immediate push-out, but unload standard fists gradually as a struck head gives way.
+			// This avoids small pressure reversals while preserving the same surface and compression limits.
+			Anim->ContactReleaseTime = UnloadTime;
 		}
 }
 
