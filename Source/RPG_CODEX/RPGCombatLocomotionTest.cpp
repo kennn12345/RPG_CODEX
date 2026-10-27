@@ -3,6 +3,7 @@
 #include "RPGPrototypeAnimationComponent.h"
 #include "RPGControllerInputComponent.h"
 #include "RPGCombatAimComponent.h"
+#include "RPGCameraModeComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Camera/CameraActor.h"
@@ -58,7 +59,7 @@ bool PlayingStance(UAnimInstance* Anim)
 class FCombatLocomotionReview:public IAutomationLatentCommand
 {
 public:
-    FCombatLocomotionReview(FAutomationTestBase* In,bool Visual):Test(In),bVisual(Visual){}
+    FCombatLocomotionReview(FAutomationTestBase* In,bool Visual,bool First=false):Test(In),bVisual(Visual),bFirst(First){}
     bool Update() override
     {
         UWorld* W=GEditor?GEditor->PlayWorld:nullptr;
@@ -80,6 +81,7 @@ public:
             C->GetCharacterMovement()->StopMovementImmediately();PC->SetControlRotation(FRotator::ZeroRotator);
             Mesh->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
             Animation->CombatStanceTimeout=40.f;Start=Now;
+            if(auto* Mode=C->FindComponentByClass<URPGCameraModeComponent>();Mode && Mode->bIsFirstPerson!=bFirst)Mode->TogglePerspective();
             Move=LoadObject<UInputAction>(nullptr,TEXT("/Game/Input/IA_Move.IA_Move"));
             Dir=FPaths::ProjectSavedDir()/TEXT("CombatLocomotion/Visual");
             if(bVisual)
@@ -113,6 +115,16 @@ public:
         const FVector Hand=Mesh->GetSocketTransform(TEXT("hand_r"),RTS_Component).GetLocation();
         if(bHaveHand && ((T>8.f && T<8.7f)||(T>12.f && T<13.3f)))MaxArmStep=FMath::Max(MaxArmStep,float(FVector::Dist(Hand,LastHand)));
         LastHand=Hand;bHaveHand=true;
+        if(bFirst)
+        {
+            const auto* View=C->FindComponentByClass<UCameraComponent>();
+            const float Eye=View?C->GetActorTransform().InverseTransformPosition(View->GetComponentLocation()).Z:0.f;
+            if(T>1.5f && T<2.8f)WalkEye=Eye;
+            if(T>7.3f && T<7.9f)CombatEye=Eye;
+            if(T>10.7f && T<11.8f)RunEye=Eye;
+            if(bHaveEye && ((T>8.f && T<8.7f)||(T>12.f && T<13.3f)))MaxEyeStep=FMath::Max(MaxEyeStep,FMath::Abs(Eye-LastEye));
+            LastEye=Eye;bHaveEye=true;
+        }
         CSV+=FString::Printf(TEXT("%.5f,%.3f,%.2f,%d,%s,%.2f,%.2f,%.2f\n"),T,Amount,Speed,Stance,*Selected,Hand.X,Hand.Y,Hand.Z);
         if(bVisual)
         {
@@ -130,13 +142,22 @@ public:
         Test->TestTrue(TEXT("Stopping returns to combat stance"),Returned);
         Test->TestTrue(TEXT("Arm transitions contain no per-frame pose pop"),MaxArmStep<12.f);
         Test->TestEqual(TEXT("Three standard punches released during the sequence"),Animation->CapturedPunchReleaseCount,3);
-        FFileHelper::SaveStringToFile(CSV,*(FPaths::ProjectSavedDir()/TEXT("CombatLocomotion/movement.csv")));
+        FVector ReferenceEye;
+        if(bFirst && Animation->GetReferenceGuardEye(ReferenceEye))
+        {
+            Test->TestTrue(TEXT("First-person camera follows the lower reference guard"),CombatEye<WalkEye-3.f && CombatEye>WalkEye-45.f);
+            Test->TestTrue(TEXT("Running restores the locomotion eye height"),RunEye>CombatEye+3.f);
+            Test->TestTrue(TEXT("First-person stance/movement camera has no per-frame height pop"),MaxEyeStep<8.f);
+            Test->AddInfo(FString::Printf(TEXT("FPS eyes walk %.2f, combat %.2f, run %.2f; transition step %.2f cm"),WalkEye,CombatEye,RunEye,MaxEyeStep));
+        }
+        FFileHelper::SaveStringToFile(CSV,*(FPaths::ProjectSavedDir()/(bFirst?TEXT("CombatLocomotion/movement-first-person.csv"):TEXT("CombatLocomotion/movement.csv"))));
         if(bVisual)FFileHelper::SaveStringToFile(Times,*(Dir/TEXT("captures.csv")));
         Test->AddInfo(FString::Printf(TEXT("Walk %.1f, run %.1f cm/s; largest transition hand step %.2f cm; stance stationary only; three standard releases"),WalkSpeed,RunSpeed,MaxArmStep));
         return true;
     }
 private:
-    FAutomationTestBase* Test;bool bVisual=false,Walk=false,Run=false,WalkAfterCombat=false,MovingStance=false,Stationary=false,Returned=false,bHaveHand=false;
+    FAutomationTestBase* Test;bool bVisual=false,bFirst=false,Walk=false,Run=false,WalkAfterCombat=false,MovingStance=false,Stationary=false,Returned=false,bHaveHand=false,bHaveEye=false;
+    float WalkEye=0,CombatEye=0,RunEye=0,MaxEyeStep=0,LastEye=0;
     float Start=-1,WalkSpeed=0,RunSpeed=0,MaxArmStep=0,LastShot=-1;int32 Wait=0,Shot=0;uint32 Events=0;
     TObjectPtr<UInputAction> Move;TObjectPtr<ACameraActor> Camera;FVector LastHand;
     FString Dir,CSV=TEXT("time,input,speed,stance,selected,hand_x,hand_y,hand_z\n"),Times=TEXT("frame,time\n");
@@ -148,4 +169,7 @@ bool FCombatLocomotionTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLocomotionVisual,"Visual.StationaryStanceLocomotion",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)
 bool FCombatLocomotionVisual::RunTest(const FString&)
 {ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.f));ADD_LATENT_AUTOMATION_COMMAND(FCombatLocomotionReview(this,true));ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());return true;}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCombatLocomotionFirst,"RPG.Combat.StationaryStanceLocomotionFirstPerson",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)
+bool FCombatLocomotionFirst::RunTest(const FString&)
+{ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.f));ADD_LATENT_AUTOMATION_COMMAND(FCombatLocomotionReview(this,false,true));ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());return true;}
 #endif

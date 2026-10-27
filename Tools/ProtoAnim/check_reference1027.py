@@ -9,6 +9,8 @@ HERE=Path(__file__).resolve().parent
 clips=json.loads((HERE/'reference1027_uefn.json').read_text())
 stance=clips['RPG_CombatStance_Reference1027']['poses'][0]
 fpstance=clips['RPG_FP_CombatStance_Reference1027']['poses'][0]
+guard_cs=p.to_cs(fpstance)
+guard_eye=p.add(guard_cs['head'][1],p.qrot(guard_cs['head'][0],[15.,13.,0.]))
 metrics={}
 for name,c in clips.items():
     assert c['fps']==60 and c['frames']==len(c['poses'])
@@ -42,6 +44,15 @@ for name,c in clips.items():
         rest=fpstance if name.startswith('RPG_FP_') else stance
         assert c['poses'][0]==rest and c['poses'][-1]==rest,(name,'stance seam')
         assert c['impact']==(.36 if c['tier']=='Light' else 1.5),(name,'runtime timing')
+        if name.startswith('RPG_FP_') and c['tier']!='Light':
+            for i in range(18,73):
+                cs=p.to_cs(c['poses'][i]);head_eye=p.add(cs['head'][1],p.qrot(cs['head'][0],[15.,13.,0.]))
+                eye=[guard_eye[j]+(head_eye[j]-guard_eye[j])*(.4 if j==2 else .2) for j in range(3)]
+                scores=[]
+                for s in 'lr':
+                    fist=p.lerp(cs['hand_'+s][1],cs['middle_01_'+s][1],.5);v=p.sub(fist,eye)
+                    scores.append(max(abs(v[0])/max(.01,v[1]),abs(v[2])/(max(.01,v[1])*(688./1280.))))
+                assert min(scores)<.95,(name,i,'both loaded fists outside nominal first-person view',scores)
     metrics[name]=dict(min_floor_margin=round(worst_floor,4),max_ball_slide_xy=round(worst_ball,4),max_hand_step_cm=round(max_step,3),hips=round(hips,3),head=round(head,3),forward=round(forward,3))
 for side in 'LR':
     for tier in ['Light','Heavy','Power']:

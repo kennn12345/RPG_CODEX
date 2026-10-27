@@ -13,6 +13,13 @@ from capture_punches8630 import fit_punch_shoulder,elbow_clearance
 HERE=Path(__file__).resolve().parent;FPS=60
 FIT=json.loads((HERE/'captures/reference1027_fitted_poses.json').read_text())
 POSE={r['frame']:r['pose'] for r in FIT['rows']}
+REFINED=HERE/'captures/reference1027_refined_upper_body.json'
+if REFINED.exists():
+    for row in json.loads(REFINED.read_text())['rows']:
+        for bone,q in row['rotations'].items():POSE[row['frame']][bone]=(q,POSE[row['frame']][bone][1])
+SUPPORT=HERE/'captures/reference1027_refined_support.json'
+SUPPORT_PARAMETERS=json.loads(SUPPORT.read_text())['parameters'] if SUPPORT.exists() else [12.,30.,-20.,-18.,0.,0.,0.]
+for pose in POSE.values():pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],SUPPORT_PARAMETERS[4:7]))
 STANCE=POSE[128]
 REFERENCE_FIST=copy.deepcopy(p.FIST)
 for bone,(rotation,translation) in list(REFERENCE_FIST.items()):
@@ -100,9 +107,23 @@ def finish(local,planted=False):
         if planted:planted_leg(local,s,target,rot)
         else:repair_chain(local,'thigh_'+s,'calf_'+s,foot,target,p.sub(cs['calf_'+s][1],cs['thigh_'+s][1]),rot)
         cs=p.to_cs(local)
-        repair_chain(local,'upperarm_'+s,'lowerarm_'+s,'hand_'+s,cs['hand_'+s][1],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]),cs['hand_'+s][0])
+        view_arm(local,s,cs['hand_'+s][1],cs['hand_'+s][0],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]))
         # Retain source fist roll, remove incidental wrist bending after interpolation.
         if g.wrist(p.to_cs(local),s)>55.:straight_wrist(local,s)
+    if planted:
+        cs=p.to_cs(local)
+        extension=min(g.limb_angles(cs,s,'pelvis','thigh_'+s,'calf_'+s)[0] for s in 'lr')
+        if extension < -23.:
+            # A long cross comes from a small pelvic hinge as well as the arm.
+            # Keep the filmed upper-body world orientation while letting the
+            # pelvis follow the drive, rather than hyperextending the rear hip.
+            tilt=min(12.,-23.-extension);spine=cs['spine_01'][0]
+            feet={s:(cs['foot_'+s][0],cs['foot_'+s][1]) for s in 'lr'}
+            q=p.qnorm(p.qmul(p.qaxis(g.frame(cs,'pelvis')[0],-tilt),cs['pelvis'][0]))
+            local['pelvis']=(q,local['pelvis'][1])
+            local['spine_01']=(p.qnorm(p.qmul(p.qconj(q),spine)),local['spine_01'][1])
+            lower_for_contacts(local,{s:v[1] for s,v in feet.items()})
+            for s,(rotation,target) in feet.items():planted_leg(local,s,target,rotation)
     return follow_ik(local)
 
 def clip(name,rows,keys,**info):
@@ -138,12 +159,20 @@ def camera_torso(local,weight):
 
 def first_person(local,rest,view_rest,t=0.,side=None):
     view=copy.deepcopy(local);rcs=p.to_cs(rest);vcs0=p.to_cs(view_rest)
-    presentation=1. if side is None else 1.-ease(t/.08) if t<.36 else ease((t-.78)/.27)
+    presentation=1. if side is None else 1.-ease((t-.12)/.16) if t<.28 else ease((t-.78)/.27)
+    if presentation==0.:return follow_ik(view)  # Exact shared performance through contact/withdrawal.
     camera_torso(view,presentation)
     for s in 'lr':
         cs=p.to_cs(local)
         weight=presentation
         target=p.add(cs['hand_'+s][1],p.mul(p.sub(vcs0['hand_'+s][1],rcs['hand_'+s][1]),weight))
+        if side is not None and t<.28:
+            # A third-person rear-hand load passes behind the eyes. Keep a readable
+            # camera windup through the common charge boundary, then join the exact
+            # body strike path before contact. The non-striking hand stays protective.
+            loaded=list(vcs0['hand_'+s][1])
+            if s==side:loaded=p.add(loaded,p.mul([3. if s=='l' else -3.,-10.,-2.],ease(t/.12)))
+            target=p.lerp(cs['hand_'+s][1],loaded,weight)
         if weight>0.:fit_punch_shoulder(view,s,target)
         vs=p.to_cs(view);target=elbow_clearance(vs,s,target)
         relative=p.qmul(p.qconj(rcs['hand_'+s][0]),cs['hand_'+s][0])
@@ -178,7 +207,7 @@ def charged_family(result,view_rest):
     """
     for side in 'lr':
         standard=result[f'RPG_Punch_{side.upper()}_Light_Reference1027_V1']['poses']
-        load=sampled(standard,.12);coil=copy.deepcopy(load)
+        load=sampled(standard,.12);coil=sampled(standard,.226666667)
         coil['pelvis']=(coil['pelvis'][0],p.add(coil['pelvis'][1],[0.,-3.,-2.]))
         hand='hand_'+side
         coil=finish(coil,True)
@@ -194,16 +223,16 @@ def charged_family(result,view_rest):
                     elif t<=1.2:
                         pose=blend(load,coil,ease((t-.12)/.48));phase=.12
                     else:
-                        phase=.12+(.24*(t-1.2)/.3) if t<=1.5 else .36+(.30*(t-1.5)/.3) if t<=1.8 else .66+.39*(t-1.8)/(duration-1.8)
+                        phase=.226666667+(.133333333*(t-1.2)/.3) if t<=1.5 else .36+(.30*(t-1.5)/.3) if t<=1.8 else .66+.39*(t-1.8)/(duration-1.8)
                         timing=math.sin(math.pi*(phase-.12)/.24)**2 if phase<.36 else math.sin(math.pi*(phase-.36)/.69)**2
-                        pose=sampled(standard,phase+offset*.004*timing)
+                        pose=sampled(standard,phase+offset*.0025*timing)
                         if t<1.38:pose=blend(coil,pose,ease((t-1.2)/.18))
                         drive=ease((t-1.2)/.3)*(1.-ease((t-1.7)/(duration-1.7)))
                         original_height=p.to_cs(pose)[hand][1][2]
                         pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],[0.,8.*strength*drive,0.]))
                         lean_forward(pose,6.*strength*drive)
                         pose=finish(pose,True)
-                        extension=drive*(1.-ease((t-1.58)/.17))
+                        extension=drive*(1.-ease((t-1.53)/.10))
                         if extension>1.e-6:
                             cs=p.to_cs(pose);target=p.add(cs[hand][1],[0.,4.*strength*extension,2.*strength*extension]);rotation=cs[hand][0]
                             # Knees/hips absorb the larger drive, but the fist still delivers
@@ -240,7 +269,8 @@ def build():
         rot=cs[foot][0]
         # Hidden rear-foot depth is underdetermined by the crop. Use the native
         # stagger as a prior, rather than the image fit's overlong63cm footprint.
-        ball_target=[12.,30.,3.2] if s=='l' else [-20.,-18.,3.2]
+        k=0 if s=='l' else 2
+        ball_target=[SUPPORT_PARAMETERS[k],SUPPORT_PARAMETERS[k+1],3.2]
         target=p.sub(ball_target,p.qrot(rot,STANCE[ball][1]))
         target[2]=max(4.5,target[2]);targets[s]=target
     lower_for_contacts(STANCE,targets)
@@ -260,10 +290,13 @@ def build():
     name='RPG_CombatStance_Reference1027';result[name]=clip(name,stance_rows,[0.,.5,1.,1.5,2.])
     view_rest=copy.deepcopy(STANCE)
     camera_torso(view_rest,1.)
+    head=p.to_cs(view_rest)['head'];eye=p.add(head[1],p.qrot(head[0],[15.,13.,0.]))
+    camera=eye  # Runtime blends its stationary reference anchor to this guard's real eyes.
     for s in 'lr':
         # The gameplay camera only partially follows the animated skull. A full
         # skull-relative offset hides both fists below the frame during this crouch.
-        target=[12.,55.,154.] if s=='l' else [-23.,55.,156.]
+        # Keep guard height/depth relative to the camera as the reference crouch changes.
+        target=p.add(camera,[14.,25.,-8.] if s=='l' else [-14.,23.,-6.])
         fit_punch_shoulder(view_rest,s,target);cs=p.to_cs(view_rest);target=elbow_clearance(cs,s,target)
         view_arm(view_rest,s,target,cs['hand_'+s][0],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]))
     view_rest=follow_ik(view_rest)
@@ -275,13 +308,16 @@ def build():
     rows=[finish(at(pairkeys,i/FPS)) for i in range(57)]
     name='RPG_Reference1027_PairReview';result[name]=clip(name,rows,[0.,8/60,16/60,20/60,24/60,28/60,40/60,56/60])
     for side in 'lr':
-        if side=='l':keys=[(0.,STANCE),(.12,POSE[72]),(.20,POSE[76]),(.36,POSE[80]),(.43,POSE[84]),(.82,STANCE),(1.05,STANCE)]
+        # Keep .36s impact/input timing; preserve the filmed 60Hz spacing of
+        # loading, extension and follow-through around it. Guard entry supplies
+        # the remaining time rather than stretching the punch's actual release.
+        if side=='l':keys=[(0.,STANCE),(.226666667,POSE[72]),(.293333333,POSE[76]),(.36,POSE[80]),(.426666667,POSE[84]),(.626666667,STANCE),(1.05,STANCE)]
         else:
             load=copy.deepcopy(POSE[88])
             # A single RT must not also throw the preceding filmed left jab.
             for b in p.BONES:
                 if b.endswith('_l') and any(t in b for t in ('clavicle','arm','hand','index','middle','ring','pinky','thumb')):load[b]=copy.deepcopy(STANCE[b])
-            keys=[(0.,STANCE),(.12,load),(.24,POSE[92]),(.36,POSE[96]),(.44,POSE[100]),(.54,POSE[104]),(.72,POSE[112]),(1.05,STANCE)]
+            keys=[(0.,STANCE),(.226666667,load),(.293333333,POSE[92]),(.36,POSE[96]),(.426666667,POSE[100]),(.493333333,POSE[104]),(.626666667,POSE[112]),(.893333333,STANCE),(1.05,STANCE)]
         for variant,offset in enumerate([0.,1.,-1.],1):
             rows=[]
             for i in range(64):
@@ -290,16 +326,18 @@ def build():
                 # Slight acceleration/recovery timing changes keep the same strike and impact pose.
                 # Spatial offsets near a fully lateral shoulder can choose a different elbow solution.
                 phase=math.sin(math.pi*(t-.12)/.24)**2 if .12<t<.36 else math.sin(math.pi*(t-.36)/.69)**2 if .36<t<1.05 else 0.
-                pose=at(keys,t+offset*.004*phase)
+                pose=at(keys,t+offset*.0025*phase)
                 # The source advances through the jab/cross. Keep a documented body drive
                 # when removing capsule/root travel, with planted feet owning the support.
-                drive=ease((t-.12)/.24)*(1.-ease((t-.48)/.5))
-                pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],[0.,20.*drive,0.]))
+                drive=ease((t-.226666667)/.133333333)*(1.-ease((t-.48)/.5))
+                # The rear cross needs the filmed shoulder/hip commitment to
+                # reach as far as the lead jab on the shorter target rig.
+                pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],[0.,(20. if side=='l' else 30.)*drive,0.]))
                 rows.append(finish(pose,True))
             rows[0]=copy.deepcopy(STANCE);rows[-1]=copy.deepcopy(STANCE)
             name=f'RPG_Punch_{side.upper()}_Light_Reference1027_V{variant}'
             result[name]=clip(name,rows,[a for a,_ in keys],impact=.36,hand=side,tier='Light',variant=variant-1,
-                             adaptation='Isolated strike with common guard endpoints, planted-ball pivots and20cm in-place body drive replacing source root advance')
+                             adaptation='Isolated strike with common guard endpoints, planted-ball pivots and in-place hip/shoulder drive replacing source root advance')
             views=[first_person(row,STANCE,view_rest,i/FPS,side) for i,row in enumerate(rows)]
             views[0]=copy.deepcopy(view_rest);views[-1]=copy.deepcopy(view_rest)
             name=name.replace('RPG_Punch_','RPG_FP_Punch_')
@@ -317,6 +355,9 @@ def build():
             points.append('FVector('+','.join(f'{v:.6f}' for v in point)+')')
         lines.append('    {'+', '.join(points)+'},')
     lines.append('};');calibration='\n'.join(lines)+'\n'
+    guard_cs=p.to_cs(result['RPG_FP_CombatStance_Reference1027']['poses'][0]);head=guard_cs['head']
+    eye=p.add(head[1],p.qrot(head[0],[15.,13.,0.]))
+    calibration+='const FVector ReferenceGuardEye('+','.join(f'{v:.6f}' for v in eye)+');\n'
     path=HERE.parent.parent/'Source/RPG_CODEX/ReferencePunchCalibration.inl'
     if not path.exists() or path.read_text()!=calibration:path.write_text(calibration)
     (HERE/'reference1027_uefn.json').write_text(json.dumps(result))

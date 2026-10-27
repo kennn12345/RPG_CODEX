@@ -240,6 +240,7 @@ private:
 		/** Where the animation alone has the end point (fist / foot centre) and the end bone, this frame and last. */
 		FVector Animated = FVector::ZeroVector;
 		FVector LastAnimated = FVector::ZeroVector;
+		FVector PreviousStep = FVector::ZeroVector;
 		FVector AnimatedBone = FVector::ZeroVector;
 		FVector LastAnimatedBone = FVector::ZeroVector;
 		bool bHaveLast = false;
@@ -264,6 +265,7 @@ private:
 
 	FLimbState Limbs[RPGStrikeContact::NumLimbs];
 	float SinceAttack = 1000.f;
+	float ReferenceReleaseRemaining = 0.f;
 	/** Pushback so far in the current strike (StrikeId). */
 	float StrikePushback = 0.f;
 	int32 PushbackStrikeId = -1;

@@ -606,7 +606,7 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 		FVector& Applied = Result.Applied;
 		Result.PressureAge += DeltaTime;
 		if (Desired.SizeSquared() >= Applied.SizeSquared()) { Applied = Desired; Result.PressureAge = 0.f; }
-		else if (Set.Num==0 || Result.PressureAge>=ContactPressureHold)
+		else if (Result.PressureAge>=ContactPressureHold)
 			Applied = Desired + (Applied - Desired) * FMath::Exp(-DeltaTime / FMath::Max(ContactReleaseTime, 0.005f));
 		Applied = Applied.GetClampedToMaxSize(MaxContactCorrection);
 		if (Applied.SizeSquared() < 1e-4f) Applied = FVector::ZeroVector;

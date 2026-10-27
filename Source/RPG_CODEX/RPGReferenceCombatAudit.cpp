@@ -42,6 +42,7 @@ public:
             Floor->SetActorScale3D(FVector(30,30,.1));Floor->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
             Body=W->SpawnActor<ASkeletalMeshActor>(Origin,FRotator::ZeroRotator);
             bFitted=!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_FITTED")).IsEmpty();
+            bCalibrated=!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_CALIBRATED")).IsEmpty();
             bTarget=bFitted || !FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_TARGET")).IsEmpty();
             auto* Mesh=LoadObject<USkeletalMesh>(nullptr,bTarget?
                 TEXT("/Game/Characters/UEFN_Mannequin/Meshes/SKM_UEFN_Mannequin.SKM_UEFN_Mannequin"):
@@ -51,7 +52,11 @@ public:
             Body->GetSkeletalMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
             Body->GetSkeletalMeshComponent()->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
             Camera=W->SpawnActor<ACameraActor>();Camera->GetCameraComponent()->SetFieldOfView(45);
-            Camera->GetCameraComponent()->bConstrainAspectRatio=false;
+            if(bCalibrated)Camera->GetCameraComponent()->SetFieldOfView(FMath::RadiansToDegrees(2.f*FMath::Atan(816.f/(2.f*2021.2471f))));
+            // PIE may cap the window to a landscape viewport. Preserve the fitted
+            // portrait camera with pillarboxing instead of cropping head/feet.
+            Camera->GetCameraComponent()->bConstrainAspectRatio=bCalibrated;
+            if(bCalibrated)Camera->GetCameraComponent()->SetAspectRatio(816.f/1242.f);
             Camera->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount=true;Camera->GetCameraComponent()->PostProcessSettings.MotionBlurAmount=0;
             PC->bAutoManageActiveCameraTarget=false;PC->SetViewTarget(Camera);
             Dir=FPaths::ProjectSavedDir()/(bFitted?TEXT("ReferenceCombat1027/FittedAuditUEFN"):bTarget?TEXT("ReferenceCombat1027/SourceAuditUEFN"):TEXT("ReferenceCombat1027/SourceAuditNative"));IFileManager::Get().MakeDirectory(*Dir,true);
@@ -63,7 +68,7 @@ public:
                 AuditYaw=FMath::Clamp(FCString::Atof(*Yaw),5.f,85.f);
                 Dir+=FString::Printf(TEXT("_Yaw%.0f"),AuditYaw);IFileManager::Get().MakeDirectory(*Dir,true);
             }
-            CSV=TEXT("frame,clip,view,time\n");
+            CSV=TEXT("frame,clip,view,time,pelvis_x,pelvis_y,pelvis_z,left_x,left_y,left_z,right_x,right_y,right_z,left_screen_x,left_screen_y,right_screen_x,right_screen_y\n");
             return false;
         }
         // Hold this exact pose until its screenshot is rendered and saved; fixed tick counts can drop frames offscreen.
@@ -90,9 +95,11 @@ public:
             const float Time=ClipIndex==0?Shot*.5f:Shot/30.f;
             Mesh->SetPosition(Time,false);Mesh->TickAnimation(0,false);Mesh->RefreshBoneTransforms();
             const FVector Root=Mesh->GetBoneLocation(TEXT("root"));
-            const FVector Focus(Root.X,Root.Y,Origin.Z+85);
+            const FVector Centre=bCalibrated?Mesh->GetBoneLocation(TEXT("pelvis")):Root;
+            const FVector Focus(Centre.X,Centre.Y,Origin.Z+85);
             const float Side=View==0?-1.f:1.f;
-            const FVector Offset=AuditYaw<0?FVector(Side*260,-360,155):
+            const FVector Offset=bCalibrated?FVector(Side*350.f*FMath::Sin(FMath::DegreesToRadians(55.39699f))*FMath::Cos(FMath::DegreesToRadians(17.81645f)),
+                -350.f*FMath::Cos(FMath::DegreesToRadians(55.39699f))*FMath::Cos(FMath::DegreesToRadians(17.81645f)),350.f*FMath::Sin(FMath::DegreesToRadians(17.81645f))):AuditYaw<0?FVector(Side*260,-360,155):
                 FVector(Side*444*FMath::Sin(FMath::DegreesToRadians(AuditYaw)),-444*FMath::Cos(FMath::DegreesToRadians(AuditYaw)),155);
             const FVector Eye=Focus+Offset;
             Camera->SetActorLocationAndRotation(Eye,(Focus-Eye).Rotation());
@@ -103,7 +110,11 @@ public:
         const FString File=FString::Printf(TEXT("frame_%05d.png"),Frame);
         PendingFile=Dir/File;
         FScreenshotRequest::RequestScreenshot(PendingFile,false,false);
-        CSV+=FString::Printf(TEXT("%d,%s,%d,%.6f\n"),Frame++,bFitted?FittedNames[ClipIndex]:Names[ClipIndex],View,Time);
+        const FVector Pelvis=Mesh->GetBoneLocation(TEXT("pelvis"))-Origin;
+        const FVector Left=Mesh->GetBoneLocation(TEXT("hand_l"))-Origin,Right=Mesh->GetBoneLocation(TEXT("hand_r"))-Origin;
+        FVector2D LeftScreen,RightScreen;PC->ProjectWorldLocationToScreen(Left+Origin,LeftScreen);PC->ProjectWorldLocationToScreen(Right+Origin,RightScreen);
+        CSV+=FString::Printf(TEXT("%d,%s,%d,%.6f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.3f,%.3f,%.3f,%.3f\n"),Frame++,bFitted?FittedNames[ClipIndex]:Names[ClipIndex],View,Time,
+            Pelvis.X,Pelvis.Y,Pelvis.Z,Left.X,Left.Y,Left.Z,Right.X,Right.Y,Right.Z,LeftScreen.X,LeftScreen.Y,RightScreen.X,RightScreen.Y);
         Stage=0;
         if(++Shot>=(ClipIndex==0?6:36))
         {Shot=0;if(++View==2){View=0;++ClipIndex;}}
@@ -111,13 +122,16 @@ public:
     }
 private:
     FAutomationTestBase* Test;TObjectPtr<ASkeletalMeshActor> Body;TObjectPtr<ACameraActor> Camera;
-    FVector Origin;int32 Wait=0,ClipIndex=0,View=0,Shot=0,Stage=0,Frame=0;FString Dir,CSV,PendingFile;bool bTarget=false,bFitted=false;float AuditYaw=-1.f;
+    FVector Origin;int32 Wait=0,ClipIndex=0,View=0,Shot=0,Stage=0,Frame=0;FString Dir,CSV,PendingFile;bool bTarget=false,bFitted=false,bCalibrated=false;float AuditYaw=-1.f;
 };
 }
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FReferenceAuditTest,"Visual.ReferenceCombat1027Audit",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)
 bool FReferenceAuditTest::RunTest(const FString&)
 {
     auto* Play=NewObject<ULevelEditorPlaySettings>();Play->NewWindowWidth=1280;Play->NewWindowHeight=720;
+    // Keep a landscape window the desktop can honor; the camera supplies the
+    // calibrated portrait view inside it without cropping the body.
+    if(!FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_REFERENCE_AUDIT_CALIBRATED")).IsEmpty()){Play->NewWindowWidth=1280;Play->NewWindowHeight=720;}
     Play->CenterNewWindow=false;Play->LastExecutedPlayModeType=PlayMode_InEditorFloating;
     FRequestPlaySessionParams Session;Session.WorldType=EPlaySessionWorldType::PlayInEditor;Session.EditorPlaySettings=Play;
     GEditor->RequestPlaySession(Session);

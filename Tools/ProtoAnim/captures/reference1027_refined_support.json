@@ -1,0 +1,15 @@
+{
+  "parameters": [
+    10.797905875681577,
+    45.7803716477083,
+    -15.841953872301035,
+    -32.24466240312283,
+    3.0811329070866025,
+    -2.990956684934529,
+    -7.50125418620241e-07
+  ],
+  "weighted_joint_rms": 2.249701665711849,
+  "method": "Visible knee centres and clearly visible front ankles f80/84 only. Fixed camera, pelvis image translation aligned. Grounded shared support; anatomy and native support prior. Other shoe markers excluded.",
+  "before_weighted_joint_rms": 3.9650258482351144,
+  "evaluations": 17
+}

@@ -94,6 +94,8 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	const bool bCombat = Animation && Animation->IsInCombat() && bGrounded;
 	const bool bAttacking = State && State->AttackPhase != ERPGAttackPhase::None;
 	const bool bKick = bAttacking && State->bAttackPhaseIsKick;
+	const bool bReferenceLoading=bFirstPerson && Animation && Animation->IsReferencePunchPlaying() && State
+		&& (State->AttackPhase==ERPGAttackPhase::Windup || State->AttackPhase==ERPGAttackPhase::ChargeHold);
 	// A reference charge already drives the shoulders forward. Tilting that whole
 	// body about the eyes adds another forward lunge at close range; let its spine
 	// take the aim instead, as in the third-person performance.
@@ -106,12 +108,27 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	const FVector ViewDirection = ViewRotation.Vector();
 	bool bOnTarget = false;
 	FVector StrikePoint=NaturalStrikePoint;
-	// Preserve the established reach/target acquisition. Only the FPS charged tilt
-	// needs per-clip calibration after changing its anatomical pivot.
-	if (bFirstPerson && Animation && Animation->IsReferenceChargedPunchPlaying()) Animation->GetReferenceStrikePoint(StrikePoint);
-	const FVector AimPoint = FindAimPoint(Character, ViewLocation, ViewDirection, bFirstPerson, bOnTarget);
+	// Each reconstructed fist has its own delivery line. Measure that line for
+	// both hands/views, while retaining the established target acquisition range.
+	const bool bReferenceStrike=Animation && Animation->IsReferencePunchPlaying() && Animation->GetReferenceStrikePoint(StrikePoint);
+	FVector AimPoint = FindAimPoint(Character, ViewLocation, ViewDirection, bFirstPerson, bOnTarget);
+	if(bReferenceStrike && !bFirstPerson && !bOnTarget)
+	{
+		const FTransform& MeshToWorld=Character->GetMesh()->GetComponentTransform();
+		const FVector Pivot=MeshToWorld.TransformPosition(StrikePivot),Natural=MeshToWorld.TransformPosition(StrikePoint);
+		const float Turn=FRotator::NormalizeAxis(ViewRotation.Yaw-(Natural-Pivot).Rotation().Yaw);
+		AimPoint=Pivot+FQuat(FVector::UpVector,FMath::DegreesToRadians(Turn)).RotateVector(Natural-Pivot);
+	}
 	auto MeasureAim = [&](float& OutYaw, float& OutPitch)
 	{
+		// The camera guard is authored to face the view. Do not aim a held coil
+		// using its future impact point: that turns/tilts both loaded fists out
+		// of frame. On release the normal strike calibration takes over.
+		if(bReferenceLoading)
+		{
+			OutYaw=FRotator::NormalizeAxis(ViewRotation.Yaw-Character->GetActorRotation().Yaw);
+			OutPitch=0.f;return;
+		}
 		// From the eyes in first person (the chest tilts about them), from the spine in third person.
 		const FTransform& MeshToWorld = Character->GetMesh()->GetComponentTransform();
 		const FVector From = bEyePivot ? ViewLocation : MeshToWorld.TransformPosition(StrikePivot);
@@ -119,8 +136,9 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		const FRotator Natural = (NaturalPoint - From).Rotation();
 		const FRotator Wanted = (AimPoint - From).Rotation();
 		OutYaw = FRotator::NormalizeAxis(Wanted.Yaw - Natural.Yaw);
+		const float Radius=bReferenceStrike?FMath::Max(10.f,float((NaturalPoint-From).Size2D())):ThirdPersonStrikeRadius;
 		OutPitch = bFirstPerson ? FRotator::NormalizeAxis(Wanted.Pitch - Natural.Pitch)
-			: FMath::RadiansToDegrees(FMath::Atan2(AimPoint.Z - NaturalPoint.Z, ThirdPersonStrikeRadius));
+			: FMath::RadiansToDegrees(FMath::Atan2(AimPoint.Z - NaturalPoint.Z, Radius));
 	};
 	float Twist = 0.f, RawPitch = 0.f;
 	MeasureAim(Twist, RawPitch);

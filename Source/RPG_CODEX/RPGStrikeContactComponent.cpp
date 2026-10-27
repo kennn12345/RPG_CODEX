@@ -174,10 +174,19 @@ void URPGStrikeContactComponent::UpdateLimb(int32 Index, const TArray<UPrimitive
 	const FSurfaceSample Samples[NumSamples] = {Def.Samples[0], Def.Samples[1], Def.Samples[2], Def.Inner[0], Def.Inner[1]};
 	FVector Now[NumSamples], Next[NumSamples];
 	const FVector Velocity = S.bHaveLast ? S.Animated - S.LastAnimated : FVector::ZeroVector;
+	const auto* Animation=GetOwner()->FindComponentByClass<URPGPrototypeAnimationComponent>();
+	const bool bReferenceFist=Index<=LeftHand && Animation && Animation->IsReferencePunchPlaying();
+	const FVector Acceleration=(Velocity-S.PreviousStep).GetClampedToMaxSize(15.f);
+	// The reference release accelerates over four filmed frames. Constant-speed
+	// lookahead can miss its first surface; predict the increasing step as well.
+	const FVector LookAhead=Velocity*2.f+(bReferenceFist && FVector::DotProduct(Acceleration,Velocity)>0.f?Acceleration*2.f:FVector::ZeroVector);
+	const auto* CombatState=GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
+	const bool bFastRelease=bReferenceFist && !Animation->IsReferenceChargedPunchPlaying() && CombatState && CombatState->AttackPhase==ERPGAttackPhase::Strike;
+	const float CurveMargin=bFastRelease && Velocity.SizeSquared()>1.f?FMath::Clamp(float(Velocity.Size()*.25f+Acceleration.Size()*.5f),2.f,8.f):0.f;
 	for (int32 K = 0; K < NumSamples; ++K)
 	{
 		Now[K] = SamplePoint(Mesh, Samples[K]);
-		Next[K] = Now[K] - (K < 3 ? S.Correction : FVector::ZeroVector) + Velocity * 2.f;
+		Next[K] = Now[K] - (K < 3 ? S.Correction : FVector::ZeroVector) + LookAhead;
 	}
 
 	// Contacts already held: each moves with its body; it lets go once the animated limb is back out in front of it.
@@ -232,8 +241,12 @@ void URPGStrikeContactComponent::UpdateLimb(int32 Index, const TArray<UPrimitive
 			for (int32 K = 0; K < NumSamples; ++K)
 			{
 				const FCollisionShape Sphere = FCollisionShape::MakeSphere(Samples[K].Radius);
+				// A conservative query envelope covers the curved release between
+				// frames. Hit points remain on the target's real surface; physical
+				// limb radii and allowed compression are unchanged.
+				const FCollisionShape PredictSphere = FCollisionShape::MakeSphere(Samples[K].Radius+CurveMargin);
 				FHitResult Hit;
-				if (FVector::DistSquared(Now[K], Next[K]) > 0.01f && Body.Key->Sweep(Hit, Now[K], Next[K], FQuat::Identity, Sphere, false))
+				if (FVector::DistSquared(Now[K], Next[K]) > 0.01f && Body.Key->Sweep(Hit, Now[K], Next[K], FQuat::Identity, PredictSphere, false))
 				{
 					if (!Hit.bStartPenetrating && Hit.Time < BestTime)
 					{
@@ -282,7 +295,13 @@ void URPGStrikeContactComponent::UpdateLimb(int32 Index, const TArray<UPrimitive
 		Latch.LastPoint = P;
 		Latch.bHaveLast = true;
 		FRPGLimbContactPlane& Plane = S.Set.Planes[S.Set.Num++];
-		Plane.Point = P + (SurfaceVelocity * DeltaTime).GetClampedToMaxSize(MaxPlaneLead);
+		// A struck target's small hand/forearm bodies can rebound farther than
+		// its torso. Reference fists anticipate that motion with the same
+		// measured velocity rather than waiting until the next pose is inside.
+		// Anticipate an approaching surface. Predicting a yielding surface away
+		// pulls pressure off too soon and then reapplies it on a small rebound.
+		const FVector Lead=bReferenceFist?N*FMath::Max(0.f,float(FVector::DotProduct(SurfaceVelocity,N)))*DeltaTime:SurfaceVelocity*DeltaTime;
+		Plane.Point = P + Lead.GetClampedToMaxSize(bReferenceFist?12.f:MaxPlaneLead);
 		Plane.Normal = N;
 		const float Into = float(FVector::DotProduct(SurfaceVelocity - Velocity / DeltaTime, N));
 		S.ApproachSpeed = FMath::Max(S.ApproachSpeed, Into);
@@ -301,7 +320,10 @@ void URPGStrikeContactComponent::PushPlanes()
 	Character->GetComponents<USkeletalMeshComponent>(Meshes);
 	const auto* Animation=Character->FindComponentByClass<URPGPrototypeAnimationComponent>();
 	const bool SmoothFist=Animation && (Animation->IsCapturedStandardPunchPlaying() || Animation->IsReferencePunchPlaying());
-	const float UnloadTime=SmoothFist?FMath::Max(ReleaseTime,.2f):ReleaseTime;
+	float UnloadTime=SmoothFist?FMath::Max(ReleaseTime,.2f):ReleaseTime;
+	if(ReferenceReleaseRemaining>0.f && !(Animation && Animation->IsReferencePunchPlaying()))
+		for(const auto& LimbState:Limbs)
+			if(LimbState.Correction.SizeSquared()>400.f)UnloadTime=FMath::Max(UnloadTime,.12f);
 	// The visible body and the first-person shadow body (same surfaces, so the shadow's limbs stop in the same place).
 	for (USkeletalMeshComponent* Mesh : Meshes)
 		if (URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Mesh->GetAnimInstance()))
@@ -311,8 +333,9 @@ void URPGStrikeContactComponent::PushPlanes()
 			// This avoids small pressure reversals while preserving the same surface and compression limits.
 			Anim->ContactReleaseTime = UnloadTime;
 			// Keep impact pressure through a brief head rebound instead of
-			// alternating withdrawal/re-contact over consecutive60Hz poses.
-			Anim->ContactPressureHold = Animation && Animation->IsReferencePunchPlaying()?.07f:0.f;
+			// alternating withdrawal/re-contact over consecutive60Hz poses,
+			// including brief gaps between neighboring surface contacts.
+			Anim->ContactPressureHold = Animation && Animation->IsReferencePunchPlaying()?(Animation->IsReferenceChargedPunchPlaying()?.16f:.10f):0.f;
 		}
 }
 
@@ -325,9 +348,9 @@ void URPGStrikeContactComponent::PushBack(float DeltaTime)
 	Residual.Z = 0.f;
 	const URPGCombatStateComponent* State = GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
 	const auto* Animation=GetOwner()->FindComponentByClass<URPGPrototypeAnimationComponent>();
-	// A release and the following hit window are one reference charge, not two
+	// A release and the following hit window are one reference punch, not two
 	// independent opportunities to consume the retreat budget.
-	const int32 BudgetKey=Animation && Animation->IsReferenceChargedPunchPlaying()
+	const int32 BudgetKey=Animation && Animation->IsReferencePunchPlaying()
 		?-Animation->CapturedPunchReleaseCount-1:State?State->StrikeId:PushbackStrikeId;
 	if (BudgetKey != PushbackStrikeId)
 	{
@@ -337,12 +360,14 @@ void URPGStrikeContactComponent::PushBack(float DeltaTime)
 	const bool FullDrive=Animation && Animation->IsReferenceChargedPunchPlaying() && State
 		&& (State->AttackPhase==ERPGAttackPhase::Strike || State->AttackPhase==ERPGAttackPhase::Recovery);
 	const bool Power=FullDrive && Animation->LastCapturedPunchTier==2;
+	const bool Standard=Animation && Animation->IsReferencePunchPlaying() && !Animation->IsReferenceChargedPunchPlaying() && State
+		&& (State->AttackPhase==ERPGAttackPhase::Strike || State->AttackPhase==ERPGAttackPhase::Recovery);
 	// A close target cannot absorb the larger reference charge's hip/shoulder drive
 	// by folding the arm alone. Let the player's existing swept back-off take it,
 	// without moving the target or changing limb radii/compression/fold limits.
-	const float StrikeLimit=FullDrive?FMath::Max(MaxPushbackPerStrike,Power?26.f:18.f):MaxPushbackPerStrike;
-	const float FrameLimit=FullDrive?FMath::Max(MaxPushbackPerFrame,Power?4.5f:3.f):MaxPushbackPerFrame;
-	const float Rate=FullDrive?FMath::Max(PushbackRate,Power?1.f:.8f):PushbackRate;
+	const float StrikeLimit=FullDrive?FMath::Max(MaxPushbackPerStrike,Power?26.f:18.f):Standard?FMath::Max(MaxPushbackPerStrike,22.f):MaxPushbackPerStrike;
+	const float FrameLimit=FullDrive?FMath::Max(MaxPushbackPerFrame,Power?4.5f:3.f):Standard?FMath::Max(MaxPushbackPerFrame,3.5f):MaxPushbackPerFrame;
+	const float Rate=FullDrive?FMath::Max(PushbackRate,Power?1.f:.8f):Standard?FMath::Max(PushbackRate,1.f):PushbackRate;
 	const float Allowed = StrikeLimit - StrikePushback;
 	if (Residual.SizeSquared() < 0.01f || Allowed <= 0.f) return;
 	const FVector Step = (Residual * Rate).GetClampedToMaxSize(FMath::Min(FrameLimit, Allowed));
@@ -359,6 +384,11 @@ void URPGStrikeContactComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	USkeletalMeshComponent* Mesh = GetMesh();
 	URPGAnimInstance* Anim = Mesh ? Cast<URPGAnimInstance>(Mesh->GetAnimInstance()) : nullptr;
 	if (!Mesh || !Anim) return;
+	const auto* Animation=GetOwner()->FindComponentByClass<URPGPrototypeAnimationComponent>();
+	const auto* CombatState=GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
+	if(Animation && Animation->IsReferencePunchPlaying())ReferenceReleaseRemaining=.25f;
+	else if(CombatState && CombatState->AttackPhase!=ERPGAttackPhase::None)ReferenceReleaseRemaining=0.f;
+	else ReferenceReleaseRemaining=FMath::Max(0.f,ReferenceReleaseRemaining-DeltaTime);
 
 	// What the proxy did to this pose, and so where the animation alone has each limb.
 	const FTransform& ToWorld = Mesh->GetComponentTransform();
@@ -371,6 +401,7 @@ void URPGStrikeContactComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		S.Residual = ToWorld.TransformVector(Result.Residual);
 		S.AnimatedAngle = Result.AnimatedAngle;
 		S.CorrectedAngle = Result.CorrectedAngle;
+		S.PreviousStep = S.Animated-S.LastAnimated;
 		S.LastAnimated = S.Animated;
 		S.LastAnimatedBone = S.AnimatedBone;
 		S.Animated = SamplePoint(Mesh, Def.Samples[0]) - S.Correction;

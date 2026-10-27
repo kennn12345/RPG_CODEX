@@ -213,8 +213,12 @@ FVector URPGCameraModeComponent::GetFirstPersonEyeTarget() const
 	const FVector HeadEye = MeshToWorld.InverseTransformPosition(Mesh->GetSocketTransform(Head).TransformPosition(FirstPersonEyeOffset));
 	// The attack aim never moves the camera: its turn and tilt swing the chest about the eyes (URPGAnimInstance). Only
 	// the attack animation's own head motion is followed, and only a little: the camera stays a steady aiming reference.
-	const FVector Delta = HeadEye - FirstPersonRestEye;
-	const FVector Eye = FirstPersonRestEye
+	FVector ReferenceEye=FirstPersonRestEye;
+	const auto* Animation=GetOwner()->FindComponentByClass<URPGPrototypeAnimationComponent>();
+	if(Animation)Animation->GetReferenceGuardEye(ReferenceEye);
+	const FVector RestEye=FMath::Lerp(FirstPersonRestEye,ReferenceEye,ReferenceEyeWeight);
+	const FVector Delta = HeadEye - RestEye;
+	const FVector Eye = RestEye
 		+ FVector(Delta.X * FirstPersonFollowHorizontal, Delta.Y * FirstPersonFollowHorizontal, Delta.Z * FirstPersonFollowVertical);
 	return GetOwner()->GetActorTransform().InverseTransformPosition(MeshToWorld.TransformPosition(Eye));
 }
@@ -247,6 +251,13 @@ void URPGCameraModeComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	}
 	// Smoothing runs relative to the body, so walking never lags the camera behind it. The camera sits at the body's
 	// eyes and turns only with the body itself (smoothly); looking around never moves it, the arms swing under it.
+	const auto* Animation=GetOwner()->FindComponentByClass<URPGPrototypeAnimationComponent>();FVector ReferenceEye;
+	const auto* Character=Cast<ACharacter>(GetOwner());
+	const bool bGrounded=Character && Character->GetCharacterMovement() && Character->GetCharacterMovement()->IsMovingOnGround() && !Character->GetMesh()->IsSimulatingPhysics();
+	const bool bReference=bGrounded && Animation && Animation->IsInCombat() && GetOwner()->GetVelocity().SizeSquared2D()<400.f && Animation->GetReferenceGuardEye(ReferenceEye);
+	// The reference has a lower stationary guard. Ease into its actual eye height
+	// with the stance; keep the existing locomotion eye anchor outside that pose.
+	ReferenceEyeWeight=FMath::FInterpConstantTo(ReferenceEyeWeight,bReference?1.f:0.f,DeltaTime,1.f/.3f);
 	const FVector Target = GetFirstPersonEyeTarget();
 	SmoothedEye = (!bHaveSmoothedEye || FirstPersonSmoothing <= 0.f) ? Target
 		: FMath::Lerp(SmoothedEye, Target, 1.f - FMath::Exp(-FirstPersonSmoothing * DeltaTime));

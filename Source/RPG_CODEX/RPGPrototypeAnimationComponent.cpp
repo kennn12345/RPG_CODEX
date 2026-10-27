@@ -608,6 +608,13 @@ bool URPGPrototypeAnimationComponent::IsReferencePunchPlaying() const
     return CVarReferencePunches.GetValueOnGameThread()!=0 && bCapturedPunch && !bChargeIsKick;
 }
 
+bool URPGPrototypeAnimationComponent::GetReferenceGuardEye(FVector& OutPoint) const
+{
+    FVector Unused;
+    if (!GetReferenceStrikePoint(Unused)) return false;
+    OutPoint=ReferenceGuardEye;return true;
+}
+
 bool URPGPrototypeAnimationComponent::GetReferenceStrikePoint(FVector& OutPoint) const
 {
     if (CVarReferencePunches.GetValueOnGameThread()==0) return false;

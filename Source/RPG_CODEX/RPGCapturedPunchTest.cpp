@@ -4,6 +4,7 @@
 #include "RPGControllerInputComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGCombatAimComponent.h"
+#include "RPGAnimInstance.h"
 #include "RPGCameraModeComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
@@ -90,18 +91,33 @@ public:
         const bool bLeft=Case%2==1;
         if (bVisual && Case<Total && Now-LastShot>=1.f/30.f && !FScreenshotRequest::IsScreenshotRequested())
         {
-            Captures+=FString::Printf(TEXT("%d,%.6f,%d,%d,%d,%d\n"),Shot,Now-GlobalStart,Case,Tier,bLeft,Phase);
+            const auto* Pose=Cast<URPGAnimInstance>(Player->GetMesh()->GetAnimInstance());
+            Captures+=FString::Printf(TEXT("%d,%.6f,%d,%d,%d,%d,%.4f,%.4f,%d\n"),Shot,Now-GlobalStart,Case,Tier,bLeft,Phase,
+                Pose?Pose->AimYaw:0.f,Pose?Pose->AimPitch:0.f,Animation->IsReferenceChargedPunchPlaying());
             FScreenshotRequest::RequestScreenshot(Dir/FString::Printf(TEXT("frame_%05d.png"),Shot++),false,false);LastShot=Now;
         }
         if (Phase==0)
         {
-            Before=Animation->CapturedPunchReleaseCount;BeforeStrike=State->StrikeId;bSawClip=false;bSawStance=false;Start=Now;
+            Before=Animation->CapturedPunchReleaseCount;BeforeStrike=State->StrikeId;bSawClip=false;bSawStance=false;HiddenLoadFrames=0;Start=Now;
             Hold=Tier==0?FMath::Min(.08f,Buttons->TapMaxTime*.5f):Tier==1?(Buttons->TapMaxTime+Buttons->FullChargeTime)*.5f:Buttons->FullChargeTime+.15f;
             if (!bVisual && Case==17) { Hold=Buttons->FullChargeTime+9.f;Animation->CombatStanceTimeout=8.f; }
             Press(Player,Controller,bLeft,true);Phase=1;return false;
         }
         if (Phase==1)
         {
+            if(bVisual && bFirst && Tier>0 && Now-Start>.35f)
+            {
+                int32 Width=0,Height=0;Controller->GetViewportSize(Width,Height);bool Visible=false;
+                for(const TCHAR* Side:{TEXT("l"),TEXT("r")})
+                {
+                    const FVector Hand=Player->GetMesh()->GetBoneLocation(FName(*FString::Printf(TEXT("hand_%s"),Side)));
+                    const FVector Knuckle=Player->GetMesh()->GetBoneLocation(FName(*FString::Printf(TEXT("middle_01_%s"),Side)));
+                    FVector2D Screen;
+                    Visible|=Controller->ProjectWorldLocationToScreen(FMath::Lerp(Hand,Knuckle,.5f),Screen)
+                        && Width>0 && Height>0 && Screen.X>Width*.02f && Screen.X<Width*.98f && Screen.Y>Height*.02f && Screen.Y<Height*.98f;
+                }
+                if(!Visible)++HiddenLoadFrames;
+            }
             if (Animation->CapturedPunchReleaseCount!=Before || State->StrikeId!=BeforeStrike)
             {Test->AddError(TEXT("Held trigger fired before release or repeated a punch"));return true;}
             if (Now-Start<Hold)return false;
@@ -127,6 +143,7 @@ public:
                                 }
             if (Now-Released<(Tier==0?1.3f:Tier==1?1.5f:1.7f))return false;
             Test->TestEqual(TEXT("Exactly one punch released per trigger press"),Animation->CapturedPunchReleaseCount,Before+1);
+            if(bVisual && bFirst && Tier>0)Test->TestEqual(TEXT("A loaded fist remains visible in the actual first-person view"),HiddenLoadFrames,0);
             Test->TestEqual(TEXT("One gameplay strike window per punch"),State->StrikeId,BeforeStrike+1);
             Test->TestEqual(TEXT("Release selects the requested charge tier"),Animation->LastCapturedPunchTier,Tier);
             Test->TestEqual(TEXT("Per-hand/per-tier variations cycle 1,2,3 independently"),Animation->LastCapturedPunchVariant,Variant);
@@ -165,9 +182,9 @@ private:
         {if(bDown)Input->StartContinuousInputInjectionForAction(Action,FInputActionValue(1.f),{},{});else Input->StopContinuousInputInjectionForAction(Action);}
     }
     FAutomationTestBase* Test;bool bFirst=false,bVisual=false,bReady=false,bSawClip=false,bSawStance=false,bReferenceReview=false;
-    int32 Phase=0,Wait=0,Case=0,Before=0,BeforeStrike=0,Shot=0;
+    int32 Phase=0,Wait=0,Case=0,Before=0,BeforeStrike=0,Shot=0,HiddenLoadFrames=0;
     float Start=0,Released=0,Hold=0,GlobalStart=0,LastShot=-1;
-    FString Dir,Rows=TEXT("case,tier,left,variant,clip,strikes\n"),Captures=TEXT("frame,time,case,tier,left,phase\n");
+    FString Dir,Rows=TEXT("case,tier,left,variant,clip,strikes\n"),Captures=TEXT("frame,time,case,tier,left,phase,aim_yaw,aim_pitch,reference_charge\n");
 };
 }
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCapturedPunchTest,"RPG.Combat.CapturedPunches",EAutomationTestFlags::EditorContext|EAutomationTestFlags::ProductFilter)

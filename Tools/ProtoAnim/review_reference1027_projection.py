@@ -37,6 +37,8 @@ draw.text((12,8),'Current exported poses: orange / filmed player: blue',font=fon
 draw.text((12,32),'Fixed calibrated camera; pelvis translation aligned only. Diagnostic, not an accuracy score.',font=font,fill='white')
 report=[]
 for k,(label,frame,name,t) in enumerate(cases):
+    # Follow the authored phase keys after reference-timing refinement.
+    t=clips[name]['keys'][[0,1,3,2,3,6][k]]
     clip=clips[name];pose=clip['poses'][round(t*clip['fps'])];cs=p.to_cs(pose)
     observed=marks[str(frame)]
     projected={bone:project(g.head_top(cs) if bone=='head_centre' else cs[bone][1]) for bone in observed}

@@ -107,6 +107,7 @@ private:
     void ClearFlightPresentation();
     float FlightArmOffset = 0.f, FlightFOVOffset = 0.f;
     float CombatCameraWeight = 0.f;
+    float ReferenceEyeWeight = 0.f;
 	USpringArmComponent* GetCameraBoom() const;
 	class UCameraComponent* GetCamera() const;
 	/** Where the first-person camera wants to be this frame, relative to the body (actor space). */
