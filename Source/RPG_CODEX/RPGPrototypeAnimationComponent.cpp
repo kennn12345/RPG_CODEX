@@ -399,6 +399,15 @@ void URPGPrototypeAnimationComponent::BuildPresentationMap(const USkeleton* Skel
         UAnimSequence* FirstPerson = LoadFor(*Pair.Value, Skeleton);
         if (ThirdPerson && FirstPerson && FirstPerson->GetSkeleton() == Skeleton) FirstPersonClips.Add(ThirdPerson, FirstPerson);
     }
+    for (const bool bLeft : {false,true}) for (int32 Tier=0;Tier<3;++Tier) for (int32 Variant=0;Variant<3;++Variant)
+    {
+        UAnimSequence* Body=CapturedPunchClip(bLeft,Tier,Variant,Skeleton);
+        if (!Body) continue;
+        const FString Name=Body->GetName().Replace(TEXT("RPG_Punch_"),TEXT("RPG_FP_Punch_"));
+        const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/CapturedPunches/%s.%s"),*Name,*Name);
+        UAnimSequence* View=LoadObject<UAnimSequence>(nullptr,*Path);
+        if (View && View->GetSkeleton()==Skeleton) FirstPersonClips.Add(Body,View);
+    }
 }
 
 void URPGPrototypeAnimationComponent::SetFirstPersonPresentation(bool bFirstPerson)
@@ -493,6 +502,7 @@ void URPGPrototypeAnimationComponent::ClearCharge()
     bChargeButtonHeld = false;
     bChargePaused = false;
     bWaitingAtLoad = false;
+    bCapturedPunch = false;
     SetAttackPhase(ERPGAttackPhase::None);
 }
 
@@ -564,6 +574,57 @@ void URPGPrototypeAnimationComponent::UpdateCharge(UAnimInstance* Instance, floa
     UpdateStrikeWindow(Position);
 }
 
+UAnimSequence* URPGPrototypeAnimationComponent::CapturedPunchClip(bool bLeft,int32 Tier,int32 Variant,const USkeleton* Skeleton) const
+{
+    if (!Skeleton || Skeleton->GetName()!=TEXT("SK_UEFN_Mannequin")) return nullptr;
+    const TCHAR* Tiers[]={TEXT("Light"),TEXT("Heavy"),TEXT("Power")};
+    const FString Name=FString::Printf(TEXT("RPG_Punch_%s_%s_V%d"),bLeft?TEXT("L"):TEXT("R"),Tiers[FMath::Clamp(Tier,0,2)],FMath::Clamp(Variant,0,2)+1);
+    const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/CapturedPunches/%s.%s"),*Name,*Name);
+    UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,*Path);
+    return Clip && Clip->GetSkeleton()==Skeleton?Clip:nullptr;
+}
+
+bool URPGPrototypeAnimationComponent::ReleaseCapturedPunch(UAnimInstance* Instance,const FRPGPlayerActionInfo& Info)
+{
+    const bool bLeft=Info.Hand==ERPGHand::Left;
+    const int32 Hand=bLeft?0:1;
+    const int32 Tier=Info.Action==ERPGPlayerAction::PowerAttack?2:Info.Action==ERPGPlayerAction::HeavyAttack?1:0;
+    const int32 Variant=PendingCapturedPunch[Tier];
+    UAnimSequence* Clip=CapturedPunchClip(bLeft,Tier,Variant,Instance->CurrentSkeleton);
+    const FAnimMontageInstance* Playing=Instance->GetActiveInstanceForMontage(ChargeMontage);
+    if (!Clip || !Playing) return false;
+    UAnimMontage* Previous=ChargeMontage;
+    if (Tier>0)
+    {
+        // All charged variants have the same coil at this release boundary. Only one strike follows it.
+        UAnimMontage* Released=Instance->PlaySlotAnimationAsDynamicMontage(Present(Clip),bChargeUpperBody?UpperBodySlot:PrototypeSlot,.10f,.18f,1.f,1,-1.f,1.2f);
+        if (!Released) return false;
+        if (const FAnimMontageInstance* Old=Instance->GetActiveInstanceForMontage(Previous);Old && !Old->IsStopped()) Instance->Montage_Stop(.10f,Previous);
+        ChargeMontage=ActiveMontage=Released;
+    }
+    else
+    {
+        // A tap continues the single punch already loaded on press.
+        Instance->Montage_Resume(ChargeMontage);
+    }
+    FullBodyPunch=bChargeUpperBody?nullptr:Clip;
+    ChargedPlaying=Clip;ChargedSequence=nullptr;
+    bChargeButtonHeld=false;bChargePaused=false;bWaitingAtLoad=false;bChargeLoops=Tier>0;
+    ChargeImpactTime=Tier==0?.3f:1.5f;
+    ChargedHoldStart=.6f;ChargedHoldEnd=1.2f;
+    NextCapturedPunch[Hand][Tier]=(Variant+1)%3;
+    LastCapturedPunch=Clip->GetFName();LastCapturedPunchTier=Tier;LastCapturedPunchVariant=Variant;++CapturedPunchReleaseCount;
+    LastCombatActionTime=GetWorld()?GetWorld()->GetTimeSeconds():0.f;
+    if (URPGCombatStateComponent* State=GetCombatState())
+    {
+        State->LastReleaseChargePercent=Info.ChargePercent;
+        State->LastReleaseTime=GetWorld()?GetWorld()->GetTimeSeconds():0.f;
+    }
+    SetAttackPhase(ERPGAttackPhase::Strike);
+    UE_LOG(LogRPGInput,Display,TEXT("MOCAP PUNCH hand=%s tier=%d variant=%d clip=%s"),bLeft?TEXT("L"):TEXT("R"),Tier,Variant,*Clip->GetName());
+    return true;
+}
+
 void URPGPrototypeAnimationComponent::SwitchToChargedClip(UAnimInstance* Instance, float Position)
 {
     // Both clips are the same pose up to the load key, so a short crossfade just covers the swap.
@@ -592,6 +653,7 @@ bool URPGPrototypeAnimationComponent::ReleaseCharge(UAnimInstance* Instance, con
     if (!ChargeMontage || bChargeIsKick != bKick || !bChargeButtonHeld || (!bKick && ChargeHand != Info.Hand)) return false;
     const FAnimMontageInstance* Playing = Instance->GetActiveInstanceForMontage(ChargeMontage);
     if (!Playing || Playing->IsStopped()) return false;
+    if (bCapturedPunch && !bKick) return ReleaseCapturedPunch(Instance,Info);
     // Same montage, same frame: the strike carries on from the loaded pose (or simply never stops, if released
     // before the attack reached it - a tap).
     bChargeButtonHeld = false;
@@ -692,6 +754,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
     bool bPunch = false;
     bool bGroundedKick = false;
     bool bChargeStart = false;
+    bool bReleaseCapturedImmediately = false;
     switch (Info.Action)
     {
     case ERPGPlayerAction::Attack:
@@ -701,7 +764,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
         if (ReleaseCharge(Instance, Info, false)) return;
         // This press's punch was replaced by another attack that is still being held: don't play over it.
         if (ChargeMontage && bChargeButtonHeld) return;
-        // One light punch per hand for now, reused for charged attacks.
+        // Legacy skeleton fallback; UEFN selects the captured hand/tier variants below.
         Clip = Info.Hand == ERPGHand::Left ? LeftPunch : RightPunch;
         bPunch = true;
         break;
@@ -737,7 +800,19 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
     default: return;
     }
 
-    UAnimSequence* Sequence = LoadFor(Clip, Instance->CurrentSkeleton);
+    UAnimSequence* Sequence = nullptr;
+    if (bPunch)
+    {
+        const bool bLeft=Info.Hand==ERPGHand::Left;const int32 Hand=bLeft?0:1;
+        Sequence=CapturedPunchClip(bLeft,0,NextCapturedPunch[Hand][0],Instance->CurrentSkeleton);
+        bCapturedPunch=Sequence!=nullptr;
+        if (bCapturedPunch)
+        {
+            for (int32 Tier=0;Tier<3;++Tier) PendingCapturedPunch[Tier]=NextCapturedPunch[Hand][Tier];
+            if (!bChargeStart) { bReleaseCapturedImmediately=true;bChargeStart=true; }
+        }
+    }
+    if (!Sequence) Sequence = LoadFor(Clip, Instance->CurrentSkeleton);
     if (!Sequence || Sequence->GetSkeleton() != Instance->CurrentSkeleton)
     {
         UE_LOG(LogRPGInput, Warning, TEXT("Prototype clip unavailable or skeleton mismatch: %s. Run animation setup."), *Clip.ToString());
@@ -809,9 +884,15 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
             ChargedHoldEnd = bLeft ? LeftPunchHoldEnd : RightPunchHoldEnd;
             ChargedImpactTime = bLeft ? LeftPunchChargedImpactTime : RightPunchChargedImpactTime;
             ChargedSequence = LoadFor(bLeft ? LeftPunchCharged : RightPunchCharged, Instance->CurrentSkeleton);
+            if (bCapturedPunch)
+            {
+                ChargeSwitchTime=.12f;ChargedHoldStart=.6f;ChargedHoldEnd=1.2f;ChargedImpactTime=1.5f;ChargeImpactTime=.3f;
+                ChargedSequence=CapturedPunchClip(bLeft,1,PendingCapturedPunch[1],Instance->CurrentSkeleton);
+            }
         }
         else
         {
+            bCapturedPunch=false;
             // Kicks: no rear-back, the breathing loop starts right at the hold frame.
             ChargeSwitchTime = ChargedHoldStart = bLeft ? LeftKickHoldTime : RightKickHoldTime;
             ChargedHoldEnd = bLeft ? LeftKickHoldEnd : RightKickHoldEnd;
@@ -824,6 +905,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
         bChargeButtonHeld = true;
         bChargePaused = false;
         SetAttackPhase(ERPGAttackPhase::Windup);
+        if (bReleaseCapturedImmediately) ReleaseCapturedPunch(Instance,Info);
     }
     SetComponentTickEnabled(true);   // charge / hand-off / kick lock / combat stance each switch it off when idle
     UE_LOG(LogRPGInput, Log, TEXT("Prototype montage %s: %s"), ActiveMontage ? TEXT("started") : TEXT("failed"), *Sequence->GetName());

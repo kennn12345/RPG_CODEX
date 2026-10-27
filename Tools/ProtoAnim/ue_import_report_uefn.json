@@ -5039,5 +5039,3893 @@
     "torso_up_cos": 0.997
    }
   ]
+ },
+ "RPG_Punch_L_Light_V1": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Light_V1": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_L_Light_V2": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Light_V2": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_L_Light_V3": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Light_V3": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_L_Heavy_V1": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.2,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.5,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.8,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Heavy_V1": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.2,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.5,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.8,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_L_Heavy_V2": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.2,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.5,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.8,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Heavy_V2": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.2,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.5,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.8,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_L_Heavy_V3": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.2,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.5,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.8,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Heavy_V3": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.2,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.5,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.8,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_L_Power_V1": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.0,
+    "torso_up_cos": 0.995
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.6,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Power_V1": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.0,
+    "torso_up_cos": 0.995
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.6,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_L_Power_V2": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.0,
+    "torso_up_cos": 0.995
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.6,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Power_V2": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.0,
+    "torso_up_cos": 0.995
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.6,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_L_Power_V3": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.0,
+    "torso_up_cos": 0.995
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.6,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_L_Power_V3": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.3,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 144.5,
+    "torso_up_cos": 0.988
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.0,
+    "torso_up_cos": 0.995
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 146.6,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Light_V1": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Light_V1": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Light_V2": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Light_V2": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Light_V3": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Light_V3": {
+  "length": 0.95,
+  "frames": 57,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.23,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.7,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 0.3,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.997
+   },
+   {
+    "t": 0.35,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.3,
+    "torso_up_cos": 0.996
+   },
+   {
+    "t": 0.58,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.95,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Heavy_V1": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.994
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 149.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Heavy_V1": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.994
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 149.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Heavy_V2": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.994
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 149.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Heavy_V2": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.994
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 149.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Heavy_V3": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.994
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 149.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Heavy_V3": {
+  "length": 2.2,
+  "frames": 132,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.994
+   },
+   {
+    "t": 2.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 149.7,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Power_V1": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.993
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 150.0,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Power_V1": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.993
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 150.0,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Power_V2": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.993
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 150.0,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Power_V2": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.993
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 150.0,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_Punch_R_Power_V3": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.993
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 150.0,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
+ },
+ "RPG_FP_Punch_R_Power_V3": {
+  "length": 2.4,
+  "frames": 144,
+  "root_lock": "<RootMotionRootLock.REF_POSE: 0>",
+  "root_motion": false,
+  "target_rate": "(Default=(Numerator=60,Denominator=1),PerPlatform=())",
+  "samples": [
+   {
+    "t": 0.0,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   },
+   {
+    "t": 0.12,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 0.6,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 147.9,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 1.43,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.4,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.5,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.55,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.0,
+    "torso_up_cos": 0.998
+   },
+   {
+    "t": 1.8,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.2,
+    "torso_up_cos": 0.993
+   },
+   {
+    "t": 2.2,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 150.0,
+    "torso_up_cos": 0.999
+   },
+   {
+    "t": 2.4,
+    "root_q": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "head_z": 148.1,
+    "torso_up_cos": 1.0
+   }
+  ]
  }
 }

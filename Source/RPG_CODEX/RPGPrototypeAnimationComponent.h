@@ -228,6 +228,15 @@ public:
     UFUNCTION(BlueprintPure, Category="RPG|Prototype Animation")
     bool IsInCombat() const;
 
+    /** Last released recorded punch (tier 0 light, 1 heavy, 2 power; variant 0..2). */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Captured Punches")
+    FName LastCapturedPunch;
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Captured Punches")
+    int32 LastCapturedPunchTier = -1;
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Captured Punches")
+    int32 LastCapturedPunchVariant = -1;
+    int32 CapturedPunchReleaseCount = 0;
+
     /**
      * Editor-only: makes URPGAnimInstance the parent class of ABP_Unarmed (the graph is untouched), so the attack aim can
      * turn the spine after the graph. Safe to re-run.
@@ -245,6 +254,8 @@ private:
     void UpdateCharge(UAnimInstance* Instance, float DeltaTime);
     /** Lets a charging attack go on its release action. False if there is no matching charge (play it normally). */
     bool ReleaseCharge(UAnimInstance* Instance, const FRPGPlayerActionInfo& Info, bool bKick);
+    UAnimSequence* CapturedPunchClip(bool bLeft, int32 Tier, int32 Variant, const USkeleton* Skeleton) const;
+    bool ReleaseCapturedPunch(UAnimInstance* Instance, const FRPGPlayerActionInfo& Info);
     void ClearCharge();
     /** Held past the punch's load key: continue in its Charged clip from the same frame. */
     void SwitchToChargedClip(UAnimInstance* Instance, float Position);
@@ -298,6 +309,9 @@ private:
     TObjectPtr<UAnimSequence> ChargedPlaying;
     /** Playing the Charged clip: the hold is its breathing loop rather than a pause. */
     bool bChargeLoops = false;
+    bool bCapturedPunch = false;
+    int32 NextCapturedPunch[2][3] = {};
+    int32 PendingCapturedPunch[3] = {};
     /** This strike's window was opened early by the limb landing on a close target (held until the usual end). */
     bool bWindowOpenedByContact = false;
     /** The punch plays on the UpperBody layer (thrown while moving, or handed over when movement began). */

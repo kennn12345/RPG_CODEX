@@ -93,7 +93,7 @@ public:
                                 const FString Name=Segment.GetAnimReference()->GetName();
                                 const FString Expected=bFirstPerson?TEXT("RPG_FP_CombatStance_Capture8619"):TEXT("RPG_CombatStance_Capture8619");
                                 if (Name==Expected) { bSawCapture=true; if (T>6.f) bSawReturn=true; }
-                                if (Name==(bFirstPerson?TEXT("RPG_FP_Punch_R"):TEXT("RPG_Proto_Punch_R"))) bSawPunch=true;
+                                if (Name.StartsWith(bFirstPerson?TEXT("RPG_FP_Punch_R_Light_V"):TEXT("RPG_Punch_R_Light_V"))) bSawPunch=true;
                             }
         }
         if (bVisual && T-LastShot >= 1.f/30.f)

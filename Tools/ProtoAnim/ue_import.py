@@ -32,6 +32,9 @@ for name, clip in clips.items():
     if seq is None or seq.get_editor_property('skeleton') != skel:
         raise RuntimeError('Could not create animation on SK_Mannequin: ' + path)
 
+    # Set compression/resampling rate before editing frame counts; a 60 Hz clip may end on a half-30 Hz frame.
+    if not unreal.RPGPrototypeAnimationComponent.set_clip_sample_rate(seq, clip['fps']):
+        raise RuntimeError('Could not set the sample rate of ' + path)
     ctrl = seq.controller
     ctrl.open_bracket(unreal.Text('Build prototype ' + name), False)
     ctrl.remove_all_bone_tracks(False)
@@ -50,11 +53,6 @@ for name, clip in clips.items():
     seq.set_editor_property('enable_root_motion', False)
     seq.set_editor_property('force_root_lock', True)
     seq.set_editor_property('root_motion_root_lock', unreal.RootMotionRootLock.REF_POSE)
-    # Compress at the rate the clip was baked at, not the project default (30), so fast snaps keep their keys.
-    # (read-only to Python, so a small C++ editor helper sets it)
-    if not unreal.RPGPrototypeAnimationComponent.set_clip_sample_rate(seq, clip['fps']):
-        raise RuntimeError('Could not set the sample rate of ' + path)
-
     unreal.AnimationLibrary.remove_all_animation_notify_tracks(seq)
 
     if not unreal.EditorAssetLibrary.save_loaded_asset(seq, False):
