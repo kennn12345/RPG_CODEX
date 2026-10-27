@@ -87,6 +87,7 @@ void FRPGAnimInstanceProxy::PreUpdate(UAnimInstance* InAnimInstance, float Delta
 		for (int32 I = 0; I < RPGStrikeContact::NumLimbs; ++I) ContactSets[I] = Instance->ContactSets[I];
 		ContactReleaseTime = Instance->ContactReleaseTime;
 		ContactPressureHold = Instance->ContactPressureHold;
+		bReferenceArmContact = Instance->bReferenceArmContact;
         FlightClips.Reset();
         for (UAnimSequence* Clip : Instance->FlightClips) FlightClips.Add(Clip);
         FlightWeight = Instance->FlightWeight;
@@ -546,6 +547,7 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 		FRPGLimbContactResult& Result = ContactResults[L];
 		Result.Residual = FVector::ZeroVector;
 		Result.Moved = FVector::ZeroVector;
+		Result.BendPlaneError = 0.f;
 		const FCompactPoseBoneIndex Root = Find(Def.Root), Mid = Find(Def.Mid), End = Find(Def.End);
 		if (!Root.IsValid() || !Mid.IsValid() || !End.IsValid() || Bones.GetParentBoneIndex(End) != Mid || Bones.GetParentBoneIndex(Mid) != Root)
 		{
@@ -627,6 +629,13 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 			Result.Residual += Target - Limited;
 			Target = Limited;
 		}
+		const bool ReferenceArm=bReferenceArmContact && L<=LeftHand;
+		const float MaxArmReach=(Upper+Lower)*.998f;
+		if(ReferenceArm && (Target-RootPos).Size()>MaxArmReach)
+		{
+			const FVector Limited=RootPos+(Target-RootPos).GetSafeNormal()*MaxArmReach;
+			Result.Residual+=Target-Limited;Target=Limited;
+		}
 
 		// Two-bone IK to the moved hand / foot. The elbow / knee stays in the plane the animation has it in (its own
 		// position is the pole); the wrist / ankle keeps the animation's angle to the forearm / shin.
@@ -652,7 +661,23 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 
 			AnimationCore::SolveTwoBoneIK(RootPos, MidPos, EndPos, Pole, Target, NewMid, NewEnd, false, 1.0, 1.0);
 		}
-		const FQuat TurnUpper = FQuat::FindBetweenNormals((MidPos - RootPos).GetSafeNormal(), (NewMid - RootPos).GetSafeNormal());
+		FQuat TurnUpper = FQuat::FindBetweenNormals((MidPos - RootPos).GetSafeNormal(), (NewMid - RootPos).GetSafeNormal());
+		if(ReferenceArm)
+		{
+			const FVector OldPlane=FVector::CrossProduct(MidPos-RootPos,EndPos-MidPos).GetSafeNormal();
+			const FVector NewPlane=FVector::CrossProduct(NewMid-RootPos,NewEnd-NewMid).GetSafeNormal();
+			if(!OldPlane.IsNearlyZero() && !NewPlane.IsNearlyZero())
+			{
+				// Swing alone aligns the upper-arm direction but can leave its elbow
+				// hinge rolled away from the actual bend plane. Add the matching twist
+				// before solving the forearm, so the joint bends rather than inverts.
+				const FVector Axis=(NewMid-RootPos).GetSafeNormal();
+				const FVector Swung=TurnUpper.RotateVector(OldPlane).GetSafeNormal();
+				const float Twist=FMath::Atan2(float(FVector::DotProduct(Axis,FVector::CrossProduct(Swung,NewPlane))),float(FVector::DotProduct(Swung,NewPlane)));
+				TurnUpper=(FQuat(Axis,Twist)*TurnUpper).GetNormalized();
+				Result.BendPlaneError=FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(float(FVector::DotProduct(TurnUpper.RotateVector(OldPlane),NewPlane)),-1.f,1.f)));
+			}
+		}
 		const FVector LowerAfterUpper = TurnUpper.RotateVector(EndPos - MidPos).GetSafeNormal();
 		const FQuat TurnLower = FQuat::FindBetweenNormals(LowerAfterUpper, (NewEnd - NewMid).GetSafeNormal());
 		FTransform NewRootCS = RootCS;

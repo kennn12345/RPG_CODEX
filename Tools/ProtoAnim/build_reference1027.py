@@ -36,7 +36,55 @@ def ease(t):
     t=max(0.,min(1.,t));return t*t*t*(10.+t*(-15.+6.*t))
 
 def blend(a,b,u):
-    return {bone:(p._nlerp(a[bone][0],b[bone][0],u),p.lerp(a[bone][1],b[bone][1],u)) for bone in p.BONES}
+    if u<=0.:return copy.deepcopy(a)
+    if u>=1.:return copy.deepcopy(b)
+    local={bone:(p._nlerp(a[bone][0],b[bone][0],u),p.lerp(a[bone][1],b[bone][1],u)) for bone in p.BONES}
+    # Independent local-bone interpolation sweeps a fist around the shoulder
+    # and can rotate the elbow through a different hinge branch between keys.
+    # Interpolate the intended hand/elbow path, then solve a fixed-length hinge.
+    ac,bc=p.to_cs(a),p.to_cs(b);body=p.to_cs(local)['spine_05']
+    def body_point(cs,bone):
+        q,t=cs['spine_05'];return p.qrot(p.qconj(q),p.sub(cs[bone][1],t))
+    for s in 'lr':
+        hand='hand_'+s;upper='upperarm_'+s;lower='lowerarm_'+s
+        target=p.add(body[1],p.qrot(body[0],p.lerp(body_point(ac,hand),body_point(bc,hand),u)))
+        elbow=p.add(body[1],p.qrot(body[0],p.lerp(body_point(ac,lower),body_point(bc,lower),u)))
+        rotation=p._nlerp(ac[hand][0],bc[hand][0],u)
+        repair_reference_arm(local,s,target,p.sub(elbow,p.to_cs(local)[upper][1]),rotation)
+    return local
+
+def level_bank(local,bone,limit):
+    cs=p.to_cs(local);left,forward,_=g.frame(cs,bone)
+    bank=math.degrees(math.asin(max(-1.,min(1.,left[2]))))
+    if abs(bank)<=limit:return
+    level=p.norm(p.cross(forward,[0.,0.,1.]));turn=p.qnorm(p.cross(left,level)+[1.+p.dot(left,level)])
+    turn=p._nlerp([0.,0.,0.,1.],turn,1.-limit/abs(bank))
+    world=p.qmul(turn,cs[bone][0]);parent=cs[p.PARENT[bone]][0]
+    local[bone]=(p.qnorm(p.qmul(p.qconj(parent),world)),local[bone][1])
+
+def repair_reference_arm(local,s,target,pole,rotation):
+    # A punch can look fully extended without entering the straight-chain
+    # singularity that makes its elbow plane/mesh roll undefined.
+    upper,lower,end='upperarm_'+s,'lowerarm_'+s,'hand_'+s;cs=p.to_cs(local)
+    a,b=p.length(local[lower][1]),p.length(local[end][1])
+    minimum=math.sqrt(a*a+b*b+2.*a*b*math.cos(math.radians(144.)))
+    delta=p.sub(target,cs[upper][1]);distance=p.length(delta)
+    if distance<minimum:target=p.add(cs[upper][1],p.mul(p.norm(delta),minimum))
+    p.two_bone(cs,local,upper,lower,end,target,pole,end_rot=rotation,max_reach=.998)
+    for bone in [upper,lower,end]:
+        local[bone]=(p.qnorm(p.qmul(p.qconj(cs[p.PARENT[bone]][0]),cs[bone][0])),local[bone][1])
+
+def settle_right_shoulder(local,limit):
+    cs=p.to_cs(local);excess=cs['upperarm_r'][1][2]-cs['upperarm_l'][1][2]-limit
+    if excess<=0.:return
+    clav='clavicle_r';v=p.sub(cs['upperarm_r'][1],cs[clav][1]);length=p.length(v)
+    z=max(-length*.95,min(length*.95,v[2]-excess));horizontal=p.norm([v[0],v[1],0.])
+    wanted=p.add(p.mul(horizontal,math.sqrt(max(0.,length*length-z*z))),[0.,0.,z])
+    a,b=p.norm(v),p.norm(wanted);turn=p.qnorm(p.cross(a,b)+[1.+p.dot(a,b)])
+    q=p.qmul(turn,cs[clav][0]);parent=cs[p.PARENT[clav]][0]
+    target,rotation=cs['hand_r'][1],cs['hand_r'][0];elbow=cs['lowerarm_r'][1]
+    local[clav]=(p.qnorm(p.qmul(p.qconj(parent),q)),local[clav][1])
+    now=p.to_cs(local);view_arm(local,'r',target,rotation,p.sub(elbow,now['upperarm_r'][1]))
 
 def at(keys,t):
     if t<=keys[0][0]:return copy.deepcopy(keys[0][1])
@@ -85,11 +133,17 @@ def planted_leg(local,s,target,rotation):
             break
     local.update(best[1])
 
-def finish(local,planted=False):
+def finish(local,planted=False,guard=False):
     local['root']=([0.,0.,0.,1.],[0.,0.,0.])
     # Automatic source finger retargeting leaves the rear hand partly open.
     # Use the established target-rig fist for every guard, windup and strike frame.
     for bone,(rotation,_) in REFERENCE_FIST.items():local[bone]=(list(rotation),p.REF[bone][1])
+    cs=p.to_cs(local);foot_rotations={s:cs['foot_'+s][0] for s in 'lr'}
+    level_bank(local,'pelvis',.5 if guard else 3.)
+    level_bank(local,'spine_05',.5 if guard else 5.)
+    for s,q in foot_rotations.items():
+        cs=p.to_cs(local);foot='foot_'+s
+        local[foot]=(p.qnorm(p.qmul(p.qconj(cs[p.PARENT[foot]][0]),q)),local[foot][1])
     rest=p.to_cs(STANCE)
     if planted:
         cs=p.to_cs(local);targets={}
@@ -106,10 +160,6 @@ def finish(local,planted=False):
         target[2]+=max(0.,3.2-cs[toe][1][2],4.5-target[2]) if not planted else max(0.,4.5-target[2])
         if planted:planted_leg(local,s,target,rot)
         else:repair_chain(local,'thigh_'+s,'calf_'+s,foot,target,p.sub(cs['calf_'+s][1],cs['thigh_'+s][1]),rot)
-        cs=p.to_cs(local)
-        view_arm(local,s,cs['hand_'+s][1],cs['hand_'+s][0],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]))
-        # Retain source fist roll, remove incidental wrist bending after interpolation.
-        if g.wrist(p.to_cs(local),s)>55.:straight_wrist(local,s)
     if planted:
         cs=p.to_cs(local)
         extension=min(g.limb_angles(cs,s,'pelvis','thigh_'+s,'calf_'+s)[0] for s in 'lr')
@@ -124,6 +174,11 @@ def finish(local,planted=False):
             local['spine_01']=(p.qnorm(p.qmul(p.qconj(q),spine)),local['spine_01'][1])
             lower_for_contacts(local,{s:v[1] for s,v in feet.items()})
             for s,(rotation,target) in feet.items():planted_leg(local,s,target,rotation)
+    settle_right_shoulder(local,1.5 if guard else 4.)
+    for s in 'lr':
+        cs=p.to_cs(local)
+        view_arm(local,s,cs['hand_'+s][1],cs['hand_'+s][0],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]))
+        if g.wrist(p.to_cs(local),s)>55.:straight_wrist(local,s)
     return follow_ik(local)
 
 def clip(name,rows,keys,**info):
@@ -134,9 +189,14 @@ def clip(name,rows,keys,**info):
 def view_arm(local,s,target,rotation,pole):
     """Choose the nearest elbow plane that keeps the camera-fit arm outside the torso/head."""
     original=copy.deepcopy(local);cs=p.to_cs(local);axis=p.norm(p.sub(target,cs['upperarm_'+s][1]));best=None
+    # A fitted elbow can cross the reach axis between sparse keys. Seed the
+    # hinge from an anatomical outside/down direction instead of that ambiguous
+    # fitted pole, keeping the elbow outside the ribs through extension.
+    left,forward,_=g.frame(cs,'spine_05')
+    pole=p.add(p.add(p.mul(left,30. if s=='l' else -30.),p.mul(forward,-8.)),[0.,0.,-25.])
     for angle in [0]+[sign*a for a in range(3,181,3) for sign in (1,-1)]:
         trial=copy.deepcopy(original)
-        repair_chain(trial,'upperarm_'+s,'lowerarm_'+s,'hand_'+s,target,p.qrot(p.qaxis(axis,angle),pole),rotation)
+        repair_reference_arm(trial,s,target,p.qrot(p.qaxis(axis,angle),pole),rotation)
         if g.wrist(p.to_cs(trial),s)>55.:straight_wrist(trial,s)
         tcs=p.to_cs(trial);flex,abd=g.limb_angles(tcs,s,'spine_05','upperarm_'+s,'lowerarm_'+s)
         cost=max(0.,-53.-flex)+max(0.,flex-173.)+(max(0.,-38.-abd) if abs(flex)<110. else 0.)
@@ -178,6 +238,7 @@ def first_person(local,rest,view_rest,t=0.,side=None):
         relative=p.qmul(p.qconj(rcs['hand_'+s][0]),cs['hand_'+s][0])
         rotation=p._nlerp(cs['hand_'+s][0],p.qmul(vcs0['hand_'+s][0],relative),weight)
         view_arm(view,s,target,rotation,p.sub(vs['lowerarm_'+s][1],vs['upperarm_'+s][1]))
+    settle_right_shoulder(view,1.5 if side is None else 4.)
     return follow_ik(view)
 
 def sampled(rows,t):
@@ -260,7 +321,7 @@ def build():
     global STANCE
     assert p.SP.NAME=='uefn'
     p.SOFT_IK=p.SOFT_IK_ARM=1.e-7
-    STANCE=finish(copy.deepcopy(STANCE))
+    STANCE=finish(copy.deepcopy(STANCE),guard=True)
     # The filmed front shoe is partly occluded: its annotated toe must not become
     # an elevated ankle. Establish a real ground-contact footprint before isolating attacks.
     targets={}
@@ -285,8 +346,9 @@ def build():
         # Quiet stationary breathing only, not a weave or an invented attack.
         amount=.22*math.sin(2.*math.pi*i/120.)**2
         pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],[0.,0.,amount]))
-        stance_rows.append(finish(pose,True))
+        stance_rows.append(finish(pose,True,guard=True))
     STANCE=stance_rows[0];stance_rows[-1]=copy.deepcopy(STANCE)
+    POSE[128]=copy.deepcopy(STANCE)
     name='RPG_CombatStance_Reference1027';result[name]=clip(name,stance_rows,[0.,.5,1.,1.5,2.])
     view_rest=copy.deepcopy(STANCE)
     camera_torso(view_rest,1.)
@@ -299,7 +361,7 @@ def build():
         target=p.add(camera,[14.,25.,-8.] if s=='l' else [-14.,23.,-6.])
         fit_punch_shoulder(view_rest,s,target);cs=p.to_cs(view_rest);target=elbow_clearance(cs,s,target)
         view_arm(view_rest,s,target,cs['hand_'+s][0],p.sub(cs['lowerarm_'+s][1],cs['upperarm_'+s][1]))
-    view_rest=follow_ik(view_rest)
+    settle_right_shoulder(view_rest,1.5);view_rest=follow_ik(view_rest)
     views=[first_person(row,STANCE,view_rest) for row in stance_rows]
     view_rest=views[0];views[-1]=copy.deepcopy(view_rest)
     name='RPG_FP_CombatStance_Reference1027';result[name]=clip(name,views,[0.,.5,1.,1.5,2.],presentation='Camera guard fitted for visible fists; reference is third-person only, so this is a presentation adaptation')

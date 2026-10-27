@@ -332,6 +332,7 @@ void URPGStrikeContactComponent::PushPlanes()
 			// Keep immediate push-out; unload reference full-body punches gradually as their body drive withdraws.
 			// This avoids small pressure reversals while preserving the same surface and compression limits.
 			Anim->ContactReleaseTime = UnloadTime;
+			Anim->bReferenceArmContact=(Animation && Animation->IsReferencePunchPlaying()) || ReferenceReleaseRemaining>0.f;
 			// Keep impact pressure through a brief head rebound instead of
 			// alternating withdrawal/re-contact over consecutive60Hz poses,
 			// including brief gaps between neighboring surface contacts.
