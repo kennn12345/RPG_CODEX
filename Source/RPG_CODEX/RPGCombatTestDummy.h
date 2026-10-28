@@ -164,9 +164,9 @@ public:
 	float StaggerHeavyDisplacement = 45.f;
 	/** Get-up speed: this play rate at full health, down to GetUpHurtRate near 0 (and when knocked out). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up", meta = (ClampMin = "0.1"))
-	float GetUpHealthyRate = 1.15f;
+	float GetUpHealthyRate = 1.725f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up", meta = (ClampMin = "0.1"))
-	float GetUpHurtRate = 0.7f;
+	float GetUpHurtRate = 1.05f;
 	/** On a slope the body starts tilted to the ground (up to this many degrees) and is upright by this fraction of
 	 *  the get-up. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dummy|Get Up", meta = (ClampMin = "0", ClampMax = "60"))

@@ -65,7 +65,7 @@ public:
     float NormalFlightSpeedScale = 1.1f;
 	/** Flight speed with L3 fast flight on. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Flight")
-	float FastFlightSpeed = 2000.f;
+	float FastFlightSpeed = 2300.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Dodge")
 	float DodgeSpeed = 1400.f;

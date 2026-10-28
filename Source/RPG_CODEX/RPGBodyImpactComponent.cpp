@@ -329,7 +329,7 @@ void URPGBodyImpactComponent::HandleLimpEnding()
 	Character->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	float Duration = 0.f;
 	// Holding a direction while down: get up into a run.
-	StandUp(Character, 1.f, Duration, Character->GetPendingMovementInputVector().SizeSquared() > 0.04f || Character->GetLastMovementInputVector().SizeSquared() > 0.04f);
+	StandUp(Character, 1.5f, Duration, Character->GetPendingMovementInputVector().SizeSquared() > 0.04f || Character->GetLastMovementInputVector().SizeSquared() > 0.04f);
 	bDown = false;
 }
 

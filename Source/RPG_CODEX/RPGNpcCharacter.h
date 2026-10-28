@@ -103,9 +103,9 @@ public:
 
 	/** Get-up speed: this rate at full health, down to GetUpHurtRate near 0 (and when knocked out). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up", meta = (ClampMin = "0.1"))
-	float GetUpHealthyRate = 1.15f;
+	float GetUpHealthyRate = 1.725f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up", meta = (ClampMin = "0.1"))
-	float GetUpHurtRate = 0.7f;
+	float GetUpHurtRate = 1.05f;
 
 	/** Total body weight (lb) spread over the body parts by RPGBodyMass; 0 = the project's Humanoid Body Weight. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC", meta = (ClampMin = "0"))
