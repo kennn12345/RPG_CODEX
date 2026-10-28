@@ -15,6 +15,10 @@ the hand-edited `RPG_FightStance`, which is kept unchanged in the project.
 - No hand, elbow or foot offsets (unlike the later 8619 tweaks). The recorded left elbow was ~18 degrees off its hinge;
   `repair_chain` re-seats both elbows on the rig hinge with each hand left exactly where it was recorded.
 - `RPGPrototypeAnimationComponent.cpp` default `CombatStance` / `FirstPersonCombatStance` point at the new clips.
+- Revised the same day with the filmed punch (Docs/PUNCH_CAPTURE_8634.md): lead (left) foot 8 cm further forward
+  (stagger 5.9 -> 13.9 cm, `LEAD_FOOT_FORWARD_CM`), hips 3 cm lower so the planted legs reach (`HIPS_DOWN_CM`), and
+  tight fists (`tight_fist`: fingers closed 80/95/65 degrees; the rig's `p.FIST` alone reads half-open). Both clips
+  still pass `check_stance8635.py` and the stance tests.
 
 ## Capture and rebake
 

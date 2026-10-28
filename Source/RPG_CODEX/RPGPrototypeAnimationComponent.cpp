@@ -43,6 +43,10 @@ namespace
     /** spine_01 takes 1/3 of the layer, spine_02 2/3, spine_03 up all of it, so the waist twist between the
      *  walking hips and the punching chest is spread over the lower spine instead of one joint. */
     constexpr int32 UpperBodyBlendDepth = 3;
+    /** Filmed tap punch (Tools/ProtoAnim/capture_punch8634.py LOAD / IMPACT): a held press waits at the pulled-back
+     *  load pose; full extension, the centre of the hit window, follows. */
+    constexpr float FilmedPunchLoadTime = .20f;
+    constexpr float FilmedPunchImpactTime = .42f;
 
     /** PlaySlotAnimationAsDynamicMontage without the engine's "one montage per slot group" rule (DefaultSlot and
      *  UpperBody share a group on SK_Mannequin): whatever else is playing carries on, and the caller stops what it
@@ -372,6 +376,15 @@ void URPGPrototypeAnimationComponent::BuildPresentationMap(const USkeleton* Skel
         UAnimSequence* FirstPerson = LoadFor(*Pair.Value, Skeleton);
         if (ThirdPerson && FirstPerson && FirstPerson->GetSkeleton() == Skeleton) FirstPersonClips.Add(ThirdPerson, FirstPerson);
     }
+    // Filmed punches: RPG_Punch_* plays RPG_FP_Punch_* from the same folder in first person.
+    for (const bool bLeft : {false,true})
+    {
+        UAnimSequence* Body=CapturedPunchClip(bLeft,0,0,Skeleton);
+        if (!Body) continue;
+        const FString Name=Body->GetName().Replace(TEXT("RPG_Punch_"),TEXT("RPG_FP_Punch_"));
+        UAnimSequence* View=LoadObject<UAnimSequence>(nullptr,*Body->GetPathName().Replace(*Body->GetName(),*Name));
+        if (View && View->GetSkeleton()==Skeleton) FirstPersonClips.Add(Body,View);
+    }
 }
 
 void URPGPrototypeAnimationComponent::SetFirstPersonPresentation(bool bFirstPerson)
@@ -540,8 +553,11 @@ void URPGPrototypeAnimationComponent::UpdateCharge(UAnimInstance* Instance, floa
 
 UAnimSequence* URPGPrototypeAnimationComponent::CapturedPunchClip(bool bLeft,int32 Tier,int32 Variant,const USkeleton* Skeleton) const
 {
-    // The captured / reference punch families were scrapped (2026-10-28); new punches will be selected here.
-    return nullptr;
+    // The captured / reference punch families were scrapped (2026-10-28). So far there is one filmed punch: the right
+    // hand's IMG_8634 tap punch. Charged tiers have no clip of their own (a charged release throws the same punch).
+    if (bLeft || Tier!=0 || !Skeleton || Skeleton->GetName()!=TEXT("SK_UEFN_Mannequin")) return nullptr;
+    UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/RPG/Animations/CapturedPunches/RPG_Punch_R_Capture8634.RPG_Punch_R_Capture8634"));
+    return Clip && Clip->GetSkeleton()==Skeleton?Clip:nullptr;
 }
 
 bool URPGPrototypeAnimationComponent::IsReferencePunchPlaying() const
@@ -572,7 +588,9 @@ bool URPGPrototypeAnimationComponent::ReleaseCapturedPunch(UAnimInstance* Instan
 {
     const bool bLeft=Info.Hand==ERPGHand::Left;
     const int32 Hand=bLeft?0:1;
-    const int32 Tier=Info.Action==ERPGPlayerAction::PowerAttack?2:Info.Action==ERPGPlayerAction::HeavyAttack?1:0;
+    int32 Tier=Info.Action==ERPGPlayerAction::PowerAttack?2:Info.Action==ERPGPlayerAction::HeavyAttack?1:0;
+    // No charged clip for this hand: the release continues the tap punch already loaded on press.
+    if (Tier>0 && !CapturedPunchClip(bLeft,Tier,PendingCapturedPunch[Tier],Instance->CurrentSkeleton)) Tier=0;
     const int32 Variant=PendingCapturedPunch[Tier];
     UAnimSequence* Clip=CapturedPunchClip(bLeft,Tier,Variant,Instance->CurrentSkeleton);
     const FAnimMontageInstance* Playing=Instance->GetActiveInstanceForMontage(ChargeMontage);
@@ -594,7 +612,7 @@ bool URPGPrototypeAnimationComponent::ReleaseCapturedPunch(UAnimInstance* Instan
     FullBodyPunch=bChargeUpperBody?nullptr:Clip;
     ChargedPlaying=Clip;ChargedSequence=nullptr;
     bChargeButtonHeld=false;bChargePaused=false;bWaitingAtLoad=false;bChargeLoops=Tier>0;
-    ChargeImpactTime=Tier==0?.36f:1.5f;
+    ChargeImpactTime=Tier==0?FilmedPunchImpactTime:1.5f;
     ChargedHoldStart=.6f;ChargedHoldEnd=1.2f;
     NextCapturedPunch[Hand][Tier]=(Variant+1)%3;
     LastCapturedPunch=Clip->GetFName();LastCapturedPunchTier=Tier;LastCapturedPunchVariant=Variant;++CapturedPunchReleaseCount;
@@ -734,12 +752,15 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
         return;
     }
 
-    // No melee clips yet (scrapped 2026-10-28): attacks, the guard and kicks enter combat and hold the fighting
-    // stance, with no strike animation.
+    // Melee clips were scrapped 2026-10-28 and are being rebuilt one at a time. Until an action has its clip, it only
+    // enters combat and holds the fighting stance. So far: the right hand's filmed punch.
     switch (Info.Action)
     {
     case ERPGPlayerAction::Attack: case ERPGPlayerAction::HeavyAttack: case ERPGPlayerAction::PowerAttack:
-    case ERPGPlayerAction::AttackChargeStarted: case ERPGPlayerAction::UnarmedGuard:
+    case ERPGPlayerAction::AttackChargeStarted:
+        if (CapturedPunchClip(Info.Hand==ERPGHand::Left,0,0,Instance->CurrentSkeleton)) break;
+        [[fallthrough]];
+    case ERPGPlayerAction::UnarmedGuard:
     case ERPGPlayerAction::Kick: case ERPGPlayerAction::HeavyKick: case ERPGPlayerAction::PowerKick:
     case ERPGPlayerAction::KickChargeStarted: case ERPGPlayerAction::FlyingAttack:
         LastCombatActionTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
@@ -885,7 +906,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
             ChargedSequence = LoadFor(bLeft ? LeftPunchCharged : RightPunchCharged, Instance->CurrentSkeleton);
             if (bCapturedPunch)
             {
-                ChargeSwitchTime=.12f;ChargedHoldStart=.6f;ChargedHoldEnd=1.2f;ChargedImpactTime=1.5f;ChargeImpactTime=.36f;
+                ChargeSwitchTime=FilmedPunchLoadTime;ChargedHoldStart=.6f;ChargedHoldEnd=1.2f;ChargedImpactTime=1.5f;ChargeImpactTime=FilmedPunchImpactTime;
                 ChargedSequence=CapturedPunchClip(bLeft,1,PendingCapturedPunch[1],Instance->CurrentSkeleton);
             }
         }

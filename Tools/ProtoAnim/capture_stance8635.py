@@ -24,6 +24,22 @@ SOURCE_START = 0.5                     # Seconds into IMG_8635.mov of solve fram
 LOOP_RANGE = (4.0, 9.0)                # Steady front guard used for playback.
 VIEWS = [('front', 4.0, 14.0), ('side', 25.5, 31.0), ('back', 34.5, 40.0), ('opposite', 43.5, 49.0)]
 SEAM_SECONDS = 0.6
+# User request (2026-10-28): lead (left) foot a little further forward. The recorded stance is near straight-legged, so
+# the hips sink a little to let the planted legs reach the longer stance.
+LEAD_FOOT_FORWARD_CM = 8.0
+HIPS_DOWN_CM = 3.0
+
+
+def tight_fist(bone):
+    """The rig's fist with the four fingers closed around the palm (as in build_fight_stance.py); p.FIST alone only
+    curls the knuckles about 38 degrees and reads as a half-open hand."""
+    rotation = p.FIST[bone][0]
+    if any(bone.startswith(f+'_') for f in ('index','middle','ring','pinky')) and bone.split('_')[-2] in ('01','02','03'):
+        delta = p.qmul(p.qconj(p.REF[bone][0]), rotation)
+        if delta[3] < 0: delta = [-v for v in delta]
+        angle = math.degrees(2.*math.acos(max(-1., min(1., delta[3]))))
+        rotation = p.qnorm(p.qmul(p.REF[bone][0], p.qaxis(delta[:3], max(angle, {'01':80.,'02':95.,'03':65.}[bone.split('_')[-2]]))))
+    return (list(rotation), p.REF[bone][1])
 
 
 def index(sfps, seconds):
@@ -39,7 +55,7 @@ def build(source):
     heading = 90.-math.degrees(math.atan2(front[1],front[0]))
     turn = p.qaxis([0,0,1],heading)
     fixed_hips_q = p.qnorm(p.qmul(turn,rest['pelvis'][0]))
-    fixed_hips_t = [p.IDLE['pelvis'][1][0], p.IDLE['pelvis'][1][1], rest['pelvis'][1][2]]
+    fixed_hips_t = [p.IDLE['pelvis'][1][0], p.IDLE['pelvis'][1][1], rest['pelvis'][1][2]-HIPS_DOWN_CM]
     with contextlib.redirect_stdout(io.StringIO()):
         import fpanim
     fp_key = p.sample_track(fpanim.poses.COMBAT_STANCE,[0.],fpanim.poses.GROUPS)[0]
@@ -51,7 +67,7 @@ def build(source):
         local['root'] = ([0.,0.,0.,1.],[0.,0.,0.])
         for b in p.BONES:
             if any(k in b for k in ('index','middle','ring','pinky','thumb','metacarpal')) and b in p.FIST:
-                local[b] = copy.deepcopy(p.FIST[b])  # Body solve does not track fingers; use the rig's closed fists.
+                local[b] = tight_fist(b)  # Body solve does not track fingers; use closed fists.
         normalized.append(local)
     anchor = p.to_cs(average(normalized))
     # Footprint: median over the four held directions, each expressed in its own chest-facing frame.
@@ -71,6 +87,7 @@ def build(source):
     for side in 'lr':
         q,t = anchor['foot_'+side];t=list(t)
         for axis in range(2): t[axis]+=(.5 if side=='l' else -.5)*(footprint[axis]-current[axis])
+        if side == 'l': t[1] += LEAD_FOOT_FORWARD_CM
         toe_z=p.add(t,p.qrot(q,normalized[0]['ball_'+side][1]))[2]
         t[2] += max(0.,3.2-toe_z,4.-t[2])
         feet[side] = (q,t)
