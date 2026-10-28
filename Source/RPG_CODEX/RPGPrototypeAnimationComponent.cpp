@@ -557,10 +557,13 @@ void URPGPrototypeAnimationComponent::UpdateCharge(UAnimInstance* Instance, floa
 
 UAnimSequence* URPGPrototypeAnimationComponent::CapturedPunchClip(bool bLeft,int32 Tier,int32 Variant,const USkeleton* Skeleton) const
 {
-    // The captured / reference punch families were scrapped (2026-10-28). So far there is one filmed punch: the right
-    // hand's IMG_8634 tap punch. Charged tiers have no clip of their own (a charged release throws the same punch).
-    if (bLeft || Tier!=0 || !Skeleton || Skeleton->GetName()!=TEXT("SK_UEFN_Mannequin")) return nullptr;
-    UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/RPG/Animations/CapturedPunches/RPG_Punch_R_Capture8634.RPG_Punch_R_Capture8634"));
+    // The captured / reference punch families were scrapped (2026-10-28). The filmed IMG_8634 tap punches replace them:
+    // the right one as recorded, the left one mirrored from it. Charged tiers have no clip of their own (a charged
+    // release throws the same punch).
+    if (Tier!=0 || !Skeleton || Skeleton->GetName()!=TEXT("SK_UEFN_Mannequin")) return nullptr;
+    UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,bLeft
+        ?TEXT("/Game/RPG/Animations/CapturedPunches/RPG_Punch_L_Capture8634.RPG_Punch_L_Capture8634")
+        :TEXT("/Game/RPG/Animations/CapturedPunches/RPG_Punch_R_Capture8634.RPG_Punch_R_Capture8634"));
     return Clip && Clip->GetSkeleton()==Skeleton?Clip:nullptr;
 }
 
@@ -757,7 +760,7 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
     }
 
     // Melee clips were scrapped 2026-10-28 and are being rebuilt one at a time. Until an action has its clip, it only
-    // enters combat and holds the fighting stance. So far: the right hand's filmed punch.
+    // enters combat and holds the fighting stance. So far: the filmed punches (both hands).
     switch (Info.Action)
     {
     case ERPGPlayerAction::Attack: case ERPGPlayerAction::HeavyAttack: case ERPGPlayerAction::PowerAttack:

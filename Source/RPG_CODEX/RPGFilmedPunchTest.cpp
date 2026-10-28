@@ -35,9 +35,8 @@ FString PlayingClip(UAnimInstance* Anim,const TCHAR* Part)
     return FString();
 }
 /**
- * The right hand's filmed punch (IMG_8634): a tap, a held press released as a Heavy attack, and the left hand (no clip
- * yet, so it must only hold the stance). Checks the actual clip, one strike window per punch, real fist travel and the
- * return to the fighting stance.
+ * The filmed punches (IMG_8634; the left one mirrored): for each hand a tap and a held press released as a Heavy
+ * attack. Checks the actual clip, one strike window per punch, real fist travel and the return to the fighting stance.
  */
 class FFilmedPunchReview:public IAutomationLatentCommand
 {
@@ -63,12 +62,9 @@ public:
             Animation->CombatStanceTimeout=60.f;
             if(bVisual)
             {
-                ACameraActor* Camera=World->SpawnActor<ACameraActor>();Camera->GetCameraComponent()->SetFieldOfView(40.f);
+                Camera=World->SpawnActor<ACameraActor>();Camera->GetCameraComponent()->SetFieldOfView(40.f);
                 Camera->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount=true;Camera->GetCameraComponent()->PostProcessSettings.MotionBlurAmount=0.f;
-                // Side-on from the punching (right) side at chest height, framing the whole body and the full reach.
-                const FVector Look=Player->GetActorLocation()+Player->GetActorRotation().RotateVector(FVector(30,0,20));
-                const FVector Eye=Look+Player->GetActorRotation().RotateVector(FVector(60,430,15));
-                Camera->SetActorLocationAndRotation(Eye,(Look-Eye).Rotation());Controller->bAutoManageActiveCameraTarget=false;Controller->SetViewTarget(Camera);
+                Controller->bAutoManageActiveCameraTarget=false;Controller->SetViewTarget(Camera);
                 Dir=FPaths::ProjectSavedDir()/TEXT("Mocap8634/GameplayVisual");IFileManager::Get().DeleteDirectory(*Dir,false,true);IFileManager::Get().MakeDirectory(*Dir,true);
             }
             // Enter combat first so the punch starts from the fighting stance.
@@ -82,66 +78,68 @@ public:
             Times+=FString::Printf(TEXT("%d,%.6f,%d\n"),Shot,T,Case);
             FScreenshotRequest::RequestScreenshot(Dir/FString::Printf(TEXT("frame_%05d.png"),Shot++),false,false);LastShot=Now;
         }
+        // Cases: 0 right tap, 1 right held then released as a Heavy attack, 2 left tap, 3 left held.
+        const bool bLeft=Case>=2,bHeld=Case%2==1;
+        const TCHAR* H=bLeft?TEXT("L"):TEXT("R");
         const FTransform Actor=Player->GetActorTransform();
-        const FVector Fist=Actor.InverseTransformPosition(Player->GetMesh()->GetSocketLocation(TEXT("hand_r")));
+        const FVector Fist=Actor.InverseTransformPosition(Player->GetMesh()->GetSocketLocation(bLeft?TEXT("hand_l"):TEXT("hand_r")));
         if(Phase==0)
         {
             if(T<1.2f)return false;
-            if(!Rest.IsSet())Rest=Fist;
+            if(!Rest[bLeft].IsSet())Rest[bLeft]=Fist;
+            if(Camera)
+            {
+                // Side-on from the punching side at chest height, framing the whole body and the full reach.
+                const FVector Look=Player->GetActorLocation()+Player->GetActorRotation().RotateVector(FVector(30,0,20));
+                const FVector Eye=Look+Player->GetActorRotation().RotateVector(FVector(60,bLeft?-430:430,15));
+                Camera->SetActorLocationAndRotation(Eye,(Look-Eye).Rotation());
+            }
             Test->TestFalse(TEXT("Stance plays before the punch"),PlayingClip(Anim,TEXT("FightStance")).IsEmpty());
             Releases=Animation->CapturedPunchReleaseCount;Windows=0;MaxReach=0.f;bWasOpen=false;Clip.Reset();
-            const ERPGHand Hand=Case==2?ERPGHand::Left:ERPGHand::Right;
-            State->ReportSimpleAction(ERPGPlayerAction::AttackChargeStarted,Hand);
+            State->ReportSimpleAction(ERPGPlayerAction::AttackChargeStarted,bLeft?ERPGHand::Left:ERPGHand::Right);
             Phase=1;PhaseStart=Now;return false;
         }
         const float P=Now-PhaseStart;
-        const FString Seen=PlayingClip(Anim,TEXT("Punch_R_Capture8634"));if(!Seen.IsEmpty())Clip=Seen;
-        const bool bOpen=State->bStrikeHitWindowOpen && State->StrikeLimb==ERPGStrikeLimb::RightHand;
+        const FString Part=FString::Printf(TEXT("Punch_%s_Capture8634"),H);
+        const FString Seen=PlayingClip(Anim,*Part);if(!Seen.IsEmpty())Clip=Seen;
+        const bool bOpen=State->bStrikeHitWindowOpen && State->StrikeLimb==(bLeft?ERPGStrikeLimb::LeftHand:ERPGStrikeLimb::RightHand);
         if(bOpen && !bWasOpen){++Windows;OpenedAt=P;}
         bWasOpen=bOpen;
-        MaxReach=FMath::Max(MaxReach,Fist.X-Rest.GetValue().X);
+        MaxReach=FMath::Max(MaxReach,Fist.X-Rest[bLeft].GetValue().X);
+        const FString Label=FString::Printf(TEXT("%s %s"),bLeft?TEXT("left"):TEXT("right"),bHeld?TEXT("held/Heavy"):TEXT("tap"));
         if(Phase==1)
         {
-            // Case 0 taps; case 1 holds at the load pose, then releases as a Heavy attack; case 2 is the left hand.
-            const float Hold=Case==1?.9f:.05f;
-            if(P<Hold)return false;
-            if(Case==1)
+            if(P<(bHeld?.9f:.05f))return false;
+            if(bHeld)
             {
-                Test->TestEqual(TEXT("Held press waits at the load pose (no strike yet)"),Animation->CapturedPunchReleaseCount,Releases);
-                Test->TestEqual(TEXT("No strike window while held"),Windows,0);
+                Test->TestEqual(Label+TEXT(": held press waits at the load pose (no strike yet)"),Animation->CapturedPunchReleaseCount,Releases);
+                Test->TestEqual(Label+TEXT(": no strike window while held"),Windows,0);
             }
             ReleasedAt=P;
-            State->ReportSimpleAction(Case==1?ERPGPlayerAction::HeavyAttack:ERPGPlayerAction::Attack,Case==2?ERPGHand::Left:ERPGHand::Right,Case==1?.6f:0.f);
+            State->ReportSimpleAction(bHeld?ERPGPlayerAction::HeavyAttack:ERPGPlayerAction::Attack,bLeft?ERPGHand::Left:ERPGHand::Right,bHeld?.6f:0.f);
             Phase=2;return false;
         }
         if(P<ReleasedAt+1.6f)return false;
-        const TCHAR* Label[]={TEXT("tap"),TEXT("held/Heavy"),TEXT("left hand")};
-        if(Case<2)
-        {
-            Test->TestEqual(FString::Printf(TEXT("%s: one punch released"),Label[Case]),Animation->CapturedPunchReleaseCount,Releases+1);
-            Test->TestEqual(FString::Printf(TEXT("%s: the filmed clip played"),Label[Case]),Animation->LastCapturedPunch.ToString(),FString(TEXT("RPG_Punch_R_Capture8634")));
-            Test->TestEqual(FString::Printf(TEXT("%s: %s presentation"),Label[Case],bFirst?TEXT("first-person"):TEXT("body")),Clip,
-                FString(bFirst?TEXT("RPG_FP_Punch_R_Capture8634"):TEXT("RPG_Punch_R_Capture8634")));
-            Test->TestEqual(FString::Printf(TEXT("%s: exactly one strike window"),Label[Case]),Windows,1);
-            Test->TestTrue(FString::Printf(TEXT("%s: window opens near impact (%.2f s after release)"),Label[Case],OpenedAt-ReleasedAt),OpenedAt-ReleasedAt>.05f && OpenedAt-ReleasedAt<.5f);
-            Test->TestTrue(FString::Printf(TEXT("%s: fist travels forward (%.1f cm)"),Label[Case],MaxReach),MaxReach>(bFirst?15.f:25.f));
-        }
-        else
-        {
-            Test->TestEqual(TEXT("Left hand: no punch yet"),Animation->CapturedPunchReleaseCount,Releases);
-            Test->TestEqual(TEXT("Left hand: no strike window"),Windows,0);
-        }
-        Test->TestFalse(FString::Printf(TEXT("%s: back in the fighting stance"),Label[Case]),PlayingClip(Anim,TEXT("FightStance")).IsEmpty());
-        Test->TestTrue(FString::Printf(TEXT("%s: punch finished"),Label[Case]),PlayingClip(Anim,TEXT("Punch_R_Capture8634")).IsEmpty());
-        Test->AddInfo(FString::Printf(TEXT("%s %s: window at %.3f s after release, reach %.1f cm"),bFirst?TEXT("FP"):TEXT("TP"),Label[Case],OpenedAt-ReleasedAt,MaxReach));
-        if(++Case<3){Phase=0;Start=Now-1.2f;return false;}
+        const FString Body=FString::Printf(TEXT("RPG_Punch_%s_Capture8634"),H);
+        Test->TestEqual(Label+TEXT(": one punch released"),Animation->CapturedPunchReleaseCount,Releases+1);
+        Test->TestEqual(Label+TEXT(": the filmed clip played"),Animation->LastCapturedPunch.ToString(),Body);
+        Test->TestEqual(Label+(bFirst?TEXT(": first-person presentation"):TEXT(": body presentation")),Clip,
+            bFirst?FString::Printf(TEXT("RPG_FP_Punch_%s_Capture8634"),H):Body);
+        Test->TestEqual(Label+TEXT(": exactly one strike window"),Windows,1);
+        Test->TestTrue(FString::Printf(TEXT("%s: window opens near impact (%.2f s after release)"),*Label,OpenedAt-ReleasedAt),OpenedAt-ReleasedAt>.05f && OpenedAt-ReleasedAt<.5f);
+        // The first-person lead fist already rests far out in the camera guard, so it travels less.
+        Test->TestTrue(FString::Printf(TEXT("%s: fist travels forward (%.1f cm)"),*Label,MaxReach),MaxReach>(bFirst?(bLeft?8.f:15.f):25.f));
+        Test->TestFalse(Label+TEXT(": back in the fighting stance"),PlayingClip(Anim,TEXT("FightStance")).IsEmpty());
+        Test->TestTrue(Label+TEXT(": punch finished"),PlayingClip(Anim,*Part).IsEmpty());
+        Test->AddInfo(FString::Printf(TEXT("%s %s: window at %.3f s after release, reach %.1f cm"),bFirst?TEXT("FP"):TEXT("TP"),*Label,OpenedAt-ReleasedAt,MaxReach));
+        if(++Case<4){Phase=0;Start=Now-1.2f;return false;}
         if(bVisual)FFileHelper::SaveStringToFile(Times,*(Dir/TEXT("captures.csv")));
         return true;
     }
 private:
     FAutomationTestBase* Test;bool bFirst,bVisual;bool bReady=false;int32 Wait=0,Phase=0,Case=0,Releases=0,Windows=0,Shot=0;
     float Start=0.f,PhaseStart=0.f,ReleasedAt=0.f,OpenedAt=-1.f,MaxReach=0.f,LastShot=-1.f;bool bWasOpen=false;
-    TOptional<FVector> Rest;FString Clip,Dir,Times;
+    TOptional<FVector> Rest[2];FString Clip,Dir,Times;ACameraActor* Camera=nullptr;
 };
 }
 

@@ -34,6 +34,24 @@ enter combat and hold the stance.
   own blend-out instead of the longer locomotion blend. The old timing let the idle show through for ~0.1 s, dropping
   the arms after every punch. Verified in PIE frames (`end-frames.png`).
 
+## Left punch (mirrored)
+
+The video has only right punches. `capture_punch8634.py` now builds both hands (`use_side`): the left punch samples the
+recorded right punch mirrored frame by frame (`flight_symmetry.mirror_pose`) and fits it onto the same, unmirrored
+stance (lead left foot stays forward). Every authored turn and sideways offset flips with the striking side: pull-back
+turns the left shoulder back, follow-through drives it through, elbow steering, guard hand, first-person guard
+clearance and clavicle drive swap sides. Measured: chest yaw -25 at load / +45 at impact (right punch +25 / -45), same
+5.5 cm hip drive and 146 cm impact height. Assets: `RPG_Punch_L_Capture8634`, `RPG_FP_Punch_L_Capture8634`.
+
+First person: an arm in the camera guard is capped at 93% reach (`cap_reach(..., limit)`), relaxing to the punch's
+97% as the striking hand leaves the guard, and the fit starts from the first-person stance's clavicles, so the clip
+joins `RPG_FP_FightStance` within 0.33 cm. Worst joint step ~13 deg/frame in all four clips. The right punch's
+third-person clip is unchanged by the refactor (zero difference); its first-person clip got smoother (14.5 -> 11.2).
+
+`CapturedPunchClip` returns either hand's clip. `RPGFilmedPunchTest` covers right/left tap and held/Heavy release in
+both views (left fist travel 44.0 cm third person, 20.6 cm first person, where the lead guard already rests far out);
+all pass with the stance tests (`Saved/Mocap8634/Gameplay-H.log`, `review-both.png`).
+
 ## Code
 
 `RPGPrototypeAnimationComponent.cpp`: `CapturedPunchClip` returns the clip for the right hand, tier 0, on

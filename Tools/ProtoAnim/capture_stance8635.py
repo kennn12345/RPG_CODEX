@@ -38,13 +38,13 @@ KNEE_OUT = .2
 FP_REACH_LIMIT = .93
 
 
-def cap_reach(local, side, target):
-    """Keep a first-person fist within FP_REACH_LIMIT of full arm length. The camera-guard layout was made for a
+def cap_reach(local, side, target, limit=FP_REACH_LIMIT):
+    """Keep a first-person fist within `limit` of full arm length. The camera-guard layout was made for a
     longer-armed rig and otherwise locks the lead arm straight, where its twist is undefined."""
     cs = p.to_cs(local); shoulder = cs['upperarm_'+side][1]
     arm = p.length(p.sub(cs['lowerarm_'+side][1], shoulder))+p.length(p.sub(cs['hand_'+side][1], cs['lowerarm_'+side][1]))
     d = p.sub(target, shoulder)
-    return p.add(shoulder, p.mul(d, min(1., FP_REACH_LIMIT*arm/p.length(d))))
+    return p.add(shoulder, p.mul(d, min(1., limit*arm/p.length(d))))
 
 
 def knee_pole(side, foot_rotation, ball):
