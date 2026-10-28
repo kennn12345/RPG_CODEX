@@ -65,8 +65,9 @@ URPGPrototypeAnimationComponent::URPGPrototypeAnimationComponent()
     PrimaryComponentTick.bStartWithTickEnabled = false;
     // All melee clips were scrapped (2026-10-28) to be rebuilt from a new stance. Until then only the fighting stance
     // plays; attack, guard and kick inputs still enter combat (and hold this stance) without animating a strike.
-    CombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/FightStance/RPG_FightStance.RPG_FightStance"));
-    FirstPersonCombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/FightStance/RPG_FP_FightStance.RPG_FP_FightStance"));
+    // Filmed stance from IMG_8635 (2026-10-28); the hand-edited RPG_FightStance is kept but no longer played.
+    CombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/FightStance/RPG_FightStance_Capture8635.RPG_FightStance_Capture8635"));
+    FirstPersonCombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/FightStance/RPG_FP_FightStance_Capture8635.RPG_FP_FightStance_Capture8635"));
     FlightStart = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FlightStart.RPG_FlightStart"));
 }
 
