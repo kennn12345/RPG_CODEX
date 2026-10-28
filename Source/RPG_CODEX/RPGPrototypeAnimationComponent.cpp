@@ -36,7 +36,7 @@ namespace
 {
 #include "ReferencePunchCalibration.inl"
     // Keep the previous captured set available for local comparisons/fallback.
-    TAutoConsoleVariable<int32> CVarReferencePunches(TEXT("rpg.ReferencePunches"),1,TEXT("Reference1027 player punch/stance family; 0 restores the previous captured set."));
+    TAutoConsoleVariable<int32> CVarReferencePunches(TEXT("rpg.ReferencePunches"),0,TEXT("Reference1027 player punch family (its clips were scrapped 2026-10-28; keep 0)."));
     const FName PrototypeSlot(TEXT("DefaultSlot"));
     /** Layered from spine_01 up, so the legs keep the locomotion underneath. Already defined on SK_Mannequin. */
     const FName UpperBodySlot(TEXT("UpperBody"));
@@ -63,27 +63,10 @@ URPGPrototypeAnimationComponent::URPGPrototypeAnimationComponent()
     // lock, a charge, or the combat stance.
     PrimaryComponentTick.bCanEverTick = true;
     PrimaryComponentTick.bStartWithTickEnabled = false;
-    RightPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_Punch_R.RPG_Proto_Punch_R"));
-    LeftPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_Punch_L.RPG_Proto_Punch_L"));
-    RightPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_Punch_R_Charged.RPG_Proto_Punch_R_Charged"));
-    LeftPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_Punch_L_Charged.RPG_Proto_Punch_L_Charged"));
-    RightFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FrontKick_R_Charged.RPG_Proto_FrontKick_R_Charged"));
-    LeftFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FrontKick_L_Charged.RPG_Proto_FrontKick_L_Charged"));
-    CombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_CombatStance.RPG_Proto_CombatStance"));
-    UnarmedGuard = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_UnarmedGuard.RPG_Proto_UnarmedGuard"));
-    RightFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FrontKick_R.RPG_Proto_FrontKick_R"));
-    LeftFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_Proto_FrontKick_L.RPG_Proto_FrontKick_L"));
-    FirstPersonRightPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_Punch_R.RPG_FP_Punch_R"));
-    FirstPersonLeftPunch = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_Punch_L.RPG_FP_Punch_L"));
-    FirstPersonRightPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_Punch_R_Charged.RPG_FP_Punch_R_Charged"));
-    FirstPersonLeftPunchCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_Punch_L_Charged.RPG_FP_Punch_L_Charged"));
-    FirstPersonRightFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_FrontKick_R.RPG_FP_FrontKick_R"));
-    FirstPersonLeftFrontKick = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_FrontKick_L.RPG_FP_FrontKick_L"));
-    FirstPersonRightFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_FrontKick_R_Charged.RPG_FP_FrontKick_R_Charged"));
-    FirstPersonLeftFrontKickCharged = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_FrontKick_L_Charged.RPG_FP_FrontKick_L_Charged"));
-    FirstPersonUnarmedGuard = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_UnarmedGuard.RPG_FP_UnarmedGuard"));
-    FirstPersonCombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FP_CombatStance.RPG_FP_CombatStance"));
-    FlyingAttack = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FlyingAttack.RPG_FlyingAttack"));
+    // All melee clips were scrapped (2026-10-28) to be rebuilt from a new stance. Until then only the fighting stance
+    // plays; attack, guard and kick inputs still enter combat (and hold this stance) without animating a strike.
+    CombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/FightStance/RPG_FightStance.RPG_FightStance"));
+    FirstPersonCombatStance = FSoftObjectPath(TEXT("/Game/RPG/Animations/FightStance/RPG_FP_FightStance.RPG_FP_FightStance"));
     FlightStart = FSoftObjectPath(TEXT("/Game/RPG/Animations/Prototype/RPG_FlightStart.RPG_FlightStart"));
 }
 
@@ -301,28 +284,6 @@ FString URPGPrototypeAnimationComponent::SetupAimAnimInstance()
 
 UAnimSequence* URPGPrototypeAnimationComponent::LoadFor(const TSoftObjectPtr<UAnimSequence>& Clip, const USkeleton* Skeleton)
 {
-    // Resolve the recorded stance even for existing Blueprints with the original soft reference serialized.
-    // Other rigs retain their fitted stance; actor facing remains owned by combat movement/aim.
-    if (Skeleton && Skeleton->GetName() == TEXT("SK_UEFN_Mannequin"))
-    {
-        const FString Requested = Clip.GetAssetName();
-        if (CVarReferencePunches.GetValueOnGameThread()!=0 && (Requested==TEXT("RPG_Proto_CombatStance") || Requested==TEXT("RPG_FP_CombatStance")))
-        {
-            const FString Name=Requested==TEXT("RPG_FP_CombatStance")?TEXT("RPG_FP_CombatStance_Reference1027"):TEXT("RPG_CombatStance_Reference1027");
-            const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/ReferenceCombat1027/%s.%s"),*Name,*Name);
-            if (auto* Reference=LoadObject<UAnimSequence>(nullptr,*Path); Reference && Reference->GetSkeleton()==Skeleton) return Reference;
-        }
-        const TCHAR* Recorded = Requested == TEXT("RPG_Proto_CombatStance") ? TEXT("RPG_CombatStance_Capture8619")
-            : Requested == TEXT("RPG_FP_CombatStance") ? TEXT("RPG_FP_CombatStance_Capture8619") : nullptr;
-        if (!Recorded && (Requested.StartsWith(TEXT("RPG_Proto_Punch_")) || Requested.StartsWith(TEXT("RPG_FP_Punch_"))
-            || Requested == TEXT("RPG_Proto_UnarmedGuard") || Requested == TEXT("RPG_FP_UnarmedGuard"))) Recorded = *Requested;
-        if (Recorded)
-        {
-            const FString RecordedPath = FString::Printf(TEXT("/Game/RPG/Animations/CapturedStances/%s.%s"), Recorded, Recorded);
-            UAnimSequence* Captured = LoadObject<UAnimSequence>(nullptr, *RecordedPath);
-            if (Captured && Captured->GetSkeleton() == Skeleton) return Captured;
-        }
-    }
     UAnimSequence* Sequence = Clip.LoadSynchronous();
     if (!Skeleton || (Sequence && Sequence->GetSkeleton() == Skeleton)) return Sequence;
     const FString Name = Clip.GetAssetName();
@@ -409,15 +370,6 @@ void URPGPrototypeAnimationComponent::BuildPresentationMap(const USkeleton* Skel
         UAnimSequence* ThirdPerson = LoadFor(*Pair.Key, Skeleton);
         UAnimSequence* FirstPerson = LoadFor(*Pair.Value, Skeleton);
         if (ThirdPerson && FirstPerson && FirstPerson->GetSkeleton() == Skeleton) FirstPersonClips.Add(ThirdPerson, FirstPerson);
-    }
-    for (const bool bLeft : {false,true}) for (int32 Tier=0;Tier<3;++Tier) for (int32 Variant=0;Variant<3;++Variant)
-    {
-        UAnimSequence* Body=CapturedPunchClip(bLeft,Tier,Variant,Skeleton);
-        if (!Body) continue;
-        const FString Name=Body->GetName().Replace(TEXT("RPG_Punch_"),TEXT("RPG_FP_Punch_"));
-        const FString Path=Body->GetPathName().Replace(*Body->GetName(),*Name);
-        UAnimSequence* View=LoadObject<UAnimSequence>(nullptr,*Path);
-        if (View && View->GetSkeleton()==Skeleton) FirstPersonClips.Add(Body,View);
     }
 }
 
@@ -587,19 +539,8 @@ void URPGPrototypeAnimationComponent::UpdateCharge(UAnimInstance* Instance, floa
 
 UAnimSequence* URPGPrototypeAnimationComponent::CapturedPunchClip(bool bLeft,int32 Tier,int32 Variant,const USkeleton* Skeleton) const
 {
-    if (!Skeleton || Skeleton->GetName()!=TEXT("SK_UEFN_Mannequin")) return nullptr;
-    const TCHAR* Tiers[]={TEXT("Light"),TEXT("Heavy"),TEXT("Power")};
-    if (CVarReferencePunches.GetValueOnGameThread()!=0)
-    {
-        const FString Name=FString::Printf(TEXT("RPG_Punch_%s_%s_Reference1027_V%d"),bLeft?TEXT("L"):TEXT("R"),Tiers[FMath::Clamp(Tier,0,2)],FMath::Clamp(Variant,0,2)+1);
-        const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/ReferenceCombat1027/%s.%s"),*Name,*Name);
-        UAnimSequence* Reference=LoadObject<UAnimSequence>(nullptr,*Path);
-        return Reference && Reference->GetSkeleton()==Skeleton?Reference:nullptr;
-    }
-    const FString Name=FString::Printf(TEXT("RPG_Punch_%s_%s_V%d"),bLeft?TEXT("L"):TEXT("R"),Tiers[FMath::Clamp(Tier,0,2)],FMath::Clamp(Variant,0,2)+1);
-    const FString Path=FString::Printf(TEXT("/Game/RPG/Animations/CapturedPunches/%s.%s"),*Name,*Name);
-    UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,*Path);
-    return Clip && Clip->GetSkeleton()==Skeleton?Clip:nullptr;
+    // The captured / reference punch families were scrapped (2026-10-28); new punches will be selected here.
+    return nullptr;
 }
 
 bool URPGPrototypeAnimationComponent::IsReferencePunchPlaying() const
@@ -790,6 +731,20 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
         if (ChargeMontage && !bChargeIsKick && ChargeHand == Info.Hand) Instance->Montage_Stop(0.1f, ChargeMontage);
         ClearCharge();
         return;
+    }
+
+    // No melee clips yet (scrapped 2026-10-28): attacks, the guard and kicks enter combat and hold the fighting
+    // stance, with no strike animation.
+    switch (Info.Action)
+    {
+    case ERPGPlayerAction::Attack: case ERPGPlayerAction::HeavyAttack: case ERPGPlayerAction::PowerAttack:
+    case ERPGPlayerAction::AttackChargeStarted: case ERPGPlayerAction::UnarmedGuard:
+    case ERPGPlayerAction::Kick: case ERPGPlayerAction::HeavyKick: case ERPGPlayerAction::PowerKick:
+    case ERPGPlayerAction::KickChargeStarted: case ERPGPlayerAction::FlyingAttack:
+        LastCombatActionTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+        SetComponentTickEnabled(true);
+        return;
+    default: break;
     }
 
     TSoftObjectPtr<UAnimSequence> Clip;
