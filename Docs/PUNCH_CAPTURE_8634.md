@@ -15,6 +15,25 @@ enter combat and hold the stance.
 - Starts and ends exactly in `RPG_FightStance_Capture8635`. Root identity, feet planted, bone lengths fixed. While
   moving, the existing upper-body layer plays it over locomotion.
 
+## Revision: bigger load and follow-through (user request)
+
+- Pull-back: torso 20 degrees (spine_01-03) + pelvis 7 degrees, rear fist ~11 cm back, weight 3 cm back / 2 cm down.
+- Follow-through (`DRIVE_*`): torso 14 degrees + pelvis 6 degrees through the target, right clavicle 8 degrees forward,
+  chest lean 4 degrees, hips 2.5 cm forward. Rises from 40% of the strike, peaks 0.05 s after impact, holds while the
+  arm is out, unwinds over 0.35 s. Measured: chest yaw ~-45 to -52 degrees at impact (was ~-30), shoulder +22 cm, fist
+  reach 43.5 cm third person / 35.9 cm first person in PIE.
+- The head counter-turns the accumulated yaw (and lean), so the eyes and first-person camera stay on the target.
+- Smoothness fixes: the strike reaches for 97% of the rig's arm length (`REACH_LIMIT`, no shoulder-solver snap); the
+  right elbow is steered from the stance elbow to out-to-the-side with the strike (`elbow_pole`); smoothing averages
+  fist positions and re-solves the arms (averaging joint rotations wobbled the fist). First person: the left guard keeps
+  last frame's elbow direction and eases home over the last 0.3 s, the strike hand's camera-guard blend spans 0.2 s, and
+  the left fist steps 4 cm out during the drive. Max joint step now ~11 deg/frame in both views (was up to 59).
+- First-person stance: its lead fist is capped at 93% of arm length (`cap_reach` in capture_stance8635.py); the old
+  camera-guard layout locked that arm straight (7 degrees bend, now 43), which spun its twist.
+- Stance hand-off (`UpdateCombatStance`): after an attack that is blending out, the stance fades in over the attack's
+  own blend-out instead of the longer locomotion blend. The old timing let the idle show through for ~0.1 s, dropping
+  the arms after every punch. Verified in PIE frames (`end-frames.png`).
+
 ## Code
 
 `RPGPrototypeAnimationComponent.cpp`: `CapturedPunchClip` returns the clip for the right hand, tier 0, on

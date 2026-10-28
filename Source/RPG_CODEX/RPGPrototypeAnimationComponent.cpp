@@ -216,8 +216,12 @@ void URPGPrototypeAnimationComponent::UpdateCombatStance(UAnimInstance* Instance
     if (Active && !Active->IsStopped()) return;
     UAnimSequence* Sequence = LoadFor(CombatStance, Instance->CurrentSkeleton);
     if (!Sequence || Sequence->GetSkeleton() != Instance->CurrentSkeleton) return;
+    // Straight out of an attack that is now blending out (a filmed punch ends on the stance's first frame): cross-fade
+    // over the attack's own blend-out. The longer stance blend-in let the idle show through, dropping the arms.
+    const FAnimMontageInstance* Ending = ActiveMontage ? Instance->GetInstanceForMontage(ActiveMontage) : nullptr;
+    const float BlendIn = Ending && Ending->IsStopped() && Ending->GetWeight() > 0.f ? ActiveMontage->BlendOut.GetBlendTime() : CombatLocomotionBlendTime;
     CombatStanceMontage = Instance->PlaySlotAnimationAsDynamicMontage(Present(Sequence), PrototypeSlot,
-        CombatLocomotionBlendTime, CombatLocomotionBlendTime, 1.f, 1000);
+        BlendIn, CombatLocomotionBlendTime, 1.f, 1000);
     bCombatStanceFullBody = true;
 }
 

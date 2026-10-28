@@ -35,6 +35,18 @@ LEAD_FOOT_OUT_CM = 6.0
 KNEE_OUT = .2
 
 
+FP_REACH_LIMIT = .93
+
+
+def cap_reach(local, side, target):
+    """Keep a first-person fist within FP_REACH_LIMIT of full arm length. The camera-guard layout was made for a
+    longer-armed rig and otherwise locks the lead arm straight, where its twist is undefined."""
+    cs = p.to_cs(local); shoulder = cs['upperarm_'+side][1]
+    arm = p.length(p.sub(cs['lowerarm_'+side][1], shoulder))+p.length(p.sub(cs['hand_'+side][1], cs['lowerarm_'+side][1]))
+    d = p.sub(target, shoulder)
+    return p.add(shoulder, p.mul(d, min(1., FP_REACH_LIMIT*arm/p.length(d))))
+
+
 def knee_pole(side, foot_rotation, ball):
     """Knee direction for a planted foot: along the toes, slightly outward."""
     toe = p.qrot(foot_rotation, ball); toe = p.norm([toe[0], toe[1], 0.])
@@ -134,6 +146,7 @@ def build(source):
                 delta=p.mul(p.sub(cs['hand_'+side][1],arm_anchor['hand_'+side][1]),.3)
                 target=p.add(ref_fp['hand_'+side][1],delta)
                 fit_view_shoulder(view,side,target)
+                target=cap_reach(view,side,target)
                 repair_chain(view,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,target,
                              p.sub(ref_fp['lowerarm_'+side][1],ref_fp['upperarm_'+side][1]),ref_fp['hand_'+side][0])
             fp_poses.append(follow_ik(view))
