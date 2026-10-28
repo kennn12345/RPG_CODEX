@@ -154,8 +154,8 @@ def straight_wrist(local,s):
 # about shoulder width with the lead foot barely ahead, a very slight knee bend. The arms are left as they are.
 # (Facing +Y, left +X; a yaw above 90 turns the lead side forward.)
 STANCE_PELVIS_YAW=98.;STANCE_CHEST_YAW=102.;STANCE_LEAN=6.;TURN_GAIN=1.5
-STANCE_KNEE=12.;MIN_KNEE=8.   # lower_for_contacts used to hold every planted knee at ~28 deg: the old crouch
-FEET_HALF_WIDTH=14.;FEET_STAGGER=12.;ANKLE_AHEAD=2.;TOE_YAW={'l':84.,'r':100.}
+STANCE_KNEE=40.;MIN_KNEE=8.   # lower_for_contacts used to hold every planted knee at ~28 deg: the old crouch
+FEET_HALF_WIDTH=20.;FEET_STAGGER=12.;ANKLE_AHEAD=2.;TOE_YAW={'l':84.,'r':100.}
 DRIVE=.4   # the filmed hip drive went between feet 78 cm apart; over these feet it would pitch the body past the lead foot
 
 def yaw_of(v):return math.degrees(math.atan2(v[1],v[0]))
