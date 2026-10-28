@@ -43,6 +43,8 @@ STANCES = json.loads((HERE/'capture_stance8635_uefn.json').read_text())
 STANCE = STANCES['RPG_FightStance_Capture8635']['poses'][0]
 FP_STANCE = STANCES['RPG_FP_FightStance_Capture8635']['poses'][0]
 REST = p.to_cs(STANCE); FP_REST = p.to_cs(FP_STANCE)
+# Planted legs keep the stance's knee direction (over the toes); the recorded thigh twist would bow a knee sideways.
+KNEE_POLE = {s: p.sub(REST['calf_'+s][1], REST['thigh_'+s][1]) for s in 'lr'}
 SKIP = ('index', 'middle', 'ring', 'pinky', 'thumb', 'metacarpal', 'ik_')
 
 
@@ -88,7 +90,7 @@ def recorded(seconds, strike_weight, load=0.):
     for s in 'lr':
         # Feet stay planted on the stance footprint.
         cs = p.to_cs(local); foot = 'foot_'+s
-        repair_chain(local, 'thigh_'+s, 'calf_'+s, foot, REST[foot][1], p.sub(cs['calf_'+s][1], cs['thigh_'+s][1]), REST[foot][0])
+        repair_chain(local, 'thigh_'+s, 'calf_'+s, foot, REST[foot][1], KNEE_POLE[s], REST[foot][0])
     for s in 'lr':
         cs = p.to_cs(local); hand = 'hand_'+s
         target = p.add(REST[hand][1], p.qrot(TURN, p.sub(source_cs[hand][1], BASE_CS[hand][1])))
@@ -144,7 +146,7 @@ def smooth(rows):
             pose = copy.deepcopy(other) if pose is None else blend(pose, other, w/total)
         for s in 'lr':
             cs = p.to_cs(pose); foot = 'foot_'+s
-            repair_chain(pose, 'thigh_'+s, 'calf_'+s, foot, REST[foot][1], p.sub(cs['calf_'+s][1], cs['thigh_'+s][1]), REST[foot][0])
+            repair_chain(pose, 'thigh_'+s, 'calf_'+s, foot, REST[foot][1], KNEE_POLE[s], REST[foot][0])
         pose['root'] = ([0., 0., 0., 1.], [0., 0., 0.])
         out.append(follow_ik(pose))
     out.append(rows[-1])

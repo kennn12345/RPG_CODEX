@@ -19,6 +19,11 @@ the hand-edited `RPG_FightStance`, which is kept unchanged in the project.
   (stagger 5.9 -> 13.9 cm, `LEAD_FOOT_FORWARD_CM`), hips 3 cm lower so the planted legs reach (`HIPS_DOWN_CM`), and
   tight fists (`tight_fist`: fingers closed 80/95/65 degrees; the rig's `p.FIST` alone reads half-open). Both clips
   still pass `check_stance8635.py` and the stance tests.
+- Leg fix: the recorded left thigh twist bowed the bent knee straight out to the side. Legs are now solved with the
+  knee over the toes, turned slightly out (`knee_pole`, `KNEE_OUT`), and the lead foot sits 6 cm further out
+  (`LEAD_FOOT_OUT_CM`; feet 37.1 cm apart sideways, 13.9 cm stagger). The punch's planted legs use the stance's knee
+  directions (`KNEE_POLE` in capture_punch8634.py). Stance/punch checks and the five PIE tests pass
+  (`Saved/Mocap8634/Gameplay-E.log`; front/three-quarter/side render `stance-legs.png`).
 
 ## Capture and rebake
 

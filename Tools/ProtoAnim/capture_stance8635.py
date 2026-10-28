@@ -28,6 +28,17 @@ SEAM_SECONDS = 0.6
 # the hips sink a little to let the planted legs reach the longer stance.
 LEAD_FOOT_FORWARD_CM = 8.0
 HIPS_DOWN_CM = 3.0
+# Second request: widen the stance by taking the same lead foot further out to the side.
+LEAD_FOOT_OUT_CM = 6.0
+# Knees track over the toes, turned slightly out. The recorded thighs carry a sideways twist (left knee pointed out to
+# the side) that only showed once the knees bent for the longer stance.
+KNEE_OUT = .2
+
+
+def knee_pole(side, foot_rotation, ball):
+    """Knee direction for a planted foot: along the toes, slightly outward."""
+    toe = p.qrot(foot_rotation, ball); toe = p.norm([toe[0], toe[1], 0.])
+    return p.norm(p.add(toe, [KNEE_OUT if side == 'l' else -KNEE_OUT, 0., 0.]))
 
 
 def tight_fist(bone):
@@ -87,7 +98,7 @@ def build(source):
     for side in 'lr':
         q,t = anchor['foot_'+side];t=list(t)
         for axis in range(2): t[axis]+=(.5 if side=='l' else -.5)*(footprint[axis]-current[axis])
-        if side == 'l': t[1] += LEAD_FOOT_FORWARD_CM
+        if side == 'l': t[1] += LEAD_FOOT_FORWARD_CM; t[0] += LEAD_FOOT_OUT_CM
         toe_z=p.add(t,p.qrot(q,normalized[0]['ball_'+side][1]))[2]
         t[2] += max(0.,3.2-toe_z,4.-t[2])
         feet[side] = (q,t)
@@ -110,7 +121,7 @@ def build(source):
             for side in 'lr':
                 cs=p.to_cs(local)
                 repair_chain(local,'thigh_'+side,'calf_'+side,'foot_'+side,feet[side][1],
-                             p.sub(cs['calf_'+side][1],cs['thigh_'+side][1]),feet[side][0])
+                             knee_pole(side,feet[side][0],normalized[0]['ball_'+side][1]),feet[side][0])
                 # Re-seat the recorded elbow on the rig's hinge; the hand stays exactly where it was recorded.
                 cs=p.to_cs(local)
                 repair_chain(local,'upperarm_'+side,'lowerarm_'+side,'hand_'+side,cs['hand_'+side][1],
