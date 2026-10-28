@@ -150,12 +150,81 @@ def straight_wrist(local,s):
     turn=p.qnorm(p.cross(finger,fore)+[1.+p.dot(finger,fore)])
     local[hand]=(p.qnorm(p.qmul(p.qconj(cs[parent][0]),p.qmul(turn,cs[hand][0]))),local[hand][1])
 
+# The user's guard (2026-10-28): almost the standing idle. Shoulders square with the lead side barely forward, feet
+# about shoulder width with the lead foot barely ahead, a very slight knee bend. The arms are left as they are.
+# (Facing +Y, left +X; a yaw above 90 turns the lead side forward.)
+STANCE_PELVIS_YAW=98.;STANCE_CHEST_YAW=102.;STANCE_LEAN=6.;TURN_GAIN=1.5
+STANCE_KNEE=12.;MIN_KNEE=8.   # lower_for_contacts used to hold every planted knee at ~28 deg: the old crouch
+FEET_HALF_WIDTH=14.;FEET_STAGGER=12.;ANKLE_AHEAD=2.;TOE_YAW={'l':84.,'r':100.}
+DRIVE=.4   # the filmed hip drive went between feet 78 cm apart; over these feet it would pitch the body past the lead foot
+
+def yaw_of(v):return math.degrees(math.atan2(v[1],v[0]))
+
+def toe_yaw(cs,s):return yaw_of(p.sub(cs['ball_'+s][1],cs['foot_'+s][1]))
+
+def set_world(local,bone,world):
+    cs=p.to_cs(local);local[bone]=(p.qnorm(p.qmul(p.qconj(cs[p.PARENT[bone]][0]),world)),local[bone][1])
+
+def turn_world(local,bone,angle):
+    set_world(local,bone,p.qmul(p.qaxis([0.,0.,1.],angle),p.to_cs(local)[bone][0]))
+
+def square_up(local,old):
+    """Re-base a filmed key on the squared guard. Turns between square and the filmed guard's blade scale onto
+    square..the new guard; a turn past square the other way (the cross) stays; a turn beyond the filmed blade (the
+    jab) keeps its turn past the guard, the chest's by TURN_GAIN: from square the shoulder must turn further to
+    reach as far and to clear the face. The feet keep their filmed pivot relative to the guard."""
+    cs=p.to_cs(local);feet={s:cs['foot_'+s][0] for s in 'lr'}
+    # the fists stay where they were filmed (a turned chest must not turn the strike off its line)
+    arms=arms_of(cs)
+    def remap(y,o,new,gain):
+        if y<=90.:return y
+        if y<=o:return 90.+(y-90.)*(new-90.)/(o-90.)
+        return new+(y-o)*gain
+    yp,yc=yaw_of(g.frame(cs,'pelvis')[1]),yaw_of(g.frame(cs,'spine_05')[1])
+    dp=remap(yp,old['pelvis'],STANCE_PELVIS_YAW,1.)-yp
+    dc=remap(yc,old['chest'],STANCE_CHEST_YAW,TURN_GAIN)-yc
+    turn_world(local,'pelvis',dp)
+    for bone in ('spine_01','spine_03'):turn_world(local,bone,(dc-dp)*.5)
+    for s in 'lr':set_world(local,'foot_'+s,p.qmul(p.qaxis([0.,0.,1.],old['feet'][s]),feet[s]))
+    hold_arms(local,arms)
+
+def arms_of(cs):return {s:(cs['hand_'+s][1],cs['hand_'+s][0],cs['lowerarm_'+s][1]) for s in 'lr'}
+
+def hold_arms(local,arms):
+    """A fist out on its strike line stays there; a fist tucked in guard turns with the chest (the rear fist was filmed
+    at the chin behind a bladed chest: held in place it would sit inside a squared one). Blended by the arm's reach."""
+    cs=p.to_cs(local)
+    for s,(hand,rotation,elbow) in arms.items():
+        upper=cs['upperarm_'+s][1];full=p.length(local['lowerarm_'+s][1])+p.length(local['hand_'+s][1])
+        w=max(0.,min(1.,(p.length(p.sub(hand,upper))/full-.6)/.3))
+        hand=p.lerp(cs['hand_'+s][1],hand,w);elbow=p.lerp(cs['lowerarm_'+s][1],elbow,w)
+        rotation=p._nlerp(cs['hand_'+s][0],rotation,w)
+        repair_reference_arm(local,s,hand,p.sub(elbow,p.to_cs(local)['upperarm_'+s][1]),rotation)
+        view_arm(local,s,hand,rotation,None)
+
+def stand_up(local):
+    """Bring the guard's hunch back to STANCE_LEAN through the spine, keeping the head's gaze and the fists."""
+    arms=arms_of(p.to_cs(local))
+    for _ in range(3):
+        cs=p.to_cs(local);d=p.sub(cs['neck_01'][1],cs['pelvis'][1])
+        back=math.degrees(math.atan2(math.hypot(d[0],d[1]),d[2]))-STANCE_LEAN
+        if back<=.1:break
+        axis=p.norm(p.cross(d,[0.,0.,1.]));head=cs['head'][0]
+        for bone,share in [('spine_01',.4),('spine_03',.3),('spine_05',.3)]:
+            set_world(local,bone,p.qmul(p.qaxis(axis,back*share),p.to_cs(local)[bone][0]))
+        set_world(local,'head',head)
+    hold_arms(local,arms)
+
+def leg_reach(local,s,knee):
+    a,b=p.length(local['calf_'+s][1]),p.length(local['foot_'+s][1])
+    return math.sqrt(a*a+b*b+2.*a*b*math.cos(math.radians(knee)))
+
 def lower_for_contacts(local,targets):
     """Let the knees bend; never satisfy a planted-foot solve by lifting an unreachable shoe."""
     cs=p.to_cs(local);down=0.
     for s,target in targets.items():
         hip=cs['thigh_'+s][1]
-        reach=(p.length(local['calf_'+s][1])+p.length(local['foot_'+s][1]))*.97
+        reach=leg_reach(local,s,MIN_KNEE)
         horizontal=(hip[0]-target[0])**2+(hip[1]-target[1])**2
         vertical=math.sqrt(max(0.,reach*reach-horizontal))
         down=max(down,hip[2]-target[2]-vertical)
@@ -387,24 +456,32 @@ def build():
     global STANCE
     assert p.SP.NAME=='uefn'
     p.SOFT_IK=p.SOFT_IK_ARM=1.e-7
+    raw=p.to_cs(POSE[128]);raw_height=raw['pelvis'][1][2]
+    old=dict(pelvis=yaw_of(g.frame(raw,'pelvis')[1]),chest=yaw_of(g.frame(raw,'spine_05')[1]),
+             feet={s:TOE_YAW[s]-toe_yaw(raw,s) for s in 'lr'})
+    for pose in POSE.values():square_up(pose,old)
+    stand_up(STANCE)
     STANCE=finish(copy.deepcopy(STANCE),guard=True)
-    # The filmed front shoe is partly occluded: its annotated toe must not become
-    # an elevated ankle. Establish a real ground-contact footprint before isolating attacks.
-    targets={}
-    for s in 'lr':
-        cs=p.to_cs(STANCE);foot='foot_'+s;ball='ball_'+s
-        rot=cs[foot][0]
-        # Hidden rear-foot depth is underdetermined by the crop. Use the native
-        # stagger as a prior, rather than the image fit's overlong63cm footprint.
-        k=0 if s=='l' else 2
-        ball_target=[SUPPORT_PARAMETERS[k],SUPPORT_PARAMETERS[k+1],3.2]
-        target=p.sub(ball_target,p.qrot(rot,STANCE[ball][1]))
-        target[2]=max(4.5,target[2]);targets[s]=target
+    # A real ground-contact footprint under the hips (the filmed front shoe is partly occluded and the rear one
+    # hidden), with the pelvis at the height that leaves STANCE_KNEE in the straighter leg.
+    cs=p.to_cs(STANCE);centre=p.lerp(cs['thigh_l'][1],cs['thigh_r'][1],.5);targets={};poles={}
+    for s,(across,ahead) in {'l':(FEET_HALF_WIDTH,FEET_STAGGER*.5),'r':(-FEET_HALF_WIDTH,-FEET_STAGGER*.5)}.items():
+        foot='foot_'+s;ball='ball_'+s;rot=cs[foot][0]
+        # ankles about the hips (the weight over mid-foot), the ball on the ground
+        target=[centre[0]+across,centre[1]+ahead+ANKLE_AHEAD,max(4.5,3.2-p.qrot(rot,STANCE[ball][1])[2])];targets[s]=target
+        toe=p.sub(cs[ball][1],cs[foot][1]);poles[s]=p.norm([toe[0],toe[1],0.])
+    rise=sum(t[2]+math.sqrt(max(0.,leg_reach(STANCE,s,STANCE_KNEE)**2-(cs['thigh_'+s][1][0]-t[0])**2-(cs['thigh_'+s][1][1]-t[1])**2))
+             -cs['thigh_'+s][1][2] for s,t in targets.items())*.5   # both knees about STANCE_KNEE
+    STANCE['pelvis']=(STANCE['pelvis'][0],p.add(STANCE['pelvis'][1],[0.,0.,rise]))
     lower_for_contacts(STANCE,targets)
     for s,target in targets.items():
         cs=p.to_cs(STANCE);foot='foot_'+s;rot=cs[foot][0]
-        repair_chain(STANCE,'thigh_'+s,'calf_'+s,foot,target,p.sub(cs['calf_'+s][1],cs['thigh_'+s][1]),rot)
+        repair_chain(STANCE,'thigh_'+s,'calf_'+s,foot,target,poles[s],rot)
     follow_ik(STANCE)
+    # the strikes keep their filmed rise and fall about the new guard height
+    height=p.to_cs(STANCE)['pelvis'][1][2]-raw_height
+    for f,pose in POSE.items():
+        if f!=128:pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],[0.,0.,height]))
     result={}
     stance_rows=[]
     for i in range(121):
@@ -463,7 +540,7 @@ def build():
                 drive=ease((t-.226666667)/.133333333)*(1.-ease((t-.48)/.5))
                 # The rear cross needs the filmed shoulder/hip commitment to
                 # reach as far as the lead jab on the shorter target rig.
-                pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],[0.,(20. if side=='l' else 30.)*drive,0.]))
+                pose['pelvis']=(pose['pelvis'][0],p.add(pose['pelvis'][1],[0.,(20. if side=='l' else 30.)*DRIVE*drive,0.]))
                 rows.append(finish(pose,True))
             rows[0]=copy.deepcopy(STANCE);rows[-1]=copy.deepcopy(STANCE)
             name=f'RPG_Punch_{side.upper()}_Light_Reference1027_V{variant}'

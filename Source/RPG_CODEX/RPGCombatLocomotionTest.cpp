@@ -145,8 +145,9 @@ public:
         FVector ReferenceEye;
         if(bFirst && Animation->GetReferenceGuardEye(ReferenceEye))
         {
-            Test->TestTrue(TEXT("First-person camera follows the lower reference guard"),CombatEye<WalkEye-3.f && CombatEye>WalkEye-45.f);
-            Test->TestTrue(TEXT("Running restores the locomotion eye height"),RunEye>CombatEye+3.f);
+            // The guard stands almost as tall as the standing idle (2026-10-28): no longer a crouch below walking height.
+            Test->TestTrue(TEXT("First-person camera follows the reference guard"),CombatEye<WalkEye+3.f && CombatEye>WalkEye-45.f);
+            Test->TestTrue(TEXT("Running restores the locomotion eye height"),FMath::Abs(RunEye-WalkEye)<6.f);
             Test->TestTrue(TEXT("First-person stance/movement camera has no per-frame height pop"),MaxEyeStep<8.f);
             Test->AddInfo(FString::Printf(TEXT("FPS eyes walk %.2f, combat %.2f, run %.2f; transition step %.2f cm"),WalkEye,CombatEye,RunEye,MaxEyeStep));
         }
