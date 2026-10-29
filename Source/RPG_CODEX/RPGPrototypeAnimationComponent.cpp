@@ -45,8 +45,8 @@ namespace
     constexpr int32 UpperBodyBlendDepth = 3;
     /** Filmed tap punch (Tools/ProtoAnim/capture_punch8634.py LOAD / IMPACT): a held press waits at the pulled-back
      *  load pose; full extension, the centre of the hit window, follows. */
-    constexpr float FilmedPunchLoadTime = .20f;
-    constexpr float FilmedPunchImpactTime = .42f;
+    constexpr float FilmedPunchLoadTime = .16f;
+    constexpr float FilmedPunchImpactTime = .29f;
 
     /** PlaySlotAnimationAsDynamicMontage without the engine's "one montage per slot group" rule (DefaultSlot and
      *  UpperBody share a group on SK_Mannequin): whatever else is playing carries on, and the caller stops what it

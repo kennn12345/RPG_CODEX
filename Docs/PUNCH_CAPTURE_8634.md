@@ -77,6 +77,28 @@ shoulder at impact, and unwind over the return. `turn_weight` is timed on the cl
 deg/frame). Arc over the top reduced to 3 cm. Worst joint step 15 deg/frame at full punch speed, two smooth surges.
 PIE tests pass (`Gameplay-J.log`; close-ups `arm-right.png`, `arm-left.png`).
 
+## Whole-body chain, faster, palm-down to the chin (user request)
+
+`capture_punch8634.py` was rebuilt so the body is organised around the arm ("as if these punches are real"):
+- Kinetic chain (`CHAIN`, `weights()`): hips, torso and shoulder each have their own pull-back and drive curves,
+  offset so power builds from the ground: measured fastest moments foot/pelvis/torso 0.217 s, clavicle 0.233 s,
+  arm 0.25-0.27 s. Pull-back: pelvis 10, torso 22 degrees back, weight 4 cm back / 3 cm down, elbow and fist straight
+  back ~10 cm, tight. Drive: pelvis 14 + torso 12 degrees through (chest ~58 degrees with the recorded turn; more put
+  the lead shoulder past its range), hips 3 cm to the lead side, 5 cm forward, 4 cm down (knees bend), torso pitches
+  10 / bends 6 degrees, shoulder rolls 10 degrees. The head counter-turns to stay on target.
+- Feet (`foot_target`): the striking-side foot pivots on its ball as the hips drive (heel out up to 35 degrees,
+  lifted 22 degrees, ~5 cm); the other foot stays planted. Checks: lead foot fixed, pivot ball within 0.3 cm.
+- Faster: LOAD 0.16 s, IMPACT 0.29 s (0.13 s strike; fist peaks ~14 cm/frame, ~8 m/s), hold 0.05 s, retraction 2.2x;
+  clip 0.77 s. C++ `FilmedPunchLoadTime` / `FilmedPunchImpactTime` updated; the test's window lower bound is 0.03 s
+  (a held release now hits ~0.08 s later).
+- Fist (`turn_fist`): pronates palm-down with the shoulder roll; palm normal at impact -0.98 (right) / -0.99 (left).
+  Wrist at impact 146.5 cm (`CHIN_Z`: a same-height opponent's chin).
+- Worst joint step ~26-28 deg/frame (forearm at full punch speed). PIE: all tests pass (`Gameplay-K.log`).
+
+Review video: `Tools/Blender` (`export_anim_fbx.py` -> `apply_anim_fbx.py` onto `Blender/RPG_Player.blend`, which
+`export_player_fbx.py` / `import_player_blend.py` create -> `render_punch_frames.py`), then the encoder in the work
+folder. Output `Saved/Mocap8634/punches-review.mp4` (60 fps, side and front, normal and quarter speed).
+
 ## Code
 
 `RPGPrototypeAnimationComponent.cpp`: `CapturedPunchClip` returns the clip for the right hand, tier 0, on

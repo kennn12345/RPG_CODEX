@@ -126,7 +126,7 @@ public:
         Test->TestEqual(Label+(bFirst?TEXT(": first-person presentation"):TEXT(": body presentation")),Clip,
             bFirst?FString::Printf(TEXT("RPG_FP_Punch_%s_Capture8634"),H):Body);
         Test->TestEqual(Label+TEXT(": exactly one strike window"),Windows,1);
-        Test->TestTrue(FString::Printf(TEXT("%s: window opens near impact (%.2f s after release)"),*Label,OpenedAt-ReleasedAt),OpenedAt-ReleasedAt>.05f && OpenedAt-ReleasedAt<.5f);
+        Test->TestTrue(FString::Printf(TEXT("%s: window opens near impact (%.2f s after release)"),*Label,OpenedAt-ReleasedAt),OpenedAt-ReleasedAt>.03f && OpenedAt-ReleasedAt<.5f);
         // The first-person lead fist already rests far out in the camera guard, so it travels less.
         Test->TestTrue(FString::Printf(TEXT("%s: fist travels forward (%.1f cm)"),*Label,MaxReach),MaxReach>(bFirst?(bLeft?8.f:15.f):25.f));
         Test->TestFalse(Label+TEXT(": back in the fighting stance"),PlayingClip(Anim,TEXT("FightStance")).IsEmpty());
