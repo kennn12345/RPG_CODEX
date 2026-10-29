@@ -18,6 +18,11 @@ third-person camera framed for ranged play.
   first-person presentation) at `FilmedPunchImpactTime`: the fist (the melee sweep's knuckle point) and spine_03, the
   turn's pivot. The aim uses the thrown hand's point (both hands' midpoint between punches) and the pivot-to-fist
   distance as the pitch radius. Rebuilding the clips needs no recalibration.
+- Punches at empty air, third person (user report): with nothing under the reticle the punch went straight ahead of
+  the body, but the shoulder camera's line runs ~60 cm to its right, so the fist landed well left of the reticle. While
+  a filmed punch is thrown, the aim point is now where the view ray meets the fist's reach (sphere about spine_03; the
+  ray's closest point when it passes outside), so on screen the fist lands on the reticle. The punch then angles
+  toward the camera's side. Between punches the stance keeps facing the look direction (no idle twist).
 - Camera: `ThirdPersonViewOffset` 25 -> 60 cm right, 35 -> 45 up; `ThirdPersonCombatOffset` 35/25 -> 0/15 (the
   combat total is the same 60 / 60). At 25 cm the head covered distant targets under the reticle, and starting a
   cast slid the view 35 cm sideways.
@@ -35,6 +40,9 @@ turns) and just out of reach (105 cm); spells from 1.5 m to 15 m. Pass: lands wi
 | punches, third person | 18-37 cm, 6 of 8 missed | 1.2-9.7 cm, all hit |
 | punches, first person | 10-31 cm, 5 of 8 missed | 3.0-9.8 cm, all hit |
 | spells, both views | 0-5 cm | 0 cm |
+| punches at empty air (distance from the reticle's line) | ~60 cm to the left in third person | 0.2-2 cm, both views |
+
+Empty-air cases: right / left ahead, looking 12 degrees down, looking 30 degrees right (`air-punches.png`).
 
 The largest punch errors are the out-of-reach case (the fist stops short) and first-person hands 4-7 cm to the side.
 `RPG.Combat.FilmedRightPunch(FirstPerson)`, `RPG.Combat.StationaryStanceLocomotion(FirstPerson)`,

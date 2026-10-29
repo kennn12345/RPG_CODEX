@@ -115,7 +115,21 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	// The filmed punches: where this punch's fist lands with no aim, read from its clip (both hands' midpoint between punches).
 	const bool bFilmedStrike=!bReferenceStrike && Animation && Animation->GetFilmedStrikePoint(StrikePoint,StrikeFrom);
 	FVector AimPoint = FindAimPoint(Character, ViewLocation, ViewDirection, bFirstPerson, bOnTarget);
-	if((bReferenceStrike || bFilmedStrike) && !bFirstPerson && !bOnTarget)
+	if(bFilmedStrike && !bFirstPerson && !bOnTarget && bAttacking && !bKick)
+	{
+		// Nothing under the reticle: the shoulder camera's line passes well to the side of the body, so the punch goes
+		// to where that line is at the fist's reach (the far point of the view ray on the reach sphere about the pivot,
+		// or the ray's closest point when it passes outside it). On screen the fist lands on the reticle. Only while a
+		// punch is thrown: between punches the stance keeps facing the look direction.
+		const FTransform& MeshToWorld=Character->GetMesh()->GetComponentTransform();
+		const FVector Pivot=MeshToWorld.TransformPosition(StrikeFrom);
+		const float Reach=FVector::Dist(Pivot,MeshToWorld.TransformPosition(StrikePoint));
+		const FVector ToView=ViewLocation-Pivot;
+		const float Along=FVector::DotProduct(ViewDirection,ToView);
+		const float Inside=Along*Along-(ToView.SizeSquared()-Reach*Reach);
+		AimPoint=ViewLocation+ViewDirection*(-Along+FMath::Sqrt(FMath::Max(0.f,Inside)));
+	}
+	else if((bReferenceStrike || bFilmedStrike) && !bFirstPerson && !bOnTarget)
 	{
 		const FTransform& MeshToWorld=Character->GetMesh()->GetComponentTransform();
 		const FVector Pivot=MeshToWorld.TransformPosition(StrikeFrom),Natural=MeshToWorld.TransformPosition(StrikePoint);

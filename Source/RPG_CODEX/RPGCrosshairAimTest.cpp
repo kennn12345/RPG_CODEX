@@ -26,7 +26,8 @@
 
 namespace
 {
-/** One shot at a dummy: the crosshair is held on Bone (+ BoneOffset) of a dummy standing at Offset from the player. */
+/** One shot at a dummy: the crosshair is held on Bone (+ BoneOffset) of a dummy standing at Distance / Bearing from the
+ *  player. Bone null: a punch at empty air, the view turned Bearing right and BoneOffset.Y degrees up (no dummy ahead). */
 struct FAimCase
 {
     const TCHAR* Name;
@@ -47,6 +48,10 @@ const FAimCase AimCases[] = {
     {TEXT("punch L stomach ahead"),    false,true,  90.f,  0.f,TEXT("spine_02"),FVector::ZeroVector},
     {TEXT("punch R chin 70 right"),    false,false, 90.f, 70.f,TEXT("head"),    FVector(0,0,-6)},
     {TEXT("punch R chin far 105"),     false,false,105.f,  0.f,TEXT("head"),    FVector(0,0,-6)},
+    {TEXT("punch R air ahead"),        false,false,  0.f,  0.f,nullptr,FVector(0,0,0)},
+    {TEXT("punch L air ahead"),        false,true,   0.f,  0.f,nullptr,FVector(0,0,0)},
+    {TEXT("punch R air look down 12"), false,false,  0.f,  0.f,nullptr,FVector(0,-12,0)},
+    {TEXT("punch L air look 30 right"),false,true,   0.f, 30.f,nullptr,FVector(0,0,0)},
     {TEXT("spell R chest 150 near"),   true, false,150.f, 10.f,TEXT("spine_04"),FVector::ZeroVector},
     {TEXT("spell L head 300"),         true, true, 300.f,-20.f,TEXT("head"),    FVector::ZeroVector},
     {TEXT("spell R chest 300"),        true, false,300.f,  0.f,TEXT("spine_04"),FVector::ZeroVector},
@@ -97,10 +102,15 @@ public:
         const FVector Eye=Controller->PlayerCameraManager->GetCameraLocation();
         const FVector Look=Controller->PlayerCameraManager->GetCameraRotation().Vector();
         FHitResult Under;
-        const bool bOnDummy=ARPGEnergyOrb::Trace(World,Eye,Eye+Look*5000.f,0.f,Player,Under) && Under.GetActor()==Dummy.Get();
-        // Hold the reticle on the aimed bone (until the attack lands: the dummy reacts afterwards).
-        const FVector Target=Dummy->Mesh->GetBoneLocation(Case.Bone)+Dummy->GetActorRotation().RotateVector(Case.BoneOffset);
-        if(Phase<3)Controller->SetControlRotation((Target-Eye).Rotation());
+        const bool bAir=Case.Bone==nullptr;
+        const bool bOnDummy=bAir || (ARPGEnergyOrb::Trace(World,Eye,Eye+Look*5000.f,0.f,Player,Under) && Under.GetActor()==Dummy.Get());
+        // Hold the reticle on the aimed bone (until the attack lands: the dummy reacts afterwards), or on empty air.
+        if(bAir)Controller->SetControlRotation(FRotator(Case.BoneOffset.Y,HomeYaw+Case.Bearing,0));
+        else
+        {
+            const FVector Target=Dummy->Mesh->GetBoneLocation(Case.Bone)+Dummy->GetActorRotation().RotateVector(Case.BoneOffset);
+            Controller->SetControlRotation((Target-Eye).Rotation());
+        }
 
         if(Phase==0)
         {
@@ -123,7 +133,7 @@ public:
                 State->ReportSimpleAction(ERPGPlayerAction::AttackChargeStarted,Hand);
                 State->ReportSimpleAction(ERPGPlayerAction::Attack,Hand);
             }
-            MinFist=1e9f;bLanded=false;Phase=1;PhaseStart=Now;
+            MinFist=1e9f;bLanded=bAirShot=false;Phase=1;PhaseStart=Now;
             return false;
         }
         if(Phase==1)
@@ -138,7 +148,15 @@ public:
                 const FName Wrist=Case.bLeft?TEXT("hand_l"):TEXT("hand_r"),Knuckle=Case.bLeft?TEXT("middle_01_l"):TEXT("middle_01_r");
                 const FVector A=Mesh->GetBoneLocation(Wrist),B=Mesh->GetBoneLocation(Knuckle);
                 for(const FVector& Point:{FMath::Lerp(A,B,.55f),B})
-                    if(FVector::Dist(Point,Crosshair)<MinFist)
+                    if(bAir)
+                    {
+                        // Empty air: how far the fist is from the reticle's line, i.e. how far off it looks on screen.
+                        const float Off=FVector::CrossProduct(Point-Eye,Look).Size();
+                        if(Off<MinFist){MinFist=Off;FistOffset=Player->GetActorRotation().UnrotateVector(Point-(Eye+Look*FVector::DotProduct(Point-Eye,Look)));}
+                        else if(Point==B && bLanded && !bAirShot){bAirShot=true;Shot(TEXT("land"));}   // just past the closest pass
+                        bLanded=true;
+                    }
+                    else if(FVector::Dist(Point,Crosshair)<MinFist)
                     {
                         MinFist=FVector::Dist(Point,Crosshair);
                         FistOffset=Player->GetActorRotation().UnrotateVector(Point-Crosshair);
@@ -196,7 +214,8 @@ private:
         Player->GetCharacterMovement()->StopMovementImmediately();
         Player->SetActorLocationAndRotation(Home,FRotator(0,HomeYaw,0),false,nullptr,ETeleportType::ResetPhysics);
         const FRotator Bearing(0,HomeYaw+Case.Bearing,0);
-        const FVector At=Home+Bearing.Vector()*Case.Distance;
+        // (empty air: the dummy stands well behind, out of the way)
+        const FVector At=Case.Bone?Home+Bearing.Vector()*Case.Distance:Home-FRotator(0,HomeYaw,0).Vector()*600.f;
         FActorSpawnParameters Spawn;Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
         Dummy=World->SpawnActor<ARPGCombatTestDummy>(At,(Home-At).Rotation(),Spawn);
         Dummy->bWander=false;Dummy->bShowHitText=false;Dummy->StopWanderingAtHome();
@@ -222,7 +241,7 @@ private:
                 Player->FindComponentByClass<UCameraComponent>()?Player->FindComponentByClass<UCameraComponent>()->FieldOfView:0.f));
         FFileHelper::SaveStringToFile(Results,*(FPaths::ProjectSavedDir()/TEXT("AimReview")/(bFirst?TEXT("results-fp.csv"):TEXT("results-tp.csv"))));
     }
-    FAutomationTestBase* Test;bool bFirst,bVisual;bool bReady=false,bLanded=false;int32 Wait=0,Phase=0,HitsBefore=0,ShotsBefore=0;int32 CaseIndex=0;
+    FAutomationTestBase* Test;bool bFirst,bVisual;bool bReady=false,bLanded=false,bAirShot=false;int32 Wait=0,Phase=0,HitsBefore=0,ShotsBefore=0;int32 CaseIndex=0;
     float PhaseStart=0.f,HomeYaw=0.f,MinFist=0.f,Miss=0.f,DefaultStanceTimeout=8.f;
     FVector Home,Crosshair,FistOffset=FVector::ZeroVector;FName CrosshairBone,LandedBone;FString Dir,Results;TWeakObjectPtr<ARPGCombatTestDummy> Dummy;
 };
