@@ -276,6 +276,17 @@ void ARPGNpcCharacter::React(const FRPGMeleeHitInfo& Hit, const FRPGPowerInput& 
 		HitOutcome->StartBend(Result.Reaction >= ERPGPowerReaction::Knockback ? 28.f : 18.f, 0.25f, 0.6f);
 	// Knocked off balance: stumbling steps with the arms thrown out toward the fall.
 	const bool bCatching = Result.Reaction == ERPGPowerReaction::Catch || bFallsCatching;
+	// Falling straight forward or back it may go down onto a knee (the hand-keyed clips; root motion carries it, and a
+	// failed one hands the body to the braced ragdoll as the clip ends).
+	if (UAnimMontage* Knee = bCatching && HitOutcome ? HitOutcome->TryKneeCatch(Dir, bFallsCatching, Result) : nullptr)
+	{
+		bShoving = false;
+		ShoveVelocity = FVector::ZeroVector;
+		ActiveReaction = Knee;
+		SetAnimRootMotionTranslationScale(1.f);
+		StopForReaction(Knee->GetPlayLength() + 0.3f);
+		return;
+	}
 	if (HitOutcome && bCatching) HitOutcome->StartBrace(Dir, 0.85f, 0.7f, 0.5f);
 
 	// The push: the Power System's displacement velocity, plus the attacker's momentum over this body's weight.

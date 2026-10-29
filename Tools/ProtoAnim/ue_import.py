@@ -49,10 +49,16 @@ for name, clip in clips.items():
                                  [unreal.Vector(1, 1, 1) for _ in keys], False)
     ctrl.close_bracket(False)
 
-    # In-place clips: movement code owns displacement, root never moves or rotates.
-    seq.set_editor_property('enable_root_motion', False)
-    seq.set_editor_property('force_root_lock', True)
-    seq.set_editor_property('root_motion_root_lock', unreal.RootMotionRootLock.REF_POSE)
+    # In-place clips: movement code owns displacement, root never moves or rotates. Clips marked root_motion (the
+    # knee-down catches: the body steps and the root follows its hips) carry the character with the root instead.
+    if clip.get('root_motion'):
+        seq.set_editor_property('enable_root_motion', True)
+        seq.set_editor_property('force_root_lock', False)
+        seq.set_editor_property('root_motion_root_lock', unreal.RootMotionRootLock.ANIM_FIRST_FRAME)
+    else:
+        seq.set_editor_property('enable_root_motion', False)
+        seq.set_editor_property('force_root_lock', True)
+        seq.set_editor_property('root_motion_root_lock', unreal.RootMotionRootLock.REF_POSE)
     unreal.AnimationLibrary.remove_all_animation_notify_tracks(seq)
 
     if not unreal.EditorAssetLibrary.save_loaded_asset(seq, False):

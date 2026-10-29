@@ -62,6 +62,27 @@ braced knockdowns), `RPGPhysicsReactionComponent.cpp` (brace motors), `RPGAnimIn
 `RPG.Combat.PhysicsReaction`, `RPG.Power.Calibration`, `RPG.Power.DummyLaunch` need the old `ARPGCombatTestDummy`, which
 L_DummyField doesn't have: they stop at setup (same as the known `RPG.Combat.TestDummy`).
 
-## Not done
+## Knee-down catches (stage 3)
 
-Knee-down catch (stage 3): needs the user's phone footage (or hand-keyed poses in Unreal).
+Hand-keyed (the user chose keyed poses over footage), built into Unreal assets: `RPG_Catch_Knee{Fwd,Back}_{Recover,Fall}_{Soft,Mid,Hard}`
+in `/Game/RPG/Animations/SK_UEFN_Mannequin` (root motion). Author: `Tools/ProtoAnim/kneecatch.py`
+(`RPG_SKEL=uefn python kneecatch.py` with UE's Python -> `kneecatch_uefn.json`, stick sheets in `previews/`), import:
+`ue_import.py` with `RPG_CLIP_FILE=.../kneecatch_uefn.json RPG_IMPORT_ONLY=RPG_Catch_` (clips marked `root_motion` keep their root).
+
+- Forward: lurch, stumble step with the left foot, right knee down where the right foot stood (its ball pinned, the foot
+  turning about it), left hand braced on the left knee, right arm out; rise in two pushes, the back foot lifts and steps
+  through, idle. Backward: recoil, the right foot lifts and steps back, kneels behind. Fall versions tip over the knee /
+  sit back, then the braced ragdoll takes over.
+- Soft / Mid / Hard: stumble steps 40 / 46 / 52 cm (backward: deeper step back), faster for harder.
+- Layered on every clip: head and chest lag and settle, landing dip, decaying balance wobble, breathing, a 1-2 mm effort
+  tremble in the bracing hand, a two-push rise.
+- **Realism gate** `Tools/ProtoAnim/realism.py` (every frame, zero findings to pass): human joint ranges and capsule
+  clipping (getupcheck), wrist sideways, knees over their feet, elbows never pointing forward on a hanging arm, nothing
+  into the floor, planted feet never skating, no IK flips, no snaps or same-way pauses except at declared contacts.
+- In game (`URPGHitOutcomeComponent::TryKneeCatch`): a catch falling forward / back (up to 60 deg off; the body turns into
+  the fall over 0.25 s) becomes a knee-down one, always on a leg hit, else half the time. The hit's force across the
+  catch band plus the body's own speed that way pick Soft / Mid / Hard, the play rate is tuned 0.94-1.06x within it. A
+  failed catch hands the braced ragdoll the hips' tracked velocity.
+- Review: `Tools/Blender/clip_review_video.py` (six-angle video + sheet for any clip; the punch pipeline otherwise).
+
+Known: a failed catch falls gently (~0.6 m/s): the tipping clips end with the hips nearly still.

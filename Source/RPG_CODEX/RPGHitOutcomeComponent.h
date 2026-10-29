@@ -57,6 +57,40 @@ public:
 	/** Is it out cold (no health left)? A knockdown then falls fully limp. */
 	bool IsKnockedOut() const;
 
+	/**
+	 * Knee-down catch (hand-keyed clips RPG_Catch_Knee{Fwd,Back}_{Recover,Fall}_{Soft,Mid,Hard}): for a fall forward or
+	 * back (up to KneeCatchAlignment off straight; the body turns into the fall as it stumbles) it stumbles a step and
+	 * drops onto a knee with a hand braced on the front knee - always for a leg hit (the knee buckles), else KneeCatchShare
+	 * of the time. The momentum picks the clip: the hit's force (its reaction level across the catch band) plus how fast
+	 * the body was already moving that way choose Soft / Mid / Hard (a shorter, slower stumble or a longer, faster one),
+	 * and the play rate is tuned within the band. Root motion carries the body. bFalls = the catch fails: as the clip runs
+	 * out the body goes down in the braced ragdoll carrying the hips' actual velocity. Returns the montage, or null when
+	 * this catch isn't a knee-down one (the arms-out stumble instead).
+	 */
+	class UAnimMontage* TryKneeCatch(const FVector& FallDirection, bool bFalls, const FRPGPowerResult& Result);
+	/** 0-1: how hard the body is being driven over (the catch band of the reaction level + its own speed that way). */
+	float CatchIntensity(const FRPGPowerResult& Result, const FVector& FallDirection) const;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Hit Outcome", meta = (ClampMin = "0", ClampMax = "1"))
+	float KneeCatchShare = 0.5f;
+	/** How square to the body (forward / back) a fall must be for a knee-down catch (cosine). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Hit Outcome", meta = (ClampMin = "0", ClampMax = "1"))
+	float KneeCatchAlignment = 0.5f;
+	/** Seconds the body takes to turn square into the fall at the start of a knee-down catch. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Hit Outcome", meta = (ClampMin = "0.01"))
+	float KneeTurnTime = 0.25f;
+	/** What the last knee-down catch chose (tests, debug). */
+	FName LastKneeClip;
+	float LastKneeRate = 1.f;
+	float LastKneeIntensity = 0.f;
+	FVector LastKneeFallVelocity = FVector::ZeroVector;
+	/** Tests: 1 = always a knee-down catch when the fall allows one, -1 = never, 0 = by the rules above. */
+	int32 TestKneeCatch = 0;
+	int32 KneeCatchCount = 0;
+	int32 KneeFallCount = 0;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ActiveKneeCatch;
+
 	/** About to go down: arms brace toward FallDirection and the ragdoll fights the fall, unless knocked out (fully limp). */
 	void BeginFall(const FVector& FallDirection, bool bKnockedOut);
 
@@ -117,6 +151,14 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UAnimSequence>> ReachClips;   // forward, back, left, right
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UAnimSequence>> KneeClips;    // [direction (fwd, back)][outcome (recover, fall)][strength (soft, mid, hard)]
+	FTimerHandle KneeFallTimer;
+	/** Turning into the fall, and the hips' velocity (the momentum a failed catch falls with). */
+	float KneeTurnFrom = 0.f, KneeTurnTo = 0.f, KneeTurnElapsed = 1.f;
+	FVector LastPelvis = FVector::ZeroVector;
+	FVector PelvisVelocity = FVector::ZeroVector;
+	bool bHavePelvis = false;
 	UAnimSequence* BraceA = nullptr;
 	UAnimSequence* BraceB = nullptr;
 	float BraceAlpha = 0.f;

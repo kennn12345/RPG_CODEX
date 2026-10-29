@@ -184,7 +184,7 @@ bool FRPGPowerOutcomesTest::RunTest(const FString& Parameters)
 
 namespace
 {
-	enum class EOutcomeKind : uint8 { Punch, Energy, Bump, Combo, CatchRecover, CatchFail, KnockoutLimp, Downed, Wall, Ledge, FromBehind };
+	enum class EOutcomeKind : uint8 { Punch, Energy, Bump, Combo, CatchRecover, CatchFail, KnockoutLimp, Downed, Wall, Ledge, FromBehind, KneeFwd, KneeBack, KneeFwdFail, KneeAngled };
 	struct FOutcomeCase
 	{
 		const TCHAR* Name;
@@ -210,6 +210,10 @@ namespace
 		{ TEXT("combo_escalates"), EOutcomeKind::Combo, 5.f, 0.f, TEXT("spine_05"), ERPGPowerReaction::Knockback, false },
 		{ TEXT("catch_recovers"), EOutcomeKind::CatchRecover, 5.f, 1.f, TEXT("spine_05"), ERPGPowerReaction::Catch, false },
 		{ TEXT("catch_fails"), EOutcomeKind::CatchFail, 5.f, 1.f, TEXT("spine_05"), ERPGPowerReaction::Knockdown, true },
+		{ TEXT("knee_fwd_recovers"), EOutcomeKind::KneeFwd, 5.f, 1.f, TEXT("spine_05"), ERPGPowerReaction::Catch, false },
+		{ TEXT("knee_back_recovers"), EOutcomeKind::KneeBack, 5.f, 1.f, TEXT("spine_05"), ERPGPowerReaction::Catch, false },
+		{ TEXT("knee_fwd_fails"), EOutcomeKind::KneeFwdFail, 5.f, 1.f, TEXT("spine_05"), ERPGPowerReaction::Knockdown, true },
+		{ TEXT("knee_angled_turns"), EOutcomeKind::KneeAngled, 5.f, 1.f, TEXT("spine_05"), ERPGPowerReaction::Catch, false },
 		{ TEXT("wall_slam"), EOutcomeKind::Wall, 5.f, 0.5f, TEXT("spine_05"), ERPGPowerReaction::Knockback, false },
 		{ TEXT("ledge_fall"), EOutcomeKind::Ledge, 5.f, 0.5f, TEXT("spine_05"), ERPGPowerReaction::Knockback, true },
 		{ TEXT("knockdown_braced"), EOutcomeKind::Punch, 14.f, 0.f, TEXT("spine_05"), ERPGPowerReaction::Knockdown, true },
@@ -320,6 +324,11 @@ namespace
 				N->Stats->SetStatBaseByName(TEXT("Health"), C.Kind == EOutcomeKind::KnockoutLimp ? 1.f : 100.f);
 				N->HitOutcome->TestSeed = 0;
 				N->HitOutcome->ResetPeaks();
+				// Knee-down catches only in their own cases (elsewhere the arms-out stumble, so each case is one outcome).
+				N->HitOutcome->TestKneeCatch = C.Kind == EOutcomeKind::KneeFwd || C.Kind == EOutcomeKind::KneeBack || C.Kind == EOutcomeKind::KneeFwdFail
+					|| C.Kind == EOutcomeKind::KneeAngled ? 1 : -1;
+				StartYaw = float(N->GetActorRotation().Yaw);
+				KneesBefore = N->HitOutcome->KneeCatchCount; KneeFallsBefore = N->HitOutcome->KneeFallCount;
 				Forward = N->GetActorForwardVector().GetSafeNormal2D();
 				if (C.Kind == EOutcomeKind::Ledge)
 				{
@@ -348,7 +357,10 @@ namespace
 			case 1:   // apply the force
 			{
 				if (Now - PhaseStart < 0.3f) return false;
-				const FVector Dir = C.Kind == EOutcomeKind::FromBehind ? Forward : -Forward;
+				// Pushed from behind (forward falls) for the hit from behind and the forward knee-downs.
+				// (angled: pushed from behind but 40 degrees off to the side)
+				const FVector Dir = C.Kind == EOutcomeKind::KneeAngled ? Forward.RotateAngleAxis(40.f, FVector::UpVector)
+					: C.Kind == EOutcomeKind::FromBehind || C.Kind == EOutcomeKind::KneeFwd || C.Kind == EOutcomeKind::KneeFwdFail ? Forward : -Forward;
 				switch (C.Kind)
 				{
 				case EOutcomeKind::Energy:
@@ -389,6 +401,10 @@ namespace
 				}
 				case EOutcomeKind::CatchRecover:
 				case EOutcomeKind::CatchFail:
+				case EOutcomeKind::KneeFwd:
+				case EOutcomeKind::KneeBack:
+				case EOutcomeKind::KneeFwdFail:
+				case EOutcomeKind::KneeAngled:
 				{
 					const FRPGMeleeHitInfo Info = MakePunch(Player, N, C.Bone, Dir, C.Charge);
 					N->HitOutcome->TestSeed = FindSeed(Info, N->HitOutcome, C.Expected);
@@ -426,7 +442,7 @@ namespace
 				}
 				if (C.Kind == EOutcomeKind::Downed && !DownedPelvisBefore.IsZero() && Now - DownedHitAt > 0.4f && DownedMoved < 0.f)
 					DownedMoved = float(FVector::Dist(DownedPelvisBefore, N->GetMesh()->GetBoneLocation(TEXT("pelvis"))));
-				if (Now - PhaseStart < (C.bDown ? 4.5f : 3.f)) return false;
+				if (Now - PhaseStart < (C.bDown ? 4.5f : 3.2f)) return false;
 
 				const ERPGPowerReaction Got = C.Kind == EOutcomeKind::Bump ? N->BodyImpact->GetLastBumpReaction() : N->LastPowerResult.Reaction;
 				const bool bWentDown = bSawLimp || bSawDown;
@@ -462,6 +478,33 @@ namespace
 					bReactionOk &= bSawUnbracedLimp && !bSawBraced && N->HitOutcome->LimpFallCount > LimpFallsBefore;
 					Extra = FString::Printf(TEXT(" fully limp %d, braced %d"), bSawUnbracedLimp, bSawBraced);
 					break;
+				case EOutcomeKind::KneeFwd:
+				case EOutcomeKind::KneeBack:
+				{
+					const FString Clip = N->HitOutcome->LastKneeClip.ToString();
+					const bool bRightClip = Clip.Contains(C.Kind == EOutcomeKind::KneeFwd ? TEXT("KneeFwd_Recover") : TEXT("KneeBack_Recover"));
+					bReactionOk &= N->HitOutcome->KneeCatchCount > KneesBefore && N->HitOutcome->KneeFallCount == KneeFallsBefore && !bWentDown && bRightClip;
+					Extra = FString::Printf(TEXT(" %s at %.2fx (intensity %.2f), recovered"), *Clip, N->HitOutcome->LastKneeRate, N->HitOutcome->LastKneeIntensity);
+					break;
+				}
+				case EOutcomeKind::KneeFwdFail:
+				{
+					// it falls with its own momentum: forward, at a real speed
+					const FVector V = N->HitOutcome->LastKneeFallVelocity;
+					const bool bMomentum = V.Size2D() > 50.f && FVector::DotProduct(V.GetSafeNormal2D(), Forward) > 0.3f;
+					bReactionOk &= N->HitOutcome->KneeCatchCount > KneesBefore && N->HitOutcome->KneeFallCount > KneeFallsBefore && FirstLimpAt >= 0.85f && bSawBraced
+						&& N->HitOutcome->LastKneeClip.ToString().Contains(TEXT("KneeFwd_Fall")) && bMomentum;
+					Extra = FString::Printf(TEXT(" %s, went down after %.2f s, braced %d, fell at %.0f cm/s"), *N->HitOutcome->LastKneeClip.ToString(), FirstLimpAt, bSawBraced, V.Size());
+					break;
+				}
+				case EOutcomeKind::KneeAngled:
+				{
+					// squared up into the fall: turned ~40 degrees toward it
+					const float Turned = FMath::FindDeltaAngleDegrees(StartYaw, float(N->GetActorRotation().Yaw));
+					bReactionOk &= N->HitOutcome->KneeCatchCount > KneesBefore && FMath::Abs(Turned - 40.f) < 12.f && !bWentDown;
+					Extra = FString::Printf(TEXT(" %s, turned %.0f deg into a fall 40 deg off"), *N->HitOutcome->LastKneeClip.ToString(), Turned);
+					break;
+				}
 				case EOutcomeKind::FromBehind:
 					bReactionOk &= N->LastPowerResult.ReactionLevel > N->LastPowerResult.RelativePower * 1.1f;
 					Extra = FString::Printf(TEXT(" level %.1f from relative %.1f"), N->LastPowerResult.ReactionLevel, N->LastPowerResult.RelativePower);
@@ -513,6 +556,8 @@ namespace
 		TMap<FString, float> Moved;
 		TArray<float> Levels;
 		FVector StartSpot = FVector::ZeroVector, Forward = FVector::ForwardVector, DownedPelvisBefore = FVector::ZeroVector;
+		int32 KneesBefore = 0, KneeFallsBefore = 0;
+		float StartYaw = 0.f;
 		int32 Frames = 0, Case = 0, Phase = 0, BumpsBefore = 0, Shots = 0, CatchFallsBefore = 0, WallsBefore = 0, LedgesBefore = 0, DownedBefore = 0, LimpFallsBefore = 0;
 		float PhaseStart = 0.f, HitAt = 0.f, MaxMoved = 0.f, LastShot = -10.f, FirstLimpAt = -1.f, DownedHitAt = 0.f, DownedMoved = -1.f;
 		bool bSawLimp = false, bSawDown = false, bApplied = false, bAllOk = true, bSawBraced = false, bSawUnbracedLimp = false;
@@ -520,12 +565,13 @@ namespace
 
 	// ---------------- The player: the same outcomes through URPGHitOutcomeComponent ----------------
 
-	enum class EPlayerCase : uint8 { Stagger, Knockback, Catch, Knockdown, EnergyTap, BumpKnockback };
+	enum class EPlayerCase : uint8 { Stagger, Knockback, Catch, Knockdown, EnergyTap, BumpKnockback, KneeCatch };
 	struct FPlayerCase { const TCHAR* Name; EPlayerCase Kind; float Strength; float Charge; ERPGPowerReaction Expected; bool bDown; };
 	const FPlayerCase PlayerCases[] = {
 		{ TEXT("player_stagger"), EPlayerCase::Stagger, 5.f, 0.f, ERPGPowerReaction::Stagger, false },
 		{ TEXT("player_knockback"), EPlayerCase::Knockback, 5.f, 0.5f, ERPGPowerReaction::Knockback, false },
 		{ TEXT("player_catch"), EPlayerCase::Catch, 5.f, 1.f, ERPGPowerReaction::Catch, false },
+		{ TEXT("player_knee_catch"), EPlayerCase::KneeCatch, 5.f, 1.f, ERPGPowerReaction::Catch, false },
 		{ TEXT("player_energy_tap"), EPlayerCase::EnergyTap, 5.f, 0.f, ERPGPowerReaction::Stagger, false },
 		{ TEXT("player_bumped"), EPlayerCase::BumpKnockback, 5.f, 0.f, ERPGPowerReaction::Knockback, false },
 		{ TEXT("player_knockdown"), EPlayerCase::Knockdown, 14.f, 0.f, ERPGPowerReaction::Knockdown, true },
@@ -572,6 +618,8 @@ namespace
 				Player->GetCharacterMovement()->StopMovementImmediately();
 				Outcome->TestSeed = 0;
 				Outcome->ResetPeaks();
+				Outcome->TestKneeCatch = C.Kind == EPlayerCase::KneeCatch ? 1 : -1;
+				KneesBefore = Outcome->KneeCatchCount;
 				Forward = Player->GetActorForwardVector().GetSafeNormal2D();
 				StartSpot = Player->GetActorLocation();
 				// The NPC stands in front of the player, out of reach.
@@ -598,7 +646,7 @@ namespace
 				else
 				{
 					const FRPGMeleeHitInfo Info = MakePunch(N, Player, TEXT("spine_05"), Dir, C.Charge);
-					if (C.Kind == EPlayerCase::Catch) Outcome->TestSeed = FindSeed(Info, Outcome, ERPGPowerReaction::Catch);
+					if (C.Kind == EPlayerCase::Catch || C.Kind == EPlayerCase::KneeCatch) Outcome->TestSeed = FindSeed(Info, Outcome, ERPGPowerReaction::Catch);
 					Outcome->ReceiveMeleeHit(Info);
 				}
 				HitAt = Now;
@@ -611,10 +659,11 @@ namespace
 				MaxMoved = FMath::Max(MaxMoved, float(FVector::Dist2D(Player->GetActorLocation(), StartSpot)));
 				bSawLimp |= bLimp || (Impact && Impact->IsDown());
 				if (bLimp && Reaction->GetBraceStrength() > 0.5f && Outcome->GetBraceWeight() > 0.9f) bSawBraced = true;
-				if (Now - PhaseStart < (C.bDown ? 5.f : 2.f)) return false;
+				if (Now - PhaseStart < (C.bDown ? 5.f : C.Kind == EPlayerCase::KneeCatch ? 3.2f : 2.f)) return false;
 				const ERPGPowerReaction Got = Outcome->LastResult.Reaction;
 				bool bOk = bSawLimp == C.bDown && (C.bDown ? (Got >= ERPGPowerReaction::Knockdown && bSawBraced && Outcome->FallCount > FallsBefore) : Got == C.Expected) && MaxMoved > 3.f;
 				if (C.Kind == EPlayerCase::Catch) bOk &= Outcome->PeakBrace > 0.6f;
+				if (C.Kind == EPlayerCase::KneeCatch) bOk &= Outcome->KneeCatchCount > KneesBefore;
 				bAllOk &= bOk;
 				const FString Line = FString::Printf(TEXT("PLAYEROUTCOME %s  %-18s expected %-9s got %-9s down %d braced %d moved %.0f cm arms out %.2f"), bOk ? TEXT("PASS") : TEXT("FAIL"), C.Name,
 					*UEnum::GetDisplayValueAsText(C.Expected).ToString(), *UEnum::GetDisplayValueAsText(Got).ToString(), bSawLimp, bSawBraced, MaxMoved, Outcome->PeakBrace);
@@ -635,7 +684,7 @@ namespace
 		TWeakObjectPtr<ARPGNpcCharacter> Attacker;
 		FOutcomeFilm Film;
 		FVector StartSpot = FVector::ZeroVector, Forward = FVector::ForwardVector;
-		int32 Frames = 0, Case = 0, Phase = 0, FallsBefore = 0;
+		int32 Frames = 0, Case = 0, Phase = 0, FallsBefore = 0, KneesBefore = 0;
 		float PhaseStart = 0.f, HitAt = 0.f, MaxMoved = 0.f;
 		bool bSawLimp = false, bSawBraced = false, bAllOk = true;
 	};

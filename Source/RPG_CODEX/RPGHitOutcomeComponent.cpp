@@ -12,6 +12,8 @@
 #include "RPGPowerSystem.h"
 #include "RPGPrototypeAnimationComponent.h"
 #include "RPG_CODEX.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -26,6 +28,12 @@ namespace
 {
 	/** GASP's ragdoll reach poses (UEFN mannequin): arms out toward the fall. Forward, back, left, right. */
 	const TCHAR* ReachClipNames[] = { TEXT("M_ragdoll_reach_forward"), TEXT("M_ragdoll_reach_back"), TEXT("M_ragdoll_reach_left"), TEXT("M_ragdoll_reach_right") };
+
+	/** The hand-keyed knee-down catches (Tools/ProtoAnim/kneecatch.py), in KneeClips order. */
+	const TCHAR* KneeDirections[] = { TEXT("Fwd"), TEXT("Back") };
+	const TCHAR* KneeOutcomes[] = { TEXT("Recover"), TEXT("Fall") };
+	const TCHAR* KneeStrengths[] = { TEXT("Soft"), TEXT("Mid"), TEXT("Hard") };
+	int32 KneeIndex(int32 Direction, int32 Outcome, int32 Strength) { return (Direction * 2 + Outcome) * 3 + Strength; }
 
 	bool IsBodyShotBone(FName Bone)
 	{
@@ -44,6 +52,13 @@ void URPGHitOutcomeComponent::BeginPlay()
 	Super::BeginPlay();
 	for (const TCHAR* Name : ReachClipNames)
 		ReachClips.Add(LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/%s.%s"), Name, Name)));
+	for (const TCHAR* Direction : KneeDirections)
+		for (const TCHAR* Outcome : KneeOutcomes)
+			for (const TCHAR* Strength : KneeStrengths)
+			{
+				const FString Name = FString::Printf(TEXT("RPG_Catch_Knee%s_%s_%s"), Direction, Outcome, Strength);
+				KneeClips.Add(LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/RPG/Animations/SK_UEFN_Mannequin/%s.%s"), *Name, *Name)));
+			}
 }
 
 ACharacter* URPGHitOutcomeComponent::GetCharacter() const { return Cast<ACharacter>(GetOwner()); }
@@ -134,6 +149,68 @@ void URPGHitOutcomeComponent::StartBend(float Degrees, float Hold, float Fade)
 	BendTarget = FMath::Max(BendTarget * (BendHold > 0.f ? 1.f : 0.f), Degrees);
 	BendHold = Hold;
 	BendFade = FMath::Max(Fade, 0.05f);
+}
+
+float URPGHitOutcomeComponent::CatchIntensity(const FRPGPowerResult& Result, const FVector& FallDirection) const
+{
+	const URPGPowerSettings* S = URPGPowerSettings::Get();
+	// Where the hit sits in the catch band (just knocked off balance .. nearly a straight knockdown)...
+	const float Band = FMath::Max(S->KnockdownCertainLevel - S->KnockdownStartLevel, 0.1f);
+	const float Force = (Result.ReactionLevel - S->KnockdownStartLevel) / Band;
+	// ...plus the body's own momentum the same way (running into the fall carries it further).
+	const ACharacter* Character = GetCharacter();
+	const float Carried = Character ? FMath::Max(0.f, float(FVector::DotProduct(Character->GetVelocity(), FallDirection.GetSafeNormal2D()))) / 500.f : 0.f;
+	return FMath::Clamp(Force + Carried, 0.f, 1.f);
+}
+
+UAnimMontage* URPGHitOutcomeComponent::TryKneeCatch(const FVector& FallDirection, bool bFalls, const FRPGPowerResult& Result)
+{
+	ACharacter* Character = GetCharacter();
+	UAnimInstance* Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	if (!Anim || KneeClips.Num() < 12 || TestKneeCatch < 0) return nullptr;
+	const FVector Dir = FallDirection.GetSafeNormal2D();
+	const float Along = float(FVector::DotProduct(Dir, Character->GetActorForwardVector().GetSafeNormal2D()));
+	if (FMath::Abs(Along) < KneeCatchAlignment) return nullptr;
+	if (TestKneeCatch == 0 && Result.HitZone != ERPGHitZone::Leg && FMath::FRand() >= KneeCatchShare) return nullptr;
+	// The momentum chooses: soft / mid / hard by intensity thirds, and the rate within the third (0.94 .. 1.06).
+	const float Intensity = CatchIntensity(Result, Dir);
+	const int32 Strength = FMath::Clamp(int32(Intensity * 3.f), 0, 2);
+	const float Within = Intensity * 3.f - float(Strength);
+	const float Rate = FMath::Lerp(0.94f, 1.06f, FMath::Clamp(Within, 0.f, 1.f));
+	const bool bForward = Along > 0.f;
+	UAnimSequence* Clip = KneeClips[KneeIndex(bForward ? 0 : 1, bFalls ? 1 : 0, Strength)];
+	if (!Clip) return nullptr;
+	// The clip carries the body (root motion) and holds its own arms: no push, no brace overlay on top.
+	BraceTarget = BraceWeight = 0.f; BraceHold = 0.f;
+	UAnimMontage* Montage = Anim->PlaySlotAnimationAsDynamicMontage(Clip, TEXT("DefaultSlot"), 0.12f, bFalls ? 0.05f : 0.3f, Rate);
+	if (!Montage) return nullptr;
+	ActiveKneeCatch = Montage;
+	++KneeCatchCount;
+	LastKneeClip = Clip->GetFName();
+	LastKneeRate = Rate;
+	LastKneeIntensity = Intensity;
+	// Square into the fall over KneeTurnTime: falling forward it faces the way it goes, falling back it faces away.
+	KneeTurnFrom = float(Character->GetActorRotation().Yaw);
+	KneeTurnTo = float((bForward ? Dir : -Dir).Rotation().Yaw);
+	KneeTurnElapsed = 0.f;
+	bHavePelvis = false;
+	if (bFalls && GetWorld())
+	{
+		// It doesn't hold: as the clip runs out (tipping over / sitting back) the body goes down, still fighting it, with
+		// the momentum its hips actually have then.
+		GetWorld()->GetTimerManager().SetTimer(KneeFallTimer, FTimerDelegate::CreateWeakLambda(this, [this, Dir]()
+		{
+			ACharacter* Character = GetCharacter();
+			if (!Character) return;
+			++KneeFallCount;
+			if (UAnimInstance* Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr) Anim->Montage_Stop(0.05f, ActiveKneeCatch);
+			ActiveKneeCatch = nullptr;
+			LastKneeFallVelocity = bHavePelvis ? PelvisVelocity + Dir * 60.f : Dir * 220.f;
+			Fall(LastKneeFallVelocity, Character->GetMesh()->GetBoneLocation(TEXT("pelvis")));
+		}), FMath::Max(0.05f, Clip->GetPlayLength() / Rate - 0.04f), false);
+	}
+	UE_LOG(LogRPGInput, Log, TEXT("%s: knee-down catch %s at %.2fx (intensity %.2f)"), *GetOwner()->GetActorNameOrLabel(), *Clip->GetName(), Rate, Intensity);
+	return Montage;
 }
 
 void URPGHitOutcomeComponent::BeginFall(const FVector& FallDirection, bool bKnockedOut)
@@ -232,9 +309,10 @@ void URPGHitOutcomeComponent::ApplyResult(const FRPGPowerResult& Result, const F
 		Shake(0.5f);
 		break;
 	case ERPGPowerReaction::Catch:
+		Shake(0.6f);
+		if (TryKneeCatch(Dir, false, Result)) break;
 		Push(Dir * FMath::Max(KnockbackPush, float(Shove.Size())));
 		StartBrace(Dir, 0.85f, 0.6f, 0.5f);
-		Shake(0.6f);
 		break;
 	default:   // Knockdown / Launch
 	{
@@ -242,6 +320,7 @@ void URPGHitOutcomeComponent::ApplyResult(const FRPGPowerResult& Result, const F
 		Shake(Result.Reaction == ERPGPowerReaction::Launch ? 1.f : 0.8f);
 		const bool bTriedToCatch = Result.bCatch && Result.Reaction == ERPGPowerReaction::Knockdown
 			&& Result.ReactionLevel < URPGPowerSettings::Get()->KnockdownCertainLevel && !IsKnockedOut();
+		if (bTriedToCatch && TryKneeCatch(Dir, true, Result)) break;
 		if (bTriedToCatch && GetWorld())
 		{
 			// It tries to catch itself and falls while trying: stumbles with its arms out, then goes down.
@@ -328,6 +407,27 @@ void URPGHitOutcomeComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	if (!World) return;
 	const float Now = World->GetTimeSeconds();
 	const URPGPowerSettings* S = URPGPowerSettings::Get();
+
+	// A knee-down catch: turning square into the fall, and the hips' velocity (what a failed catch falls with).
+	if (ActiveKneeCatch)
+	{
+		if (ACharacter* Character = GetCharacter())
+		{
+			if (KneeTurnElapsed < KneeTurnTime)
+			{
+				KneeTurnElapsed = FMath::Min(KneeTurnElapsed + DeltaTime, KneeTurnTime);
+				const float A = FMath::SmoothStep(0.f, 1.f, KneeTurnElapsed / KneeTurnTime);
+				FRotator R = Character->GetActorRotation();
+				R.Yaw = KneeTurnFrom + FMath::FindDeltaAngleDegrees(KneeTurnFrom, KneeTurnTo) * A;
+				Character->SetActorRotation(R);
+			}
+			const FVector Pelvis = Character->GetMesh()->GetBoneLocation(TEXT("pelvis"));
+			if (bHavePelvis && DeltaTime > 0.f) PelvisVelocity = FMath::Lerp(PelvisVelocity, (Pelvis - LastPelvis) / DeltaTime, 0.5f);
+			LastPelvis = Pelvis; bHavePelvis = true;
+		}
+		if (const UAnimInstance* Anim = GetCharacter() && GetCharacter()->GetMesh() ? GetCharacter()->GetMesh()->GetAnimInstance() : nullptr)
+			if (!Anim->Montage_IsActive(ActiveKneeCatch)) ActiveKneeCatch = nullptr;
+	}
 
 	// Balance comes back a moment after the last hit.
 	if (Now - LastHitTime > S->BalanceRefillDelay) Balance = FMath::Min(1.f, Balance + DeltaTime / S->BalanceRefillTime);
