@@ -187,7 +187,8 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	const float TargetYaw = FMath::Clamp(Twist, -MaxTorsoYaw, MaxTorsoYaw) * (bKick ? KickTorsoShare : 1.f);
 	const float TargetPitch = bKick ? 0.f : FMath::Clamp(RawPitch, -MaxAimPitchDown, MaxAimPitchUp);
 	// The body's visible aim follows the raw aim smoothly (the reticle never lags; gameplay data uses the raw aim).
-	const bool bStriking = State && State->AttackPhase == ERPGAttackPhase::Strike;
+	// (from the wind-up: the filmed punches' 0.16 s load is too short for the calm follow to finish turning)
+	const bool bStriking = State && (State->AttackPhase == ERPGAttackPhase::Strike || State->AttackPhase == ERPGAttackPhase::Windup);
 	const float Rate = bStriking ? StrikeAimSmoothing : (bFirstPerson ? FirstPersonAimSmoothing : ThirdPersonAimSmoothing);
 	const float Follow = Rate > 0.f ? 1.f - FMath::Exp(-Rate * DeltaTime) : 1.f;
 	SmoothedYaw += (TargetYaw - SmoothedYaw) * Follow;

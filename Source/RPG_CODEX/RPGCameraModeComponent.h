@@ -54,19 +54,29 @@ public:
 	float FirstPersonSmoothing = 25.f;
 
 	/**
-	 * Third person while fighting or casting: the camera eases this much further (spring-arm socket offset: X forward,
-	 * Y right, Z up) on top of ThirdPersonViewOffset. Zero to turn off.
+	 * Third person while a spell is held / cast: the camera eases this much further (spring-arm socket offset: X
+	 * forward, Y right, Z up) on top of ThirdPersonViewOffset, over the right shoulder, so the character never covers
+	 * distant targets. The view turns with it to keep the reticle on the same spot. Melee doesn't use it: the
+	 * reticle's line then runs beside the body, and punches would land only on enemies to the right. Zero to turn off.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera")
-    FVector ThirdPersonCombatOffset = FVector(0.f, 0.f, 15.f);
+    FVector ThirdPersonCombatOffset = FVector(0.f, 40.f, 0.f);
 
     /**
-     * Over-the-shoulder framing at all times, added to the original boom socket offset: far enough right that the
-     * character never covers the reticle (25 cm hid distant targets behind the head), and the same sideways place in
-     * and out of a fight, so starting a cast doesn't slide the reticle across the view.
+     * Framing when exploring and in melee, added to the original boom socket offset: nearly straight behind (a little
+     * right, so far targets clear the head), raised so the character sits below the reticle. The reticle's line runs
+     * almost through the body, so punches land straight ahead and enemies can be fought from any side.
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera")
-    FVector ThirdPersonViewOffset = FVector(0.f,60.f,45.f);
+    FVector ThirdPersonViewOffset = FVector(0.f,20.f,60.f);
+
+    /** Seconds the casting camera stays over the shoulder after the last spell. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera", meta = (ClampMin = "0"))
+    float SpellCameraHold = 1.f;
+
+    /** While the camera moves between framings, the view turns to keep the spot under the reticle; looked for this far. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera", meta = (ClampMin = "100"))
+    float ReticleHoldRange = 6000.f;
 
     /** Speed presentation only during third-person flight; restored when flight ends. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera|Flight")
@@ -111,6 +121,13 @@ private:
     void ClearFlightPresentation();
     float FlightArmOffset = 0.f, FlightFOVOffset = 0.f;
     float CombatCameraWeight = 0.f;
+    float LastSpellTime = -100.f;
+    /** While active, turns the view so the spot under the reticle stays under it as the camera moves. */
+    void HoldReticleSpot(bool bActive);
+    float ReticleHoldTime = 0.f;
+    bool bHoldingReticleSpot = false;
+    FVector HeldReticleSpot = FVector::ZeroVector;
+    FRotator HeldViewRotation = FRotator::ZeroRotator;
     float ReferenceEyeWeight = 0.f;
 	USpringArmComponent* GetCameraBoom() const;
 	class UCameraComponent* GetCamera() const;

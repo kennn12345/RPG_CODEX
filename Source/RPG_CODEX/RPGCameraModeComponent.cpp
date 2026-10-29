@@ -223,6 +223,34 @@ FVector URPGCameraModeComponent::GetFirstPersonEyeTarget() const
 	return GetOwner()->GetActorTransform().InverseTransformPosition(MeshToWorld.TransformPosition(Eye));
 }
 
+void URPGCameraModeComponent::HoldReticleSpot(bool bActive)
+{
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+	APlayerController* Player = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	const UCameraComponent* Camera = GetCamera();
+	if (!bActive || !Player || !Camera)
+	{
+		bHoldingReticleSpot = false;
+		return;
+	}
+	// Where the camera actually is this frame (the arm may lag behind its offset), looking along the view.
+	const FRotator View = Player->GetControlRotation();
+	const FVector Eye = Camera->GetComponentLocation();
+	if (!bHoldingReticleSpot || !View.Equals(HeldViewRotation, 0.01f))
+	{
+		// Starting, or the player turned the view: hold what is under the reticle now (the first thing along the view,
+		// else far down it).
+		HeldReticleSpot = Eye + View.Vector() * ReticleHoldRange;
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, HeldReticleSpot, ECC_Visibility, FCollisionQueryParams(SCENE_QUERY_STAT(RPGReticleHold), false, GetOwner())))
+			HeldReticleSpot = Hit.ImpactPoint;
+		bHoldingReticleSpot = true;
+	}
+	const FRotator Kept = (HeldReticleSpot - Eye).Rotation();
+	HeldViewRotation = FRotator(Kept.Pitch, Kept.Yaw, View.Roll);
+	Player->SetControlRotation(HeldViewRotation);
+}
+
 void URPGCameraModeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -230,18 +258,25 @@ void URPGCameraModeComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	if (!bIsFirstPerson)
 	{
         UpdateFlightPresentation(DeltaTime);
-        // Raised shoulder view: keep the player below/left of the reticle, including spell aiming.
-		const URPGCombatAimComponent* Aim = GetOwner()->FindComponentByClass<URPGCombatAimComponent>();
+        // Nearly straight behind for exploring and melee; over the right shoulder while casting.
 		USpringArmComponent* Boom = GetCameraBoom();
 		if (Boom && !bIsAdjustingCamera)
 		{
             const URPGEnergySpellComponent* Spells=GetOwner()->FindComponentByClass<URPGEnergySpellComponent>();
-            const float SpellWeight=Spells?FMath::Max(Spells->Left.PoseWeight,Spells->Right.PoseWeight):0.f;
-            const float Desired=FMath::Max(Aim?Aim->AimAlpha:0.f,SpellWeight);
+            const float Now=GetWorld()->GetTimeSeconds();
+            if(Spells && Spells->IsAiming())LastSpellTime=Now;
+            // Held a moment after a cast, so a run of taps doesn't swing the camera back and forth.
+            const float Desired=Now-LastSpellTime<SpellCameraHold?1.f:0.f;
             CombatCameraWeight=FMath::Lerp(CombatCameraWeight,Desired,1.f-FMath::Exp(-DeltaTime/0.15f));
             if(Desired==0.f && CombatCameraWeight<0.001f)CombatCameraWeight=0.f;
             const float Alpha=FMath::SmoothStep(0.f,1.f,CombatCameraWeight);
-            Boom->SocketOffset = SavedSocketOffset + ThirdPersonViewOffset + ThirdPersonCombatOffset * Alpha;
+            const FVector Offset=SavedSocketOffset + ThirdPersonViewOffset + ThirdPersonCombatOffset * Alpha;
+            // While the camera slides between framings (and a moment after, as the arm catches up), the view turns to keep
+            // the reticle on the spot it was on: a quick cast lands where it was aimed when pressed.
+            if(!Offset.Equals(Boom->SocketOffset,0.01f))ReticleHoldTime=0.4f;
+            else ReticleHoldTime=FMath::Max(0.f,ReticleHoldTime-DeltaTime);
+            HoldReticleSpot(ReticleHoldTime>0.f);
+            Boom->SocketOffset = Offset;
 		}
 		return;
 	}
