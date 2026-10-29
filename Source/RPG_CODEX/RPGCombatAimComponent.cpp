@@ -108,14 +108,17 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	const FVector ViewDirection = ViewRotation.Vector();
 	bool bOnTarget = false;
 	FVector StrikePoint=NaturalStrikePoint;
+	FVector StrikeFrom=StrikePivot;
 	// Each reconstructed fist has its own delivery line. Measure that line for
 	// both hands/views, while retaining the established target acquisition range.
 	const bool bReferenceStrike=Animation && Animation->IsReferencePunchPlaying() && Animation->GetReferenceStrikePoint(StrikePoint);
+	// The filmed punches: where this punch's fist lands with no aim, read from its clip (both hands' midpoint between punches).
+	const bool bFilmedStrike=!bReferenceStrike && Animation && Animation->GetFilmedStrikePoint(StrikePoint,StrikeFrom);
 	FVector AimPoint = FindAimPoint(Character, ViewLocation, ViewDirection, bFirstPerson, bOnTarget);
-	if(bReferenceStrike && !bFirstPerson && !bOnTarget)
+	if((bReferenceStrike || bFilmedStrike) && !bFirstPerson && !bOnTarget)
 	{
 		const FTransform& MeshToWorld=Character->GetMesh()->GetComponentTransform();
-		const FVector Pivot=MeshToWorld.TransformPosition(StrikePivot),Natural=MeshToWorld.TransformPosition(StrikePoint);
+		const FVector Pivot=MeshToWorld.TransformPosition(StrikeFrom),Natural=MeshToWorld.TransformPosition(StrikePoint);
 		const float Turn=FRotator::NormalizeAxis(ViewRotation.Yaw-(Natural-Pivot).Rotation().Yaw);
 		AimPoint=Pivot+FQuat(FVector::UpVector,FMath::DegreesToRadians(Turn)).RotateVector(Natural-Pivot);
 	}
@@ -131,12 +134,12 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		}
 		// From the eyes in first person (the chest tilts about them), from the spine in third person.
 		const FTransform& MeshToWorld = Character->GetMesh()->GetComponentTransform();
-		const FVector From = bEyePivot ? ViewLocation : MeshToWorld.TransformPosition(StrikePivot);
+		const FVector From = bEyePivot ? ViewLocation : MeshToWorld.TransformPosition(StrikeFrom);
 		const FVector NaturalPoint = MeshToWorld.TransformPosition(StrikePoint);
 		const FRotator Natural = (NaturalPoint - From).Rotation();
 		const FRotator Wanted = (AimPoint - From).Rotation();
 		OutYaw = FRotator::NormalizeAxis(Wanted.Yaw - Natural.Yaw);
-		const float Radius=bReferenceStrike?FMath::Max(10.f,float((NaturalPoint-From).Size2D())):ThirdPersonStrikeRadius;
+		const float Radius=bReferenceStrike || bFilmedStrike?FMath::Max(10.f,float((NaturalPoint-From).Size2D())):ThirdPersonStrikeRadius;
 		OutPitch = bFirstPerson ? FRotator::NormalizeAxis(Wanted.Pitch - Natural.Pitch)
 			: FMath::RadiansToDegrees(FMath::Atan2(AimPoint.Z - NaturalPoint.Z, Radius));
 	};
@@ -190,7 +193,7 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	}
 	if (State)
 	{
-		const FVector From = bEyePivot ? ViewLocation : MeshToWorld.TransformPosition(StrikePivot);
+		const FVector From = bEyePivot ? ViewLocation : MeshToWorld.TransformPosition(StrikeFrom);
 		const FRotator Natural = (MeshToWorld.TransformPosition(StrikePoint) - From).Rotation();
 		// Gameplay aim: the raw (clamped) aim, never the smoothed body. The visible body's own turn is published apart.
 		State->AttackAimPoint = AimPoint;

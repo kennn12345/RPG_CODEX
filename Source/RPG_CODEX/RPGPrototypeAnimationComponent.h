@@ -245,6 +245,12 @@ public:
     bool IsReferenceChargedPunchPlaying() const { return IsReferencePunchPlaying() && bChargeLoops; }
     bool GetReferenceStrikePoint(FVector& OutPoint) const;
     bool GetReferenceGuardEye(FVector& OutPoint) const;
+    /**
+     * Filmed punches, mesh space, read from the clips at their impact (the view's own presentation): where the fist
+     * lands with no aim and where spine_03 is then (the turn's pivot). For the punch being thrown, or midway between
+     * both hands' landings when none is. False without the filmed clips.
+     */
+    bool GetFilmedStrikePoint(FVector& OutPoint, FVector& OutPivot) const;
 
     /**
      * Editor-only: makes URPGAnimInstance the parent class of ABP_Unarmed (the graph is untouched), so the attack aim can
@@ -284,6 +290,11 @@ private:
     void BuildPresentationMap(const USkeleton* Skeleton);
 
     bool bFirstPersonPresentation = false;
+    /** GetFilmedStrikePoint's samples: [first person][left hand] fist and spine_03 at impact. */
+    mutable FVector FilmedStrikePoints[2][2];
+    mutable FVector FilmedStrikePivots[2][2];
+    mutable bool bFilmedStrikeSampled[2] = {false, false};
+    mutable bool bFilmedStrikeValid[2] = {false, false};
     /** Visible-body montage -> the shadow body's montage mirroring it. */
     UPROPERTY(Transient)
     TMap<TObjectPtr<UAnimMontage>, TObjectPtr<UAnimMontage>> ShadowMontages;

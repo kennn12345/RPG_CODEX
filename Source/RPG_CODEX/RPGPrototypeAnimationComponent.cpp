@@ -591,6 +591,66 @@ bool URPGPrototypeAnimationComponent::GetReferenceStrikePoint(FVector& OutPoint)
     OutPoint=ReferenceImpactPoints[Hand][Tier];return true;
 }
 
+bool URPGPrototypeAnimationComponent::GetFilmedStrikePoint(FVector& OutPoint,FVector& OutPivot) const
+{
+    const auto* Character=Cast<ACharacter>(GetOwner());
+    const auto* Instance=Character && Character->GetMesh()?Character->GetMesh()->GetAnimInstance():nullptr;
+    if (!Instance || !Instance->CurrentSkeleton) return false;
+    const int32 View=bFirstPersonPresentation?1:0;
+    if (!bFilmedStrikeSampled[View])
+    {
+        // Each clip's fist (the knuckles' half of the hand, as the melee sweep sees it) and spine_03 at the impact time:
+        // every bone's local transform from the clip, up through its parents.
+        bFilmedStrikeSampled[View]=true;
+        bFilmedStrikeValid[View]=true;
+        const FReferenceSkeleton& Ref=Instance->CurrentSkeleton->GetReferenceSkeleton();
+        const FAnimExtractContext Context(static_cast<double>(FilmedPunchImpactTime));
+        for (const bool bLeft : {false,true})
+        {
+            UAnimSequence* Clip=CapturedPunchClip(bLeft,0,0,Instance->CurrentSkeleton);
+            if (Clip && View==1)
+            {
+                const TObjectPtr<UAnimSequence>* Presented=FirstPersonClips.Find(Clip);
+                Clip=Presented?Presented->Get():nullptr;
+            }
+            auto Sample=[&](const TCHAR* Name,FVector& Out)
+            {
+                const int32 Index=Ref.FindBoneIndex(Name);
+                if (!Clip || Index==INDEX_NONE) return false;
+                FTransform Bone=FTransform::Identity;
+                for (int32 I=Index;I!=INDEX_NONE;I=Ref.GetParentIndex(I))
+                {
+                    FTransform Local;
+                    Clip->GetBoneTransform(Local,FSkeletonPoseBoneIndex(I),Context,false);
+                    Bone=Bone*Local;
+                }
+                Out=Bone.GetTranslation();
+                return true;
+            };
+            FVector Wrist,Knuckle;
+            if (!Sample(bLeft?TEXT("hand_l"):TEXT("hand_r"),Wrist) || !Sample(bLeft?TEXT("middle_01_l"):TEXT("middle_01_r"),Knuckle)
+                || !Sample(TEXT("spine_03"),FilmedStrikePivots[View][bLeft]))
+            {
+                bFilmedStrikeValid[View]=false;
+                continue;
+            }
+            FilmedStrikePoints[View][bLeft]=FMath::Lerp(Wrist,Knuckle,.55f);
+        }
+    }
+    if (!bFilmedStrikeValid[View]) return false;
+    if (bCapturedPunch && !bChargeIsKick && ChargeHand!=ERPGHand::None)
+    {
+        const bool bLeft=ChargeHand==ERPGHand::Left;
+        OutPoint=FilmedStrikePoints[View][bLeft];OutPivot=FilmedStrikePivots[View][bLeft];
+    }
+    else
+    {
+        OutPoint=(FilmedStrikePoints[View][0]+FilmedStrikePoints[View][1])*.5f;
+        OutPivot=(FilmedStrikePivots[View][0]+FilmedStrikePivots[View][1])*.5f;
+    }
+    return true;
+}
+
 bool URPGPrototypeAnimationComponent::ReleaseCapturedPunch(UAnimInstance* Instance,const FRPGPlayerActionInfo& Info)
 {
     const bool bLeft=Info.Hand==ERPGHand::Left;

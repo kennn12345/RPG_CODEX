@@ -54,15 +54,19 @@ public:
 	float FirstPersonSmoothing = 25.f;
 
 	/**
-	 * Third person while fighting: the camera eases this far over the right shoulder (spring-arm socket offset: X
-	 * forward, Y right, Z up), so the reticle sits beside the character instead of on its back. Zero to turn off.
+	 * Third person while fighting or casting: the camera eases this much further (spring-arm socket offset: X forward,
+	 * Y right, Z up) on top of ThirdPersonViewOffset. Zero to turn off.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera")
-    FVector ThirdPersonCombatOffset = FVector(0.f, 35.f, 25.f);
+    FVector ThirdPersonCombatOffset = FVector(0.f, 0.f, 15.f);
 
-    /** Raised shoulder framing even outside combat. Added to the original boom socket offset. */
+    /**
+     * Over-the-shoulder framing at all times, added to the original boom socket offset: far enough right that the
+     * character never covers the reticle (25 cm hid distant targets behind the head), and the same sideways place in
+     * and out of a fight, so starting a cast doesn't slide the reticle across the view.
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera")
-    FVector ThirdPersonViewOffset = FVector(0.f,25.f,35.f);
+    FVector ThirdPersonViewOffset = FVector(0.f,60.f,45.f);
 
     /** Speed presentation only during third-person flight; restored when flight ends. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Camera|Flight")
