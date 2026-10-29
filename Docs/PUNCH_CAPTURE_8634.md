@@ -99,6 +99,30 @@ Review video: `Tools/Blender` (`export_anim_fbx.py` -> `apply_anim_fbx.py` onto 
 `export_player_fbx.py` / `import_player_blend.py` create -> `render_punch_frames.py`), then the encoder in the work
 folder. Output `Saved/Mocap8634/punches-review.mp4` (60 fps, side and front, normal and quarter speed).
 
+## Follow-through and sketch-driven arm path (user review rounds)
+
+Reviewed with six-angle preview sheets the user marked up by hand (`Tools/Blender/render_punch_frames.py ... all`,
+`Tools/Blender/punch_review_video.py`). Contact is unchanged (straight ahead at the chin); everything around it moved:
+- Follow-through (`FOLLOW_*`): just after contact the fist carries on ~9 cm forward and ~6 cm down while the
+  striking shoulder drives forward and the torso pitches and rolls down over it. The strike arrives with speed
+  (2u^2-u^3) instead of easing to a stop on the target.
+- Wind-up (`wound_arm`): the elbow rears back and down past the back line (whichever is further back of the
+  shoulder blade, ~8 cm behind its joint, and the mid back, ~11 cm behind spine_04, measured on the mesh) and out to
+  the side, folded at 138 degrees with the fist pulled in by the shoulder; the shoulder blade retracts with it
+  (`LOAD_CLAVICLE`). Measured ~7 cm past the back line on both hands (the lead side needed the back-line measure: its
+  shoulder starts further forward). Earlier tries measured in the turned chest frame and folded the arm into the chest.
+- Strike path (`STRIKE_KEYS`, `strike_path`): keyed to the user's third sketch: at 0.217 s the arm already drives out
+  forward and up (~23 degrees), at 0.250 s it reaches up and forward (~26 degrees), then comes down onto the chin.
+  Fist on a cubic Hermite through the keys; the elbow hint is the part of each keyed elbow off the shoulder-fist line,
+  slerped at constant speed (using the elbow's own direction near a straight arm flipped the solver).
+- Fists stay in line with the forearms (straightened over the pull-back, re-straightened after smoothing, eased back
+  to the stance's wrist over the settle); the guard forearm stands upright (`GUARD_ELBOW`).
+- Body chain starts earlier to keep up with the arm (`CHAIN`: torso from 10%, shoulder from 22% of the strike).
+- First person: the striking arm follows the body clip (winds up low out of view, snaps in as it fires), blending to
+  the camera guard only at the ends; blends take the short way round (`short_nlerp`, slerped poles).
+Checks: all four clips pass; worst joint step ~38 deg/frame at the launch out of the wind-up; no end-frame jump.
+PIE: all punch and stance tests pass (`Gameplay-Q.log`).
+
 ## Code
 
 `RPGPrototypeAnimationComponent.cpp`: `CapturedPunchClip` returns the clip for the right hand, tier 0, on

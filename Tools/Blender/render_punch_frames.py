@@ -1,5 +1,7 @@
-"""Render every frame of the open .blend's punch from the punching side and from the front (workbench, ortho).
-Run: blender -b <file.blend> --python <this file> -- <r|l> <out_dir>
+"""Render every frame of the open .blend's punch from several angles (workbench, ortho).
+Run: blender -b <file.blend> --python <this file> -- <r|l> <out_dir> [all]
+Default views: the punching side and the front. With "all": front, front three-quarter, punching side, back
+three-quarter, back and the far side (camera yaw relative to the front, toward the punching side first).
 The character faces -Y in Blender; its right side is -X."""
 import math
 import os
@@ -7,7 +9,9 @@ import sys
 import bpy
 from mathutils import Vector
 
-side, out = sys.argv[sys.argv.index("--") + 1:][:2]
+args = sys.argv[sys.argv.index("--") + 1:]
+side, out = args[:2]
+everything = len(args) > 2 and args[2] == "all"
 os.makedirs(out, exist_ok=True)
 scene = bpy.context.scene
 scene.render.engine = 'BLENDER_WORKBENCH'
@@ -22,15 +26,16 @@ cam.data.type = 'ORTHO'
 cam.data.ortho_scale = 215.0
 cam.data.clip_end = 10000.0
 scene.camera = cam
-target = Vector((0., -25., 92.))
-x = -1. if side == 'r' else 1.
-views = {"side": (Vector((x * 600., -25., 92.)), (math.radians(90), 0., math.radians(90 * x))),
-         "front": (Vector((0., -600., 92.)), (math.radians(90), 0., 0.))}
+toward = -1. if side == 'r' else 1.   # punching side: -X for the right hand
+yaws = ({"front": 0., "front34": 45., "side": 90., "back34": 135., "back": 180., "farside": -90.} if everything
+        else {"side": 90., "front": 0.})
+center = Vector((0., -25., 92.))
 for frame in range(scene.frame_start, scene.frame_end + 1):
     scene.frame_set(frame)
-    for name, (location, rotation) in views.items():
-        cam.location = location
-        cam.rotation_euler = rotation
+    for name, yaw in yaws.items():
+        a = math.radians(yaw * toward)   # camera position angle; toward the punching side for positive yaws
+        cam.location = center + Vector((600. * math.sin(a), -600. * math.cos(a), 0.))
+        cam.rotation_euler = (math.radians(90), 0., a)
         scene.render.filepath = os.path.join(out, "%s_%03d.png" % (name, frame))
         bpy.ops.render.render(write_still=True)
-print("RPG_RENDER_DONE", scene.frame_start, scene.frame_end)
+print("RPG_RENDER_DONE", scene.frame_start, scene.frame_end, list(yaws))

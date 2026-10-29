@@ -35,8 +35,8 @@ SETTLE = .2                        # Seconds to ease into the exact stance after
 # Kinetic chain: per segment, how far into the strike its drive starts, when it peaks (seconds from impact), and how
 # long after the load it holds before unwinding the pull-back (fraction of the strike).
 CHAIN = {'hips': dict(start=0., peak=-.02, unwind=0.),
-         'torso': dict(start=.15, peak=0., unwind=.15),
-         'shoulder': dict(start=.35, peak=.02, unwind=.3)}
+         'torso': dict(start=.1, peak=0., unwind=.1),
+         'shoulder': dict(start=.22, peak=.02, unwind=.2)}   # earlier: the arm now drives out straight from the wind-up
 UNWIND = .6                        # Fraction of the strike over which each segment's pull-back unwinds.
 DRIVE_FALL = .25                   # Seconds the follow-through takes to settle after the hold.
 
@@ -44,7 +44,37 @@ DRIVE_FALL = .25                   # Seconds the follow-through takes to settle 
 LOAD_PELVIS_TURN = 10.
 LOAD_TURN = 22.                    # Torso, over spine_01-03.
 LOAD_HIPS = [0., -4., -3.]         # Weight sits back and down (mesh space: +Y forward, -X the character's right).
-LOAD_FIST = [1., -12., 2.]         # Striking fist and elbow draw straight back, tight to the body (right hand).
+# Pull-back arm (user request: the elbow rears back past the line of the back by ~4 cm, down toward the lat, then rolls
+# into the overhand from there). Measured as seen from the side, along the line to the opponent: the shoulder blade
+# sits ~8 cm behind the shoulder joint, so the elbow goes 12 cm behind the joint. (Measured in the chest's own frame
+# instead, it compounded with the torso's turn back and folded the arm into the chest.) With the elbow that far back,
+# a forearm folded up beside the shoulder would over-bend the elbow, so the forearm angles forward at a natural bend
+# and the fist cocks at chest level, in line with the forearm.
+LOAD_CLAVICLE = 8.                 # The striking shoulder blade retracts with the rearing elbow (chest opens a little).
+# Where the back line is, seen from the side: whichever is further back of the striking shoulder blade (~8 cm behind
+# its joint) and the mid back (~11 cm behind spine_04, measured on SKM_UEFN_Mannequin). On the lead side the shoulder
+# starts further forward in the stance, so a fixed distance behind the joint left the left elbow in front of the back.
+SHOULDER_BLADE_DEPTH = 8.
+BACKLINE_DEPTH = 11.
+ELBOW_PAST_BACK = 10.              # Wound-up elbow past the back line. First asked for ~4 cm; the third sketch draws it
+                                   # further back and lower (a V: elbow back and down, fist pulled in by the shoulder).
+                                   # Smoothing with the frames either side takes ~2.5 cm off the target.
+LOAD_ELBOW_OUT = 11.               # ... and out to the striking side (user's sketches: flared out, seen from the front);
+                                   # the rest of the upper arm's length goes down.
+LOAD_ELBOW_BEND = 138.             # Elbow bend in the wound-up arm (degrees; ~145 is the natural limit): folded, so the fist
+                                   # sits in close by the shoulder.
+# Strike path (user's sketch on the six-angle sheet): from the wind-up the elbow comes forward and under, the forearm
+# angled up with the fist leading; then the upper arm comes level with the forearm upright (the top of the overhand);
+# then the arm extends straight onto the chin. Keys relative to the striking shoulder, in (forward, out, up) cm.
+# Fists are interpolated on a smooth curve through the keys, elbows by slerp between the keyed directions.
+# Second sketch (both hands): at 0.250 s the arm is nearly straight, reaching up and forward at ~25-30 degrees above
+# the target, then comes down onto the chin at contact. (Keys sit a little early so that after smoothing the arm
+# reaches the sketched positions at 0.217 / 0.250 s.)
+# Third sketch: from the wind-up the arm drives straight out forward and up on a diagonal (already mostly extended at
+# 0.217 s, no "forward and under" phase), carries on up and forward at 0.250 s, then comes down onto the chin.
+STRIKE_KEYS = [(.207, dict(elbow=[18., 7., 2.], fist=[35., 2., 14.])),       # driving out forward and up
+               (.243, dict(elbow=[22., 5., 11.], fist=[41., 1., 22.]))]      # nearly straight, up and forward
+GUARD_ELBOW = [.25, 0., -1.]       # Guard elbow under its fist (forearm upright), a little out (guard side).
 LOAD_GUARD = [0., 2., 0.]          # The other hand holds out a little.
 
 # Drive / follow-through.
@@ -58,10 +88,21 @@ DRIVE_CLAVICLE = 10.               # The striking shoulder rolls forward and dri
 FOOT_PIVOT = 35.                   # Striking-side foot turns on its ball as the hips turn (heel swings out) ...
 HEEL_LIFT = 22.                    # ... with the heel lifted.
 
+# Follow-through (user request): the punch angles down through the target. Contact is unchanged (straight ahead at
+# the chin); just after it the fist carries on forward and down while the striking shoulder drives further forward
+# and the torso pivots down over that shoulder to extend it, then everything retracts.
+FOLLOW_PEAK = .09                  # Seconds after impact the follow-through peaks ...
+FOLLOW_FALL = .14                  # ... and how long it takes to fade back into the retraction.
+FOLLOW_FIST = [-1., 6., -8.]       # Fist travel past the target: forward and down, slightly inside (right hand).
+FOLLOW_PITCH = 7.                  # Extra forward pitch of the torso, over spine_01-03.
+FOLLOW_ROLL = 8.                   # Torso rolls down toward the striking side (that shoulder dips forward and down).
+FOLLOW_CLAVICLE = 8.               # Extra striking-shoulder drive.
+FOLLOW_HIPS = [0., 2., -1.5]       # Hips carry a little further forward and down.
+
 # Arm.
-ELBOW_STRUCK = [-1., 0., .2]       # Elbow direction at impact: rolled out to the side, a little high (right arm).
+ELBOW_STRUCK = [-1., 0., .3]       # Elbow direction at impact: rolled up and out over the top (right arm).
 CHIN_Z = 146.                      # Wrist height at impact: an opponent of the same height's chin.
-OVERHAND_ARC = 3.                  # Extra fist height mid-strike: a slight arc over the top.
+OVERHAND_ARC = 5.                  # Extra fist height mid-strike: the fist comes in from above, angling down onto the chin.
 REACH_LIMIT = .97                  # Fraction of the rig's full arm length the strike reaches for.
 LEFT_AIM = [2., 0., 0.]            # User request: the left punch lands 2 cm further left.
 SMOOTH_RADIUS, SMOOTH_SIGMA = 2, 1.2   # Frames; temporal smoothing after the fit (tight, to keep the snap).
@@ -126,6 +167,12 @@ def slerp(a, b, u):
     return p.norm(p.add(p.mul(a, math.sin((1.-u)*angle)/math.sin(angle)), p.mul(b, math.sin(u*angle)/math.sin(angle))))
 
 
+def short_nlerp(a, b, u):
+    """Quaternion blend the short way round (a flipped-sign target otherwise spins the long way)."""
+    if sum(x*y for x, y in zip(a, b)) < 0.: b = [-v for v in b]
+    return p.qnorm([x+(y-x)*u for x, y in zip(a, b)])
+
+
 def recover_time():
     return HOLD+(PUNCH['back']-PUNCH['retract'])/RETURN_SPEED
 
@@ -144,9 +191,19 @@ def weights(t):
         else: drive = 1.-ease((t-max(peak, hold_end))/DRIVE_FALL)
         w[seg] = (load, drive)
     if t <= LOAD: w['strike'] = 0.
-    elif t <= IMPACT: w['strike'] = ease((t-LOAD)/span)
+    # Starts from rest but arrives with speed (2u^2 - u^3 has zero slope at the start, full slope at the end), so the
+    # punch carries through contact into the follow-through instead of stopping dead on the target.
+    elif t <= IMPACT: u = (t-LOAD)/span; w['strike'] = 2.*u*u-u*u*u
     else: w['strike'] = 1.-ease((t-IMPACT)/recover)
     w['arc'] = math.sin(math.pi*w['strike']) if LOAD < t <= IMPACT else 0.
+    # Fists straighten into line with the forearms over the pull-back and stay there (the stance's wrist angles bent
+    # them up to 50 degrees off the forearm once the arms moved); the settle blends back to the stance.
+    w['wrist'] = ease(t/LOAD) if t <= LOAD else 1.-ease((t-IMPACT-recover)/SETTLE)
+    w['t'] = t
+    # Follow-through: zero at contact, peaks just after, fades into the retraction.
+    if t <= IMPACT: w['follow'] = 0.
+    elif t <= IMPACT+FOLLOW_PEAK: w['follow'] = math.sin(.5*math.pi*(t-IMPACT)/FOLLOW_PEAK)   # leaves contact moving
+    else: w['follow'] = 1.-ease((t-IMPACT-FOLLOW_PEAK)/FOLLOW_FALL)
     return w
 
 
@@ -170,12 +227,72 @@ def plant_feet(local, w):
         repair_chain(local, 'thigh_'+s, 'calf_'+s, 'foot_'+s, t, pole, q)
 
 
-def elbow_pole(turn):
-    """Striking elbow direction: tucked down as in the stance through the pull-back and early strike, rolling over to
-    out-to-the-side with the shoulder in the release (`turn` 0..1). Steered explicitly, because near full extension the
-    elbow is barely defined and, with the torso turning through, it otherwise snaps in a few frames."""
+def wound_arm(cs):
+    """The wound-up striking arm in the current pose: elbow ELBOW_BEHIND the shoulder joint (toward the back, along
+    the line to the opponent) and down, forearm angled forward at LOAD_ELBOW_BEND. Returns (elbow, fist)."""
+    fwd = [0., 1., 0.]; out = side_x([-1., 0., 0.])
+    shoulder = cs['upperarm_'+S][1]
+    upper = p.length(p.sub(REST['lowerarm_'+S][1], REST['upperarm_'+S][1]))
+    fore = p.length(p.sub(REST['hand_'+S][1], REST['lowerarm_'+S][1]))
+    back_line = min(shoulder[1]-SHOULDER_BLADE_DEPTH, cs['spine_04'][1][1]-BACKLINE_DEPTH)
+    behind = min(shoulder[1]-(back_line-ELBOW_PAST_BACK), .75*upper)   # keep the upper arm angled down, not straight back
+    down = math.sqrt(max(0., upper*upper-behind**2-LOAD_ELBOW_OUT**2))
+    elbow = p.add(shoulder, p.add(p.add(p.mul(fwd, -behind), p.mul(out, LOAD_ELBOW_OUT)), [0., 0., -down]))
+    # Forearm: from the folded-back direction (toward the shoulder), opened forward by (180 - bend) degrees.
+    back_up = p.norm(p.sub(shoulder, elbow))
+    ahead = p.norm(p.sub(fwd, p.mul(back_up, p.dot(fwd, back_up))))
+    opening = math.radians(180.-LOAD_ELBOW_BEND)
+    forearm = p.norm(p.add(p.mul(back_up, math.cos(opening)), p.mul(ahead, math.sin(opening))))
+    return elbow, p.add(elbow, p.mul(forearm, fore))
+
+
+def axes():
+    """World (forward, out, up) for the striking side: forward is toward the opponent (mesh +Y)."""
+    return [0., 1., 0.], side_x([-1., 0., 0.]), [0., 0., 1.]
+
+
+def from_axes(v):
+    f, o, u = axes()
+    return p.add(p.add(p.mul(f, v[0]), p.mul(o, v[1])), p.mul(u, v[2]))
+
+
+def strike_path(t, shoulder, wound_elbow, wound_fist, extended):
+    """Fist target and elbow direction between the wind-up (LOAD) and contact (IMPACT), through STRIKE_KEYS.
+    Fist: cubic Hermite through the keys (relative to the shoulder), leaving the wind-up from rest and arriving at
+    the chin with speed. Elbow: slerp between the keyed directions."""
+    upper = p.length(p.sub(REST['lowerarm_'+S][1], REST['upperarm_'+S][1]))
+    def bend_hint(elbow, fist):
+        # Only the part of the elbow off the shoulder-fist line says which way to bend; near a straight arm the
+        # elbow's own direction runs along that line and the solver flips.
+        line = p.norm(fist)
+        off = p.sub(elbow, p.mul(line, p.dot(elbow, line)))
+        return p.norm(off) if p.length(off) > 1. else p.norm(side_x(ELBOW_STRUCK))
+    keys = [(LOAD, p.sub(wound_fist, shoulder), bend_hint(p.sub(wound_elbow, shoulder), p.sub(wound_fist, shoulder)))]
+    for kt, k in STRIKE_KEYS:
+        keys.append((kt, from_axes(k['fist']), bend_hint(from_axes(k['elbow']), from_axes(k['fist']))))
+    keys.append((IMPACT, p.sub(extended, shoulder), p.norm(side_x(ELBOW_STRUCK))))
+    i = max(j for j in range(len(keys)-1) if keys[j][0] <= t)
+    (t0, p0, e0), (t1, p1, e1) = keys[i], keys[i+1]
+    dt = t1-t0; u = (t-t0)/dt
+
+    def tangent(j):
+        if j == 0: return [0., 0., 0.]
+        if j == len(keys)-1: return p.mul(p.sub(keys[j][1], keys[j-1][1]), 1./(keys[j][0]-keys[j-1][0]))
+        return p.mul(p.sub(keys[j+1][1], keys[j-1][1]), 1./(keys[j+1][0]-keys[j-1][0]))
+    m0, m1 = p.mul(tangent(i), dt), p.mul(tangent(i+1), dt)
+    h00, h10, h01, h11 = 2*u**3-3*u*u+1, u**3-2*u*u+u, -2*u**3+3*u*u, u**3-u*u
+    rel = p.add(p.add(p.mul(p0, h00), p.mul(m0, h10)), p.add(p.mul(p1, h01), p.mul(m1, h11)))
+    # Constant-speed roll between keys: an eased roll doubled the peak twist where the elbow turns from down to out.
+    return p.add(shoulder, rel), slerp(e0, e1, u)
+
+
+def elbow_pole(turn, load=0., wound=None):
+    """Striking elbow direction: rearing back behind the back line in the pull-back (`load`, toward the wound-up
+    elbow `wound`), then rolling up, out and over with the shoulder in the release (`turn`). Steered explicitly,
+    because near full extension the elbow is barely defined and, with the torso turning through, it otherwise snaps."""
     guard = p.norm(p.sub(REST['lowerarm_'+S][1], REST['upperarm_'+S][1]))
-    return slerp(guard, p.norm(side_x(ELBOW_STRUCK)), turn)
+    reared = slerp(guard, p.norm(wound), load) if wound is not None else guard
+    return slerp(reared, p.norm(side_x(ELBOW_STRUCK)), turn)
 
 
 def turn_fist(local, side, amount):
@@ -205,9 +322,11 @@ def recorded(seconds, w):
         delta = p.qmul(p.qconj(BASE[bone][0]), frame[bone][0])
         local[bone] = (p.qnorm(p.qmul(STANCE[bone][0], delta)), local[bone][1])
     (hl, hd), (tl, td), (sl, sd) = w['hips'], w['torso'], w['shoulder']
+    fo = w['follow']
     hips = p.qrot(TURN, p.sub(source_cs['pelvis'][1], BASE_CS['pelvis'][1]))
     hips[2] = min(hips[2], 0.)   # never rise above the stance
     hips = p.add(p.add(hips, p.mul(LOAD_HIPS, hl)), p.mul(side_x(DRIVE_HIPS), hd))
+    hips = p.add(hips, p.mul(FOLLOW_HIPS, fo))
     local['pelvis'] = (local['pelvis'][0], p.add(STANCE['pelvis'][1], hips))
     # Positive (times SIGN) turns bring the striking side back (pull-back); negative ones drive it through.
     pelvis_turn = SIGN*(LOAD_PELVIS_TURN*hl-DRIVE_PELVIS_TURN*hd)
@@ -215,28 +334,33 @@ def recorded(seconds, w):
     turn_world(local, 'pelvis', pelvis_turn)
     for bone, share in (('spine_01', .25), ('spine_02', .35), ('spine_03', .4)):
         turn_world(local, bone, torso_turn*share)
-        # Pitch down (top of the chest toward +Y) and bend toward the lead side.
-        turn_world(local, bone, -DRIVE_LEAN*share*td, (1., 0., 0.))
-        turn_world(local, bone, SIGN*DRIVE_SIDE_BEND*share*td, (0., 1., 0.))
+        # Pitch down (top of the chest toward +Y) and bend toward the lead side; in the follow-through, pitch further
+        # and roll down over the striking shoulder.
+        pitch = DRIVE_LEAN*td+FOLLOW_PITCH*fo
+        bend = SIGN*(DRIVE_SIDE_BEND*td-FOLLOW_ROLL*fo)
+        turn_world(local, bone, -pitch*share, (1., 0., 0.))
+        turn_world(local, bone, bend*share, (0., 1., 0.))
     # Keep the head on the target: undo the accumulated yaw at the neck, and most of the pitch and bend.
     turn_world(local, 'neck_01', -(pelvis_turn+torso_turn))
-    turn_world(local, 'neck_01', .6*DRIVE_LEAN*td, (1., 0., 0.))
-    turn_world(local, 'neck_01', -.6*SIGN*DRIVE_SIDE_BEND*td, (0., 1., 0.))
-    turn_world(local, 'clavicle_'+S, -SIGN*DRIVE_CLAVICLE*sd)
+    turn_world(local, 'neck_01', .6*(DRIVE_LEAN*td+FOLLOW_PITCH*fo), (1., 0., 0.))
+    turn_world(local, 'neck_01', -.6*SIGN*(DRIVE_SIDE_BEND*td-FOLLOW_ROLL*fo), (0., 1., 0.))
+    turn_world(local, 'clavicle_'+S, SIGN*(LOAD_CLAVICLE*sl-DRIVE_CLAVICLE*sd-FOLLOW_CLAVICLE*fo))
     plant_feet(local, w)
     strike = w['strike']
     for s in 'lr':
         cs = p.to_cs(local); hand = 'hand_'+s
         target = p.add(REST[hand][1], p.qrot(TURN, p.sub(source_cs[hand][1], BASE_CS[hand][1])))
         if s == S:
-            target = p.add(target, p.mul(side_x(LOAD_FIST), sl))
+            wound_elbow, wound_fist = wound_arm(cs)
+            target = p.lerp(target, wound_fist, sl)
         else:
             target = p.add(target, p.mul(LOAD_GUARD, hl))
             # The guard fist travels with the head (covering the chin) as the body pitches and turns.
             target = p.add(target, p.sub(cs['neck_02'][1], REST['neck_02'][1]))
+        pole = None
         if s == S and strike > 0.:
-            # Toward full extension the fist follows the recorded line of the punch from the shoulder, at chin height,
-            # just short of full arm length (the shoulder drive supplies the rest smoothly).
+            # Contact: the fist on the recorded line of the punch from the shoulder, at chin height, just short of
+            # full arm length (the shoulder drive supplies the rest smoothly).
             shoulder = cs['upperarm_'+s][1]
             reach = p.qrot(TURN, p.sub(source_cs[hand][1], source_cs['upperarm_'+s][1]))
             arm = p.length(p.sub(REST['lowerarm_'+s][1], REST['upperarm_'+s][1]))+p.length(p.sub(REST[hand][1], REST['lowerarm_'+s][1]))
@@ -245,13 +369,25 @@ def recorded(seconds, w):
             flat = p.norm([reach[0], reach[1], 0.])
             extended = p.add(shoulder, p.add(p.mul(flat, math.sqrt(length*length-up*up)), [0., 0., up]))
             if s == 'l': extended = p.add(extended, LEFT_AIM)
-            target = p.lerp(target, extended, strike)
-            target[2] += OVERHAND_ARC*w['arc']
+            if w['t'] <= IMPACT:
+                # Wind-up to contact along the sketched overhand path.
+                target, pole = strike_path(w['t'], shoulder, wound_elbow, wound_fist, extended)
+            else:
+                target = p.lerp(target, extended, strike)
+                target = p.add(target, p.mul(side_x(FOLLOW_FIST), fo))
             fit_punch_shoulder(local, s, target); cs = p.to_cs(local)
         target = elbow_clearance(cs, s, target)
-        pole = elbow_pole(sd) if s == S else p.sub(cs['lowerarm_'+s][1], cs['upperarm_'+s][1])
+        if s == S:
+            pole = pole or elbow_pole(sd, sl, p.sub(wound_elbow, cs['upperarm_'+s][1]))
+            w['pole'] = pole   # the smoothing pass re-solves the arm with the same elbow direction
+        else:
+            # Guard forearm upright: the elbow under the fist, a little out (eased in over the pull-back).
+            out = [-v for v in side_x([-1., 0., 0.])]
+            pole = slerp(p.norm(p.sub(cs['lowerarm_'+s][1], cs['upperarm_'+s][1])),
+                         p.norm(p.add(p.mul(out, GUARD_ELBOW[0]), [0., 0., GUARD_ELBOW[2]])), w['wrist'])
+            w['guard_pole'] = pole
         repair_chain(local, 'upperarm_'+s, 'lowerarm_'+s, hand, target, pole)
-        straight_wrist(local, s, .8*strike if s == S else 0.)
+        straight_wrist(local, s, w['wrist'])
         if s == S: turn_fist(local, s, sd)
     local['root'] = ([0., 0., 0., 1.], [0., 0., 0.])
     return follow_ik(local)
@@ -271,8 +407,12 @@ def first_person(pose, t, length, drive, previous):
     follow-through the guard hand partly keeps its body position: with the torso turned through, the full camera-guard
     offset would pull that shoulder past its range."""
     view = copy.deepcopy(pose); cs = p.to_cs(pose)
+    # The striking arm follows the body clip (it winds up low, out of view, and snaps into view as it fires); it eases
+    # from and back to the camera guard only at the ends. Holding it in the forward camera guard while the body winds
+    # it back made the arm thrash.
+    home_end = min(1., 1.-ease(t/LOAD)+ease((t-(length-SETTLE))/SETTLE))
     for s in 'lr':
-        weight = 1.-.6*drive if s == O else min(1., ease((abs(t-IMPACT)-.04)/.12) if t <= IMPACT else ease((t-IMPACT-.06)/(length-IMPACT-.06)))
+        weight = 1.-.6*drive if s == O else home_end
         target = p.add(cs['hand_'+s][1], p.mul(p.sub(FP_REST['hand_'+s][1], REST['hand_'+s][1]), weight))
         # Start from the first-person stance's shoulder (it brings the lead shoulder forward to reach the camera
         # guard); otherwise the same fist target lands differently and the clip jumps against RPG_FP_FightStance.
@@ -283,13 +423,19 @@ def first_person(pose, t, length, drive, previous):
         # the punch's own reach as it leaves the guard.
         target = cap_reach(view, s, target, FP_REACH_LIMIT if s == O else FP_REACH_LIMIT+(REACH_LIMIT-FP_REACH_LIMIT)*(1.-weight))
         vcs = p.to_cs(view); target = elbow_clearance(vcs, s, target)
-        rotation = p._nlerp(cs['hand_'+s][0], p.qmul(FP_REST['hand_'+s][0], p.qmul(p.qconj(REST['hand_'+s][0]), cs['hand_'+s][0])), weight)
+        view_rotation = p.qmul(FP_REST['hand_'+s][0], p.qmul(p.qconj(REST['hand_'+s][0]), cs['hand_'+s][0]))
+        rotation = short_nlerp(cs['hand_'+s][0], view_rotation, weight)
         guard_pole = p.norm(p.sub(FP_REST['lowerarm_'+s][1], FP_REST['upperarm_'+s][1]))
         # The guard arm keeps last frame's elbow direction, so it evolves continuously while the torso turns through;
         # it eases back to the stance's elbow over the last 0.3 s so the clip joins RPG_FP_FightStance.
         home = ease((t-(length-.3))/.3)
-        pole = p.lerp(p.norm(previous[s]), guard_pole, home) if s == O else p.lerp(p.norm(p.sub(vcs['lowerarm_'+s][1], vcs['upperarm_'+s][1])), guard_pole, weight)
+        # (Striking arm by slerp: with the elbow reared back, the body's and the camera guard's elbow directions are
+        # nearly opposite and a straight-line blend collapses through zero and flips the arm.)
+        pole = p.lerp(p.norm(previous[s]), guard_pole, home) if s == O else slerp(p.norm(p.sub(vcs['lowerarm_'+s][1], vcs['upperarm_'+s][1])), guard_pole, weight)
         repair_chain(view, 'upperarm_'+s, 'lowerarm_'+s, 'hand_'+s, target, pole, rotation)
+        # Fists in line with the forearms, as in the body clip; eased in over the pull-back and out over the settle so
+        # the clip still starts and ends on RPG_FP_FightStance.
+        straight_wrist(view, s, ease(t/LOAD)*(1.-ease((t-(length-SETTLE))/SETTLE)))
         solved = p.to_cs(view); previous[s] = p.sub(solved['lowerarm_'+s][1], solved['upperarm_'+s][1])
     return follow_ik(view)
 
@@ -310,8 +456,12 @@ def smooth(rows, ws):
         plant_feet(pose, ws[i])
         for s in 'lr':
             cs = p.to_cs(pose)
-            pole = elbow_pole(ws[i]['shoulder'][1]) if s == S else p.sub(cs['lowerarm_'+s][1], cs['upperarm_'+s][1])
+            if s == S: pole = ws[i].get('pole') or elbow_pole(ws[i]['shoulder'][1], ws[i]['shoulder'][0], p.sub(wound_arm(cs)[0], cs['upperarm_'+s][1]))
+            else: pole = ws[i].get('guard_pole') or p.sub(cs['lowerarm_'+s][1], cs['upperarm_'+s][1])
             repair_chain(pose, 'upperarm_'+s, 'lowerarm_'+s, 'hand_'+s, p.mul(hands[s], 1./total), pole, cs['hand_'+s][0])
+            # The averaged hand angle no longer matches the re-solved forearm: straighten the fist again (it read as
+            # crooked at 0.217 s).
+            straight_wrist(pose, s, ws[i]['wrist'])
         pose['root'] = ([0., 0., 0., 1.], [0., 0., 0.])
         out.append(follow_ik(pose))
     out.append(rows[-1])
@@ -334,14 +484,12 @@ def build(side):
     BASE = sample(PUNCH['base']); BASE_CS = p.to_cs(BASE); TURN = facing_turn(BASE_CS)
     recover = recover_time()
     length = IMPACT+recover+SETTLE
-    rest_w = weights(length)
     end_pose = recorded(PUNCH['back'], weights(IMPACT+recover))
     rows, ws = [], []
     for i in range(round(length*FPS)+1):
         t = i/FPS; w = weights(t)
         if t <= IMPACT+recover: pose = recorded(source_time(t), w)
-        else:
-            pose = blend(end_pose, STANCE, ease((t-IMPACT-recover)/SETTLE)); w = rest_w
+        else: pose = blend(end_pose, STANCE, ease((t-IMPACT-recover)/SETTLE))
         rows.append(pose); ws.append(w)
     rows[0] = copy.deepcopy(STANCE); rows[-1] = copy.deepcopy(STANCE)
     rows = smooth(rows, ws)
