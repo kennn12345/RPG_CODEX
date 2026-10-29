@@ -28,7 +28,7 @@ Implemented in `Source/RPG_CODEX/RPGControllerInputComponent.cpp`.
 | **Right Stick** | Look / aim. |
 | **R3** | Ground: crouch / stealth toggle. Flying: **hold (0.25 s)** to stop flying and fall. |
 | **D-Pad Up** | Hotkey / quick-select. |
-| **D-Pad Left** | Unequip / put away weapons. |
+| **D-Pad Left** | Toggle the fighting stance, armed or not: draws weapons and raises the stance (held until the next press), or puts both away at once. Attacking with the stance down still raises it for a few seconds (`CombatStanceTimeout`). |
 | **D-Pad Right** | Tap: first ↔ third person. Hold: third-person camera distance (adjust with stick). |
 | **D-Pad Down** | Wait / sleep. |
 | **View** | Journal / quest log. |

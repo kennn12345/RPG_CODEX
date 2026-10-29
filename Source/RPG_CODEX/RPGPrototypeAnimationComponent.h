@@ -344,6 +344,8 @@ private:
     void UpdateGuardSteady(UAnimInstance* Instance);
     /** Game time of the last punch / kick / guard; the combat stance holds for CombatStanceTimeout after it. */
     float LastCombatActionTime = -1000.f;
+    /** Raised with D-Pad Left (draw / sheathe): the stance stays up, with no timeout, until the next press. */
+    bool bStanceHeld = false;
     float StationarySince = -1.f;
     /** The stationary full-body underlay for a held guard; movement fades the stance out. */
     bool bCombatStanceFullBody = false;

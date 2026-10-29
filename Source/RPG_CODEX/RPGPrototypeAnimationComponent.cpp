@@ -157,7 +157,7 @@ void URPGPrototypeAnimationComponent::TickComponent(float DeltaTime, ELevelTick 
     if (FullBodyPunch) HandOffStandingPunch(Instance);
     if (Instance) UpdateCombatStance(Instance);
     if (Instance) UpdateGuardSteady(Instance);
-    const bool bInCombat = GetWorld() && GetWorld()->GetTimeSeconds() - LastCombatActionTime < CombatStanceTimeout;
+    const bool bInCombat = bStanceHeld || (GetWorld() && GetWorld()->GetTimeSeconds() - LastCombatActionTime < CombatStanceTimeout);
     if (!bKickMovementLocked && !FullBodyPunch && !ChargeMontage && !CombatStanceMontage && !bInCombat) SetComponentTickEnabled(false);
 }
 
@@ -167,7 +167,7 @@ void URPGPrototypeAnimationComponent::UpdateCombatStance(UAnimInstance* Instance
     const UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
     const FAnimMontageInstance* Guard = GuardMontage ? Instance->GetActiveInstanceForMontage(GuardMontage) : nullptr;
     if (Guard && !Guard->IsStopped() && GetWorld()) LastCombatActionTime=GetWorld()->GetTimeSeconds();
-    const bool bInCombat = GetWorld() && GetWorld()->GetTimeSeconds() - LastCombatActionTime < CombatStanceTimeout;
+    const bool bInCombat = bStanceHeld || (GetWorld() && GetWorld()->GetTimeSeconds() - LastCombatActionTime < CombatStanceTimeout);
     const FAnimMontageInstance* Stance = CombatStanceMontage ? Instance->GetActiveInstanceForMontage(CombatStanceMontage) : nullptr;
     if (!Stance || Stance->IsStopped()) CombatStanceMontage = nullptr;
     // Out of combat (or off the ground): relax back to the normal idle.
@@ -265,7 +265,7 @@ void URPGPrototypeAnimationComponent::StopCombatStance(UAnimInstance* Instance, 
 bool URPGPrototypeAnimationComponent::IsInCombat() const
 {
     const UWorld* World = GetWorld();
-    return GuardMontage || ChargeMontage || (World && World->GetTimeSeconds() - LastCombatActionTime < CombatStanceTimeout);
+    return bStanceHeld || GuardMontage || ChargeMontage || (World && World->GetTimeSeconds() - LastCombatActionTime < CombatStanceTimeout);
 }
 
 FString URPGPrototypeAnimationComponent::SetupAimAnimInstance()
@@ -802,6 +802,16 @@ void URPGPrototypeAnimationComponent::HandleAction(const FRPGPlayerActionInfo& I
     if (Info.Action == ERPGPlayerAction::FlightCancelled)
     {
         if (ActiveMontage) Instance->Montage_Stop(0.15f, ActiveMontage);
+        return;
+    }
+    // D-Pad Left (draw / sheathe, armed or not): raise the fighting stance and hold it until the next press, or put it
+    // away at once. Attacks with the stance down still raise it for CombatStanceTimeout, as before.
+    if (Info.Action == ERPGPlayerAction::DrawSheathe)
+    {
+        const URPGCombatStateComponent* State = GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
+        bStanceHeld = State && State->bWeaponsDrawn;
+        LastCombatActionTime = bStanceHeld && GetWorld() ? GetWorld()->GetTimeSeconds() : -1000.f;
+        SetComponentTickEnabled(true);
         return;
     }
     // Letting go of the guard blends back to the normal stance / locomotion.
