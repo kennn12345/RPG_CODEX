@@ -4,6 +4,8 @@
 #include "RPGMovementAbilityComponent.h"
 #include "RPGNpcCharacter.h"
 #include "RPGPhysicsReactionComponent.h"
+#include "RPGHitOutcomeComponent.h"
+#include "RPGPowerSystem.h"
 #include "RPG_CODEX.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
@@ -285,7 +287,7 @@ void URPGBodyImpactComponent::OnCapsuleHit(UPrimitiveComponent* HitComponent, AA
 	const FVector Normal = -Hit.ImpactNormal.GetSafeNormal();
 	const FVector Relative = LastVelocity - Other->GetVelocity();
 	const float Closing = float(FVector::DotProduct(Relative, Normal));
-	if (Closing < KnockDownSpeed) return;
+	if (Closing < MinBumpSpeed) return;
 	LastImpactTime = OtherImpact->LastImpactTime = World->GetTimeSeconds();
 
 	// Momentum along the line of impact, with a little bounce: the struck body takes (1+e) m1/(m1+m2) of the closing
@@ -294,22 +296,45 @@ void URPGBodyImpactComponent::OnCapsuleHit(UPrimitiveComponent* HitComponent, AA
 	const float Struck = (1.f + Restitution) * M1 / (M1 + M2) * Closing;
 	const float Kept = (M1 - Restitution * M2) / (M1 + M2) * Closing;
 	const FVector Sideways = Relative - Normal * Closing;
-	const FVector Up(0.f, 0.f, Closing * Lift);
-	OtherImpact->KnockDown(Other->GetVelocity() + Normal * Struck + Sideways * 0.3f + Up, Hit.ImpactPoint);
-	UE_LOG(LogRPGInput, Log, TEXT("BODY IMPACT: %s into %s at %.0f cm/s -> struck %.0f cm/s, mover keeps %.0f cm/s%s"), *GetOwner()->GetActorNameOrLabel(),
-		*Other->GetActorNameOrLabel(), Closing, Struck, Kept, Closing >= SelfKnockDownSpeed ? TEXT(", mover goes down too") : TEXT(""));
+	// How hard the one run into feels it: on foot at most a knockback; only a flying crash knocks it down.
+	FRPGPowerInput BumpInput = URPGPowerSystem::MakeBumpInput(GetOwner(), Other, Normal, Closing);
+	if (const URPGHitOutcomeComponent* Outcome = Other->FindComponentByClass<URPGHitOutcomeComponent>()) Outcome->PrepareInput(BumpInput);
+	const FRPGPowerResult Felt = URPGPowerSystem::Calculate(BumpInput);
+	const bool bSelfDown = Felt.bKnockdown && Closing >= SelfKnockDownSpeed;
+	const FVector Up(0.f, 0.f, Felt.bKnockdown ? Closing * Lift : 0.f);
+	if (Felt.bKnockdown) OtherImpact->KnockDown(Other->GetVelocity() + Normal * Struck + Sideways * 0.3f + Up, Hit.ImpactPoint);
+	else OtherImpact->Bump(Normal * Struck, Hit.ImpactPoint, Felt.Reaction);
+	UE_LOG(LogRPGInput, Log, TEXT("BODY IMPACT: %s into %s at %.0f cm/s -> %s, struck %.0f cm/s, mover keeps %.0f cm/s%s"), *GetOwner()->GetActorNameOrLabel(),
+		*Other->GetActorNameOrLabel(), Closing, *UEnum::GetDisplayValueAsText(Felt.Reaction).ToString(), Struck, Kept, bSelfDown ? TEXT(", mover goes down too") : TEXT(""));
 
 	ACharacter* Self = Cast<ACharacter>(GetOwner());
 	const FVector After = LastVelocity - Normal * (Closing - Kept);
-	if (Closing >= SelfKnockDownSpeed) KnockDown(After + Up * 0.5f, Hit.ImpactPoint);
+	if (bSelfDown) KnockDown(After + Up * 0.5f, Hit.ImpactPoint);
 	else if (Self && Self->GetCharacterMovement()) Self->GetCharacterMovement()->Velocity = After;   // carries on, slowed by the impact
 }
 
-void URPGBodyImpactComponent::KnockDown(const FVector& Velocity, const FVector& Point)
+void URPGBodyImpactComponent::Bump(const FVector& Velocity, const FVector& Point, ERPGPowerReaction Reaction)
+{
+	ACharacter* Character = Cast<ACharacter>(GetOwner());
+	if (!Character || bDown) return;
+	LastBumpReaction = Reaction;
+	++BumpCount;
+	if (OnBumped.IsBound()) { OnBumped.Broadcast(Velocity, Point, Reaction); return; }
+	if (URPGHitOutcomeComponent* Outcome = GetOwner()->FindComponentByClass<URPGHitOutcomeComponent>()) { Outcome->ReceiveBump(Velocity, Reaction); return; }
+	// No reactions of its own (the player): it just takes the push on its feet.
+	if (UCharacterMovementComponent* Move = Character->GetCharacterMovement(); Move && Move->IsMovingOnGround())
+		Move->Velocity += FVector(Velocity.X, Velocity.Y, 0.f);
+}
+
+void URPGBodyImpactComponent::KnockDown(const FVector& Velocity, const FVector& Point, bool bFallPrepared)
 {
 	ACharacter* Character = Cast<ACharacter>(GetOwner());
 	URPGPhysicsReactionComponent* Reaction = GetReaction(true);
 	if (!Character || !Reaction || bDown) return;
+	// It fights the fall: arms out toward where it is going, a braced ragdoll.
+	if (!bFallPrepared)
+		if (URPGHitOutcomeComponent* Outcome = GetOwner()->FindComponentByClass<URPGHitOutcomeComponent>())
+			Outcome->BeginFall(Velocity, Outcome->IsKnockedOut());
 	bDown = true;
 	// Out of the air, no walking: the body is physical now.
 	if (URPGMovementAbilityComponent* Abilities = GetOwner()->FindComponentByClass<URPGMovementAbilityComponent>()) Abilities->StopFlight();

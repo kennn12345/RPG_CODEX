@@ -95,11 +95,16 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Stagger and Knockdown", meta = (ClampMin = "0"))
 	float StaggerResistancePerPoint = 0.01f;
 
-	/** Knockdown first becomes possible here ("occasional knockdown" at level 5)... */
+	/** At or above this: driven back several steps instead of a stagger (a charged punch on the standard bandit). */
 	UPROPERTY(Config, EditAnywhere, Category = "Stagger and Knockdown")
-	float KnockdownStartLevel = 5.f;
+	float KnockbackLevel = 6.f;
 
-	/** ...and is certain here. */
+	/** From here it is knocked off balance and tries to catch itself (a full-power punch at Strength 5; an ordinary one
+	 *  never floors the bandit). It may fall while trying: the knockdown chance starts here... */
+	UPROPERTY(Config, EditAnywhere, Category = "Stagger and Knockdown")
+	float KnockdownStartLevel = 8.f;
+
+	/** ...and is certain here (a straight knockdown, no catch). */
 	UPROPERTY(Config, EditAnywhere, Category = "Stagger and Knockdown")
 	float KnockdownCertainLevel = 11.f;
 
@@ -110,6 +115,68 @@ public:
 	/** Displacement at or beyond this (feet) is a launch through the air instead of a shove. */
 	UPROPERTY(Config, EditAnywhere, Category = "Stagger and Knockdown", meta = (ClampMin = "0"))
 	float LaunchMinFeet = 5.f;
+
+	// ---------------- Balance, hit location and situation (scale the reaction level, not damage or distance) ----------------
+
+	/** Reactions at empty balance feel this much harder (1 + this at 0 balance): quick follow-up hits escalate. */
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float BalanceEscalation = 0.6f;
+
+	/** Balance drained per reaction level of a hit (a Strength 5 punch drains about a third). */
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float BalanceDrainPerLevel = 0.07f;
+
+	/** Seconds after the last hit before balance starts coming back, and how long a full refill takes. */
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float BalanceRefillDelay = 0.6f;
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0.01"))
+	float BalanceRefillTime = 1.2f;
+
+	/** Head / neck: the head snaps back; staggers come more easily (stagger level x this). */
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float HeadStaggerScale = 1.25f;
+
+	/** Legs: the knee buckles; catches and knockdowns come more easily (reaction level x this). */
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float LegReactionScale = 1.15f;
+
+	/** Arms take some of it (reaction level x this). */
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float ArmReactionScale = 0.85f;
+
+	/** Situation (reaction level x this): planted in the fighting stance, mid-attack, running, hit from behind. */
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float StanceSituation = 0.8f;
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float AttackingSituation = 1.25f;
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float RunningSituation = 1.15f;
+	UPROPERTY(Config, EditAnywhere, Category = "Balance", meta = (ClampMin = "0"))
+	float FromBehindSituation = 1.15f;
+
+	// ---------------- Energy spells (power in ladder levels, from the charge) ----------------
+
+	/** A tap shot's power: a certain stagger on the standard bandit. */
+	UPROPERTY(Config, EditAnywhere, Category = "Energy Spells", meta = (ClampMin = "0"))
+	float EnergyTapLevel = 5.f;
+
+	/** A full charge's power (in between: by the charge). Half charge knocks back; a full charge can knock down. */
+	UPROPERTY(Config, EditAnywhere, Category = "Energy Spells", meta = (ClampMin = "0"))
+	float EnergyFullChargeLevel = 9.f;
+
+	// ---------------- Body bumps (closing speed, cm/s) ----------------
+
+	/** Running into someone slower than this only nudges them (walking pace). */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Bumps", meta = (ClampMin = "0"))
+	float BumpStaggerSpeed = 300.f;
+
+	/** At or above this the small stagger becomes a knockback (sprinting into them). */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Bumps", meta = (ClampMin = "0"))
+	float BumpKnockbackSpeed = 600.f;
+
+	/** Only crashes at or above this knock the one run into down (flying into them, well past a sprint). */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Bumps", meta = (ClampMin = "0"))
+	float BumpKnockdownSpeed = 1000.f;
 
 	// ---------------- Damage ----------------
 

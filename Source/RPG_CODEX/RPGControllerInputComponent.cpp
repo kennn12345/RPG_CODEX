@@ -1,6 +1,7 @@
 #include "RPGControllerInputComponent.h"
 #include "RPGBodyMass.h"
 #include "RPGBodyImpactComponent.h"
+#include "RPGHitOutcomeComponent.h"
 
 #include "RPGCameraModeComponent.h"
 #include "RPGCharacterStatsComponent.h"
@@ -100,6 +101,7 @@ void URPGControllerInputComponent::EnsureHelperComponents()
     FindOrCreateComponent<URPGEnergySpellComponent>(Owner, TEXT("RPGEnergySpells"));
     FindOrCreateComponent<URPGDirectionalHoverComponent>(Owner, TEXT("RPGDirectionalHover"));
     FindOrCreateComponent<URPGBodyImpactComponent>(Owner, TEXT("RPGBodyImpact"));   // body collisions (fly into someone)
+    FindOrCreateComponent<URPGHitOutcomeComponent>(Owner, TEXT("RPGHitOutcome"));    // being hit: stagger, knockback, catch, braced falls
 }
 
 UInputAction* URPGControllerInputComponent::CreateInputAction(const TCHAR* Name, EInputActionValueType ValueType)

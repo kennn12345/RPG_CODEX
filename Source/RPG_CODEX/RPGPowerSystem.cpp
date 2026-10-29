@@ -30,6 +30,8 @@ namespace
 		switch (Reaction)
 		{
 			case ERPGPowerReaction::Stagger:	return TEXT("STAGGER");
+			case ERPGPowerReaction::Knockback:	return TEXT("KNOCKBACK");
+			case ERPGPowerReaction::Catch:		return TEXT("CATCH");
 			case ERPGPowerReaction::Knockdown:	return TEXT("KNOCKDOWN");
 			case ERPGPowerReaction::Launch:		return TEXT("LAUNCH");
 			default:							return TEXT("FLINCH");
@@ -89,13 +91,39 @@ FRPGPowerResult URPGPowerSystem::Calculate(const FRPGPowerInput& Input)
 	}
 	const float SourcePower = Input.Source == ERPGPowerSource::Kick ? S->KickPower : 1.f;
 	const float Momentum = FMath::Max(Input.ClosingSpeed, 0.f) / 100.f * S->MomentumLevelsPerMeterPerSecond;
-	R.EffectivePower = Input.Attacker.Strength * TierPower * SourcePower + Momentum;
+	// A spell's power is its charge, not the caster's arm.
+	R.EffectivePower = Input.Source == ERPGPowerSource::Energy
+		? FMath::Lerp(S->EnergyTapLevel, S->EnergyFullChargeLevel, FMath::Clamp(Input.ChargePercent, 0.f, 1.f)) + Momentum
+		: Input.Attacker.Strength * TierPower * SourcePower + Momentum;
 
 	// ---- Target resistance (to being moved) ----
 	const float MassFactor = FMath::Pow(FMath::Max(Input.Target.Mass, 1.f) / S->StandardMass, S->MassExponent);
 	const float StabilityFactor = FMath::Max(0.1f, 1.f + (Input.Target.Stability - 50.f) * S->StabilityPerPoint);
 	R.TargetResistance = MassFactor * StabilityFactor;
 	R.RelativePower = R.EffectivePower / FMath::Max(R.TargetResistance, KINDA_SMALL_NUMBER);
+
+	// ---- How the target's footing feels it: hit location, situation and what is left of its balance ----
+	R.HitZone = GetHitZone(Input.HitBone);
+	const float Footing = FMath::Max(Input.Situation, 0.f) * (1.f + (1.f - FMath::Clamp(Input.Balance, 0.f, 1.f)) * S->BalanceEscalation);
+	const float ZoneScale = R.HitZone == ERPGHitZone::Leg ? S->LegReactionScale : R.HitZone == ERPGHitZone::Arm ? S->ArmReactionScale : 1.f;
+	R.ReactionLevel = R.RelativePower * Footing * ZoneScale;
+
+	// ---- Body bump: the closing speed alone (heavier / steadier bodies feel it less). No damage, no push of its own
+	// (the caller shares out the momentum); on foot at most a knockback, only a flying crash knocks down. ----
+	if (Input.Source == ERPGPowerSource::Body)
+	{
+		// (Balance and situation can turn a stagger into a knockback, never into a knockdown.)
+		const float Felt = FMath::Max(Input.ClosingSpeed, 0.f) / FMath::Max(R.TargetResistance, KINDA_SMALL_NUMBER);
+		R.EffectivePower = R.RelativePower = R.ReactionLevel = 0.f;
+		R.bKnockdown = Felt >= S->BumpKnockdownSpeed;
+		R.bKnockback = !R.bKnockdown && Felt * Footing >= S->BumpKnockbackSpeed;
+		R.bStagger = !R.bKnockdown && !R.bKnockback && Felt * Footing >= S->BumpStaggerSpeed;
+		R.KnockdownChance = R.bKnockdown ? 1.f : 0.f;
+		R.StaggerChance = R.bStagger ? 1.f : 0.f;
+		R.Reaction = R.bKnockdown ? ERPGPowerReaction::Knockdown : R.bKnockback ? ERPGPowerReaction::Knockback
+			: R.bStagger ? ERPGPowerReaction::Stagger : ERPGPowerReaction::Flinch;
+		return R;
+	}
 
 	// ---- Damage: from raw power, durability and hit location; independent of how far the target moves ----
 	const float DurabilityFactor = FMath::Pow(50.f / FMath::Max(Input.Target.Durability, 1.f), S->DurabilityExponent);
@@ -109,13 +137,19 @@ FRPGPowerResult URPGPowerSystem::Calculate(const FRPGPowerInput& Input)
 
 	// ---- Stagger ----
 	const float StaggerFactor = FMath::Max(0.1f, 1.f + (Input.Target.StaggerResistance - 50.f) * S->StaggerResistancePerPoint);
-	R.StaggerChance = Ramp(R.RelativePower / StaggerFactor, S->StaggerStartLevel, S->StaggerCertainLevel);
+	// A head hit snaps the head back: staggers come more easily.
+	const float StaggerLevel = R.ReactionLevel / StaggerFactor * (R.HitZone == ERPGHitZone::Head ? S->HeadStaggerScale : 1.f);
+	R.StaggerChance = Ramp(StaggerLevel, S->StaggerStartLevel, S->StaggerCertainLevel);
 	R.bStagger = Random.FRand() < R.StaggerChance;
 
-	// ---- Knockdown ----
-	if (R.RelativePower >= S->KnockdownStartLevel)
+	// ---- Knockback: hard enough to drive it back several steps, still on its feet ----
+	R.bKnockback = R.ReactionLevel / StaggerFactor >= S->KnockbackLevel;
+
+	// ---- Catch / knockdown: knocked off balance, it tries to catch itself and may fall while trying ----
+	R.bCatch = R.ReactionLevel >= S->KnockdownStartLevel;
+	if (R.bCatch)
 	{
-		R.KnockdownChance = FMath::Lerp(S->KnockdownStartChance, 1.f, Ramp(R.RelativePower, S->KnockdownStartLevel, S->KnockdownCertainLevel));
+		R.KnockdownChance = FMath::Lerp(S->KnockdownStartChance, 1.f, Ramp(R.ReactionLevel, S->KnockdownStartLevel, S->KnockdownCertainLevel));
 	}
 	R.bKnockdown = Random.FRand() < R.KnockdownChance;
 
@@ -155,10 +189,21 @@ FRPGPowerResult URPGPowerSystem::Calculate(const FRPGPowerInput& Input)
 	// ---- Summary: the strongest channel that fired ----
 	if (bLaunch)				R.Reaction = ERPGPowerReaction::Launch;
 	else if (R.bKnockdown)		R.Reaction = ERPGPowerReaction::Knockdown;
+	else if (R.bCatch)			R.Reaction = ERPGPowerReaction::Catch;
+	else if (R.bKnockback)		R.Reaction = ERPGPowerReaction::Knockback;
 	else if (R.bStagger)		R.Reaction = ERPGPowerReaction::Stagger;
 	else						R.Reaction = ERPGPowerReaction::Flinch;
 
 	return R;
+}
+
+ERPGHitZone URPGPowerSystem::GetHitZone(FName Bone)
+{
+	const FString Name = Bone.ToString().ToLower();
+	if (Name.Contains(TEXT("head")) || Name.Contains(TEXT("neck"))) return ERPGHitZone::Head;
+	if (Name.Contains(TEXT("thigh")) || Name.Contains(TEXT("calf")) || Name.Contains(TEXT("foot")) || Name.Contains(TEXT("ball"))) return ERPGHitZone::Leg;
+	if (Name.Contains(TEXT("arm")) || Name.Contains(TEXT("hand")) || Name.Contains(TEXT("clavicle"))) return ERPGHitZone::Arm;
+	return ERPGHitZone::Body;
 }
 
 float URPGPowerSystem::GetLaunchTotalDistance(float Speed)
@@ -219,19 +264,47 @@ FRPGPowerInput URPGPowerSystem::MakeMeleeInput(const FRPGMeleeHitInfo& Hit)
 	return Input;
 }
 
+FRPGPowerInput URPGPowerSystem::MakeEnergyInput(const FRPGEnergyImpact& Impact, AActor* Target)
+{
+	FRPGPowerInput Input;
+	Input.Source = ERPGPowerSource::Energy;
+	Input.ChargePercent = FMath::Clamp(Impact.Charge, 0.f, 1.f);
+	Input.Tier = Input.ChargePercent >= 0.99f ? ERPGPowerAttackTier::Power : Input.ChargePercent > 0.f ? ERPGPowerAttackTier::Heavy : ERPGPowerAttackTier::Normal;
+	Input.Attacker = ReadStats(Impact.Attacker);
+	Input.Target = ReadStats(Target);
+	Input.HitBone = Impact.Hit.BoneName;
+	Input.StrikeDirection = Impact.Direction.GetSafeNormal();
+	// A spell carries no body momentum of its own; the caster's run does not throw the ball harder.
+	return Input;
+}
+
+FRPGPowerInput URPGPowerSystem::MakeBumpInput(AActor* Mover, AActor* Target, const FVector& Direction, float ClosingSpeed)
+{
+	FRPGPowerInput Input;
+	Input.Source = ERPGPowerSource::Body;
+	Input.Attacker = ReadStats(Mover);
+	Input.Target = ReadStats(Target);
+	Input.HitBone = TEXT("spine_03");
+	Input.StrikeDirection = Direction.GetSafeNormal();
+	Input.ClosingSpeed = ClosingSpeed;
+	return Input;
+}
+
 FString URPGPowerSystem::DescribeResult(const FRPGPowerInput& Input, const FRPGPowerResult& Result)
 {
 	return FString::Printf(
 		TEXT("POWER  %s %s  (Strength %.1f vs %.0f kg)  ->  %s\n")
-		TEXT("  Effective Power %.1f   Target Resistance %.2f   Relative Power %.1f\n")
+		TEXT("  Effective Power %.1f   Target Resistance %.2f   Relative Power %.1f   Reaction Level %.1f (balance %.0f%%, situation x%.2f, %s)\n")
 		TEXT("  Damage %.1f%s   Structural %.0f%%\n")
-		TEXT("  Stagger %s (%.0f%%)   Knockdown %s (%.0f%%)\n")
+		TEXT("  Stagger %s (%.0f%%)   Knockback %s   Knockdown %s (%.0f%%)\n")
 		TEXT("  Displacement %.1f ft (max %.1f ft)   Velocity %.0f cm/s"),
-		TierName(Input.Tier), Input.Source == ERPGPowerSource::Kick ? TEXT("Kick") : TEXT("Punch"),
+		TierName(Input.Tier), Input.Source == ERPGPowerSource::Kick ? TEXT("Kick") : Input.Source == ERPGPowerSource::Energy ? TEXT("Energy")
+			: Input.Source == ERPGPowerSource::Body ? TEXT("Body bump") : TEXT("Punch"),
 		Input.Attacker.Strength, Input.Target.Mass, ReactionName(Result.Reaction),
-		Result.EffectivePower, Result.TargetResistance, Result.RelativePower,
+		Result.EffectivePower, Result.TargetResistance, Result.RelativePower, Result.ReactionLevel, Input.Balance * 100.f, Input.Situation,
+		*UEnum::GetDisplayValueAsText(Result.HitZone).ToString(),
 		Result.Damage, Result.bWouldKill ? TEXT(" (LETHAL)") : TEXT(""), Result.StructuralDamage * 100.f,
-		Result.bStagger ? TEXT("YES") : TEXT("no"), Result.StaggerChance * 100.f,
+		Result.bStagger ? TEXT("YES") : TEXT("no"), Result.StaggerChance * 100.f, Result.bKnockback ? TEXT("YES") : TEXT("no"),
 		Result.bKnockdown ? TEXT("YES") : TEXT("no"), Result.KnockdownChance * 100.f,
 		Result.Displacement / CmPerFoot, Result.MaxDisplacement / CmPerFoot, Result.DisplacementVelocity.Size());
 }

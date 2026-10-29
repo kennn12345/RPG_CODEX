@@ -14,6 +14,7 @@ class URPGPhysicsReactionComponent;
 class URPGHitReactionComponent;
 class URPGBodyImpactComponent;
 class URPGReactivePhysicsComponent;
+class URPGHitOutcomeComponent;
 
 /**
  * A humanoid NPC on GASP's character setup (motion matching, foot placement): BP_RPGNpc is a copy of GASP's
@@ -52,6 +53,9 @@ public:
 	/** Body-to-body collisions (run into at speed: knocked down by momentum). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
 	TObjectPtr<URPGBodyImpactComponent> BodyImpact;
+	/** Balance, situation, bracing (arms out to catch itself, braced knockdowns), shared with the player. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|NPC")
+	TObjectPtr<URPGHitOutcomeComponent> HitOutcome;
 
 	/** Speed (cm/s) a flinch / stagger hit gives the struck body part; times that part's weight = the hit's push. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
@@ -100,6 +104,35 @@ public:
 	float ShoveBraking = 380.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
 	float ShoveTime = 1.1f;
+	/** Knockback (driven back several steps, still standing): its push speed range (cm/s) and how long it lasts. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float KnockbackMinShove = 400.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float KnockbackMaxShove = 600.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float KnockbackShoveTime = 1.5f;
+	/** A head hit snaps the head back: its give is this much stronger. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float HeadSnapScale = 1.4f;
+	/** A failed catch stumbles this long (s) with its arms out before it goes down. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float CatchFailDelay = 0.35f;
+	/** Hit while lying down: share of the standing push the body gets (it slides, it isn't thrown). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float DownedPushScale = 0.35f;
+	/** A push at least this fast (cm/s) into a wall slams into it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float WallSlamSpeed = 250.f;
+
+	/** What happened (tests, debug). */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|NPC")
+	int32 CatchFallCount = 0;
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|NPC")
+	int32 WallSlamCount = 0;
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|NPC")
+	int32 LedgeFallCount = 0;
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|NPC")
+	int32 DownedHitCount = 0;
 
 	/** Get-up speed: this rate at full health, down to GetUpHurtRate near 0 (and when knocked out). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Get Up", meta = (ClampMin = "0.1"))
@@ -124,8 +157,15 @@ public:
 
 private:
 	void ReceivePowerHit(const FRPGMeleeHitInfo& Hit);
-	/** Push the body at Velocity (world, horizontal): it keeps facing its way while GASP steps it to a stop. */
-	void Shove(FVector Velocity);
+	/** Everything after the Power System's call, melee or energy (Energy set): down, falling, catching or standing. */
+	void React(const FRPGMeleeHitInfo& Hit, const FRPGPowerInput& Input, FRPGPowerResult Result, const FRPGEnergyImpact* Energy);
+	/** While pushed: slammed into a wall, or driven off a ledge. */
+	void UpdatePushObstacles();
+	/** Push the body at Velocity (world, horizontal): it keeps facing its way while GASP steps it to a stop. A knockback
+	 *  pushes harder and longer (KnockbackMinShove-KnockbackMaxShove) so it is driven back several steps. */
+	void Shove(FVector Velocity, bool bKnockback = false);
+	/** Run into (URPGBodyImpactComponent): a nudge, a stagger or a knockback, never a fall. */
+	void ReceiveBump(const FVector& Velocity, const FVector& Point, ERPGPowerReaction Reaction);
 	void PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Reaction);
 	void StopForReaction(float Seconds);
 	void OnRagdoll();
@@ -139,6 +179,8 @@ private:
 	float ShoveUntil = 0.f;
 	FVector ShoveVelocity = FVector::ZeroVector;
 	bool bShoving = false;
+	float ShoveStartTime = 0.f;
+	FTimerHandle CatchFailTimer;
 	bool bDown = false;
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ActiveReaction;

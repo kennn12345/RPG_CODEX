@@ -65,6 +65,7 @@ void URPGAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
             RearSway = Main->RearSway;
             for (int32 I=0;I<2;++I) SpellPose[I] = Main->SpellPose[I];
             DirectionalHover = Main->DirectionalHover;
+            Brace = Main->Brace;
         }
     }
 }
@@ -100,6 +101,7 @@ void FRPGAnimInstanceProxy::PreUpdate(UAnimInstance* InAnimInstance, float Delta
         RearSway = Instance->RearSway;
         for (int32 I=0;I<2;++I) SpellPose[I] = Instance->SpellPose[I];
         DirectionalHover = Instance->DirectionalHover;
+        Brace = Instance->Brace;
 	}
 }
 
@@ -113,6 +115,7 @@ bool FRPGAnimInstanceProxy::Evaluate_WithRoot(FPoseContext& Output, FAnimNode_Ba
 	ApplyGuardSteady(Output);   // before the aim, which then swings the steadied chest about the eyes
 	ApplySpineAim(Output);
 	ApplyFlow(Output);
+	ApplyBrace(Output);
     ApplyRearSway(Output);
     ApplySpellPose(Output);
 	ApplyStrikeContact(Output);   // last: on the final arm and leg positions
@@ -715,5 +718,66 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 			const float Have = float(FVector::DotProduct(Result.Residual, PlaneN[P]));
 			if (Depth > Have) Result.Residual += PlaneN[P] * (Depth - Have);
 		}
+	}
+}
+
+void FRPGAnimInstanceProxy::ApplyBrace(FPoseContext& Output) const
+{
+	const FRPGBracePose& B = Brace;
+	FCompactPose& Pose = Output.Pose;
+	const FBoneContainer& Bones = Pose.GetBoneContainer();
+	auto Find = [&Bones](const TCHAR* Name)
+	{
+		const int32 MeshIndex = Bones.GetPoseBoneIndexForBoneName(FName(Name));
+		return MeshIndex == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshIndex));
+	};
+
+	// Doubled over: the spine folds forward (pitch down about the side axis), most at the chest, the head following.
+	if (B.Bend > 0.01f)
+	{
+		static const TPair<const TCHAR*, float> Fold[] = { { TEXT("spine_02"), 0.2f }, { TEXT("spine_03"), 0.3f }, { TEXT("spine_04"), 0.25f },
+			{ TEXT("spine_05"), 0.15f }, { TEXT("neck_01"), 0.1f } };
+		for (const TPair<const TCHAR*, float>& Share : Fold)
+		{
+			const FCompactPoseBoneIndex Index = Find(Share.Key);
+			if (!Index.IsValid()) continue;
+			FQuat Parent = FQuat::Identity;
+			for (FCompactPoseBoneIndex Up = Bones.GetParentBoneIndex(Index); Up.IsValid(); Up = Bones.GetParentBoneIndex(Up))
+				Parent = Pose[Up].GetRotation() * Parent;
+			// Mesh space +Y forward, +X left: forward fold = a negative turn about +X.
+			const FQuat Delta(FVector::XAxisVector, FMath::DegreesToRadians(-B.Bend * Share.Value));
+			FTransform& Local = Pose[Index];
+			Local.SetRotation((Parent.Inverse() * Delta * Parent * Local.GetRotation()).GetNormalized());
+		}
+	}
+
+	// Arms out: the reach pose over everything from spine_03 up (the legs keep stepping on the graph).
+	const float Weight = FMath::Clamp(B.Weight, 0.f, 1.f);
+	if (Weight <= KINDA_SMALL_NUMBER || !B.A) return;
+	FPoseContext Reach(Output);
+	Reach.ResetToRefPose();
+	{
+		FAnimationPoseData Data(Reach);
+		B.A->GetAnimationPose(Data, FAnimExtractContext(0.0, false));
+	}
+	if (B.B && B.Alpha > KINDA_SMALL_NUMBER)
+	{
+		FPoseContext Other(Output);
+		Other.ResetToRefPose();
+		FAnimationPoseData OtherData(Other), ReachData(Reach);
+		B.B->GetAnimationPose(OtherData, FAnimExtractContext(0.0, false));
+		FAnimationRuntime::BlendTwoPosesTogetherInPlace(ReachData, OtherData, 1.f - FMath::Clamp(B.Alpha, 0.f, 1.f));
+	}
+	const FCompactPoseBoneIndex Root = Find(TEXT("spine_03"));
+	if (!Root.IsValid()) return;
+	for (FCompactPoseBoneIndex Index : Pose.ForEachBoneIndex())
+	{
+		bool bUpper = false;
+		for (FCompactPoseBoneIndex Up = Index; Up.IsValid(); Up = Bones.GetParentBoneIndex(Up))
+			if (Up == Root) { bUpper = true; break; }
+		if (!bUpper) continue;
+		FTransform Blended;
+		Blended.Blend(Pose[Index], Reach.Pose[Index], Weight);
+		Pose[Index] = Blended;
 	}
 }

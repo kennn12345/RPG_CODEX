@@ -10,6 +10,20 @@
 #include "RPGAnimInstance.generated.h"
 
 /**
+ * Breaking a fall (URPGHitOutcomeComponent): GASP's ragdoll reach poses (arms out toward the fall) laid over the upper
+ * body from spine_03 up, A blended toward B by Alpha. During a knockdown the ragdoll's motors drive toward this pose.
+ * Bend: degrees the spine folds forward (a body shot doubles it over).
+ */
+struct FRPGBracePose
+{
+	float Weight = 0.f;
+	class UAnimSequence* A = nullptr;
+	class UAnimSequence* B = nullptr;
+	float Alpha = 0.f;
+	float Bend = 0.f;
+};
+
+/**
  * Proxy that evaluates the Animation Blueprint's graph unchanged, then turns the spine toward the attack aim:
  * yaw about the vertical and pitch about the (aimed) side axis, spread up the spine so it bends rather than
  * rotating as one block. Arms, guard and head ride on it, so punches travel where the player aims.
@@ -35,6 +49,7 @@ private:
     void ApplyRearSway(FPoseContext& Output) const;
     void ApplySpellPose(FPoseContext& Output) const;
     void ApplyDirectionalHover(FPoseContext& Output) const;
+	void ApplyBrace(FPoseContext& Output) const;
 
 public:
 	/** Component-space offset the contact moved this limb's hand / foot by in the last pose. */
@@ -66,6 +81,7 @@ private:
     FRPGFlightRearSway RearSway;
     FRPGEnergyPose SpellPose[2];
     FRPGDirectionalHoverPose DirectionalHover;
+	FRPGBracePose Brace;
 };
 
 /**
@@ -134,6 +150,8 @@ public:
     FRPGFlightRearSway RearSway;
     FRPGEnergyPose SpellPose[2];
     FRPGDirectionalHoverPose DirectionalHover;
+	/** Arms out to break a fall / doubled over (URPGHitOutcomeComponent writes it; it keeps the clips loaded). */
+	FRPGBracePose Brace;
 
     /** Flight-only blend, copied to the worker-thread proxy in PreUpdate. */
     UPROPERTY(Transient)

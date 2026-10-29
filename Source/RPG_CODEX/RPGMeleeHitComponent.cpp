@@ -4,6 +4,7 @@
 #include "RPG_CODEX.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGMeleeTarget.h"
+#include "RPGHitOutcomeComponent.h"
 #include "RPGStrikeContactComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -218,5 +219,6 @@ void URPGMeleeHitComponent::ReportHit(const FHitResult& Hit, const FVector& End,
 	}
 
 	if (Target->Implements<URPGMeleeTarget>()) IRPGMeleeTarget::Execute_ReceiveMeleeHit(Target, Info);
+	else if (URPGHitOutcomeComponent* Outcome = Target->FindComponentByClass<URPGHitOutcomeComponent>()) Outcome->ReceiveMeleeHit(Info);   // the player
 	OnMeleeHit.Broadcast(Info);
 }

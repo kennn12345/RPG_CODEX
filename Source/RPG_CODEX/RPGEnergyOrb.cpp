@@ -1,6 +1,7 @@
 #include "RPGEnergyOrb.h"
 #include "RPGEnergySpellComponent.h"
 #include "RPGPhysicsReactionComponent.h"
+#include "RPGHitOutcomeComponent.h"
 #include "RPGCharacterStatsComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -113,6 +114,8 @@ void ARPGEnergyOrb::ApplyImpact(const FRPGEnergyImpact& Data)
     if(!IsValid(Target) || Target==Data.Attacker) return;
     if(Target->Implements<URPGEnergySpellTarget>())
     { IRPGEnergySpellTarget::Execute_ReceiveEnergyHit(Target,Data); return; }
+    // The player (and anyone else with the shared hit outcomes): the whole response there.
+    if(URPGHitOutcomeComponent* Outcome=Target->FindComponentByClass<URPGHitOutcomeComponent>()) { Outcome->ReceiveEnergyHit(Data); return; }
     if(URPGCharacterStatsComponent* Stats=Target->FindComponentByClass<URPGCharacterStatsComponent>())
     {
         float Health=0.f;

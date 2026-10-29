@@ -5,6 +5,7 @@
 #include "RPGHitReactionComponent.h"
 #include "RPGReactivePhysicsComponent.h"
 #include "RPGBodyImpactComponent.h"
+#include "RPGHitOutcomeComponent.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGHitCameraShake.h"
@@ -61,6 +62,7 @@ ARPGNpcCharacter::ARPGNpcCharacter()
 	PhysicsReaction->ReturnBlendTime = 0.45f;
 
 	BodyImpact = CreateDefaultSubobject<URPGBodyImpactComponent>(TEXT("BodyImpact"));
+	HitOutcome = CreateDefaultSubobject<URPGHitOutcomeComponent>(TEXT("HitOutcome"));
 }
 
 void ARPGNpcCharacter::BeginPlay()
@@ -88,7 +90,8 @@ void ARPGNpcCharacter::BeginPlay()
 	}
 	if (PhysicsReaction) PhysicsReaction->OnLimpEnding.AddUObject(this, &ARPGNpcCharacter::HandleLimpEnding);
 	if (PhysicsReaction) PhysicsReaction->OnLimpStarted.AddUObject(this, &ARPGNpcCharacter::OnRagdoll);
-	if (BodyImpact) BodyImpact->OnKnockedDown.AddUObject(this, &ARPGNpcCharacter::OnRagdoll);   // run into hard: down like a knockdown
+	if (BodyImpact) BodyImpact->OnKnockedDown.AddUObject(this, &ARPGNpcCharacter::OnRagdoll);   // flown into: down like a knockdown
+	if (BodyImpact) BodyImpact->OnBumped.AddUObject(this, &ARPGNpcCharacter::ReceiveBump);     // run into: nudge / stagger / knockback
 }
 
 void ARPGNpcCharacter::ApplyWalkIntent()
@@ -109,6 +112,7 @@ void ARPGNpcCharacter::ApplyWalkIntent()
 void ARPGNpcCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	UpdatePushObstacles();
 	if (bShoving)
 	{
 		// The push carries the body, slowing at ShoveBraking; motion matching steps it along. Ends when spent.
@@ -164,7 +168,8 @@ void ARPGNpcCharacter::ReceiveMeleeHit_Implementation(const FRPGMeleeHitInfo& Hi
 
 void ARPGNpcCharacter::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 {
-	const FRPGPowerInput Input = URPGPowerSystem::MakeMeleeInput(Hit);
+	FRPGPowerInput Input = URPGPowerSystem::MakeMeleeInput(Hit);
+	if (HitOutcome) HitOutcome->PrepareInput(Input);
 	FRPGPowerResult Result = URPGPowerSystem::Calculate(Input);
 
 	// Damage -> Health (GAS). Reaching 0 knocks it out: it goes down whatever the hit's own reaction was.
@@ -173,87 +178,202 @@ void ARPGNpcCharacter::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	{
 		const float Health = AbilitySystem->GetNumericAttribute(URPGAttributeSet::GetHealthAttribute());
 		AbilitySystem->SetNumericAttributeBase(URPGAttributeSet::GetHealthAttribute(), Health - Result.Damage);
-		if (Health - Result.Damage <= 0.f && !bKnockedOut)
-		{
-			bKnockedOut = true;
-			if (Result.Reaction == ERPGPowerReaction::Flinch || Result.Reaction == ERPGPowerReaction::Stagger)
-				Result.Reaction = ERPGPowerReaction::Knockdown;
-		}
+		if (Health - Result.Damage <= 0.f && !bKnockedOut) bKnockedOut = true;
 	}
-	LastPowerResult = Result;
-	StopForReaction(HitPause);
-
-	// The body: give on the springs at the struck bone, or a whole-body ragdoll for knockdowns / launches.
-	if (PhysicsReaction) PhysicsReaction->HandlePowerHit(Hit, Result);
-	if (PhysicsReaction && PhysicsReaction->GetReactionState() == ERPGPhysicsReactionState::Limp) OnRagdoll();
-	else ReactToHit(Hit.HitBone, Hit.ImpactLocation, Hit.StrikeDirection.IsNearlyZero() && Hit.Attacker ? GetActorLocation() - Hit.Attacker->GetActorLocation() : Hit.StrikeDirection,
-		Result.Reaction == ERPGPowerReaction::Stagger ? HitSpeedStagger : HitSpeedFlinch, Hit.Attacker);
-	if (!bDown)
-	{
-		// The push: the Power System's displacement velocity, plus the attacker's momentum over this body's weight.
-		FVector Push = FVector(Result.DisplacementVelocity) * ShoveScale;
-		if (Hit.Attacker) Push += Hit.Attacker->GetVelocity() * MomentumTransfer * RPGBodyMass::TotalKgFor(0.f) / RPGBodyMass::TotalKgFor(BodyWeightLbs);
-		Shove(Push);
-	}
+	React(Hit, Input, Result, nullptr);
 	PlayImpactFeel(Hit.Attacker, Result.Reaction);
-
-	const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
-	UE_LOG(LogRPGInput, Log, TEXT("%s\n  %s Health %.0f / %.0f%s"), *URPGPowerSystem::DescribeResult(Input, Result),
-		*(DisplayLabel.IsEmpty() ? GetActorNameOrLabel() : DisplayLabel), A ? A->GetHealth() : 0.f, A ? A->GetMaxHealth() : 0.f,
-		bKnockedOut ? TEXT("  KNOCKED OUT") : TEXT(""));
 }
 
 void ARPGNpcCharacter::ReceiveEnergyHit_Implementation(const FRPGEnergyImpact& Impact)
 {
 	++HitCount;
-	StopForReaction(HitPause + Impact.Charge);
+	// The Power System decides the reaction from the charge (a tap staggers, half a charge knocks back, a full charge
+	// knocks it off balance); the spell keeps its own damage.
+	FRPGPowerInput Input = URPGPowerSystem::MakeEnergyInput(Impact, this);
+	if (HitOutcome) HitOutcome->PrepareInput(Input);
+	FRPGPowerResult Result = URPGPowerSystem::Calculate(Input);
+	Result.Damage = Impact.Damage;
 	UAbilitySystemComponent* AbilitySystem = Stats ? Stats->GetAbilitySystem() : nullptr;
 	if (AbilitySystem && Stats->GetAttributes())
 	{
 		const float Health = AbilitySystem->GetNumericAttribute(URPGAttributeSet::GetHealthAttribute());
+		Result.bWouldKill = Health > 0.f && Impact.Damage >= Health;
 		AbilitySystem->SetNumericAttributeBase(URPGAttributeSet::GetHealthAttribute(), FMath::Max(0.f, Health - Impact.Damage));
 		if (Health <= Impact.Damage) bKnockedOut = true;
 	}
+	FRPGMeleeHitInfo Hit;
+	Hit.AttackName = TEXT("Energy Blast");
+	Hit.Attacker = Impact.Attacker;
+	Hit.HitActor = this;
+	Hit.HitBone = Impact.Hit.BoneName;
+	Hit.ImpactLocation = Impact.Hit.ImpactPoint;
+	Hit.StrikeDirection = Impact.Direction;
+	React(Hit, Input, Result, &Impact);
+}
+
+void ARPGNpcCharacter::React(const FRPGMeleeHitInfo& Hit, const FRPGPowerInput& Input, FRPGPowerResult Result, const FRPGEnergyImpact* Energy)
+{
+	const URPGPowerSettings* S = URPGPowerSettings::Get();
+	FVector Dir = Hit.StrikeDirection.IsNearlyZero() && Hit.Attacker ? GetActorLocation() - Hit.Attacker->GetActorLocation() : FVector(Hit.StrikeDirection);
+	Dir = Dir.GetSafeNormal2D().IsNearlyZero() ? -GetActorForwardVector() : Dir.GetSafeNormal2D();
+	const bool bOutCold = bKnockedOut || (HitOutcome && HitOutcome->IsKnockedOut());
+	const bool bWasDown = bDown || (PhysicsReaction && PhysicsReaction->GetReactionState() == ERPGPhysicsReactionState::Limp);
+	// Getting up: anything that would move it a few steps puts it straight back down.
+	const bool bGettingUp = !bWasDown && ActiveReaction != nullptr;
+	if (bOutCold && Result.Reaction < ERPGPowerReaction::Knockdown) Result.Reaction = ERPGPowerReaction::Knockdown;
+	if (bGettingUp && Result.Reaction >= ERPGPowerReaction::Knockback && Result.Reaction < ERPGPowerReaction::Knockdown) Result.Reaction = ERPGPowerReaction::Knockdown;
+	if (HitOutcome) HitOutcome->NoteHit(Result);
+	LastPowerResult = Result;
+	StopForReaction(HitPause + (Energy ? Energy->Charge : 0.f));
+	const URPGAttributeSet* A = Stats ? Stats->GetAttributes() : nullptr;
+	UE_LOG(LogRPGInput, Log, TEXT("%s\n  %s Health %.0f / %.0f%s%s"), *URPGPowerSystem::DescribeResult(Input, Result),
+		*(DisplayLabel.IsEmpty() ? GetActorNameOrLabel() : DisplayLabel), A ? A->GetHealth() : 0.f, A ? A->GetMaxHealth() : 0.f,
+		bOutCold ? TEXT("  KNOCKED OUT") : TEXT(""), bWasDown ? TEXT("  (hit while down)") : TEXT(""));
 	if (!PhysicsReaction) return;
-	if (bKnockedOut)
+
+	// On the ground it can still be hit: the blow goes into the lying body (a gentler slide than standing) and keeps it
+	// down a little longer; knocked out by it, the last of its muscle goes.
+	if (bWasDown)
 	{
-		PhysicsReaction->EnterFullRagdoll(2.f);
-		PhysicsReaction->HandleEnergyHit(Impact);
+		Result.DisplacementVelocity *= DownedPushScale;
+		PhysicsReaction->HandlePowerHit(Hit, Result);
+		if (Energy) PhysicsReaction->HandleEnergyHit(*Energy);
+		if (bOutCold && HitOutcome && PhysicsReaction->IsRagdollBraced()) HitOutcome->BeginFall(Dir, true);
+		++DownedHitCount;
 		OnRagdoll();
 		return;
 	}
-	// The struck part takes the spell's force at the point it hit, the way it was travelling (capped by that part's weight).
+
+	const bool bFalls = Result.Reaction == ERPGPowerReaction::Knockdown || Result.Reaction == ERPGPowerReaction::Launch;
+	// Knocked off balance and not quite saved: it tries to catch itself and falls while trying.
+	const bool bFallsCatching = bFalls && Result.bCatch && Result.Reaction == ERPGPowerReaction::Knockdown
+		&& Result.ReactionLevel < S->KnockdownCertainLevel && !bOutCold && !bGettingUp;
+	if (bFalls && !bFallsCatching)
 	{
-		const FBodyInstance* Body = GetMesh() ? GetMesh()->GetBodyInstance(Impact.Hit.BoneName) : nullptr;
-		const float Mass = Body ? FMath::Max(0.5f, Body->GetBodyMass()) : 5.f;
-		ReactToHit(Impact.Hit.BoneName, Impact.Hit.ImpactPoint, Impact.Direction, FMath::Lerp(180.f, 450.f, FMath::Clamp(Impact.Charge, 0.f, 1.f)), Impact.Attacker,
-			Impact.Impulse > 0.f ? FMath::Min(Impact.Impulse, Mass * 450.f) : -1.f);
+		// Down: a whole-body ragdoll that fights the fall (arms toward the ground, head held) unless it is out cold.
+		if (HitOutcome) HitOutcome->BeginFall(Result.DisplacementVelocity.IsNearlyZero() ? Dir : FVector(Result.DisplacementVelocity), bOutCold);
+		PhysicsReaction->HandlePowerHit(Hit, Result);
+		if (PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Limp) PhysicsReaction->EnterFullRagdoll(2.f);
+		if (Energy) PhysicsReaction->HandleEnergyHit(*Energy);
+		OnRagdoll();
+		return;
 	}
-	// The push on the whole body: the spell's impulse along its travel, plus the caster's momentum.
-	FVector Push = Impact.Direction.GetSafeNormal() * Impact.Impulse * EnergyShovePerImpulse;
-	if (Impact.Attacker) Push += Impact.Attacker->GetVelocity() * MomentumTransfer * RPGBodyMass::TotalKgFor(0.f) / RPGBodyMass::TotalKgFor(BodyWeightLbs);
-	Shove(Push);
+
+	// On its feet: the struck part gives (the head snaps back harder), a body shot doubles it over.
+	float Speed = Result.Reaction == ERPGPowerReaction::Flinch ? HitSpeedFlinch : HitSpeedStagger;
+	if (Result.HitZone == ERPGHitZone::Head) Speed *= HeadSnapScale;
+	float MaxImpulse = -1.f;
+	if (Energy)
+	{
+		const FBodyInstance* Body = GetMesh() ? GetMesh()->GetBodyInstance(Energy->Hit.BoneName) : nullptr;
+		const float Mass = Body ? FMath::Max(0.5f, Body->GetBodyMass()) : 5.f;
+		Speed = FMath::Lerp(180.f, 450.f, FMath::Clamp(Energy->Charge, 0.f, 1.f)) * (Result.HitZone == ERPGHitZone::Head ? HeadSnapScale : 1.f);
+		if (Energy->Impulse > 0.f) MaxImpulse = FMath::Min(Energy->Impulse, Mass * 450.f);
+	}
+	ReactToHit(Hit.HitBone, Hit.ImpactLocation, Dir, Speed, Energy ? nullptr : Hit.Attacker.Get(), MaxImpulse);
+	const FString Bone = Hit.HitBone.ToString().ToLower();
+	if (HitOutcome && Result.Reaction != ERPGPowerReaction::Flinch && (Bone == TEXT("pelvis") || Bone == TEXT("spine_01") || Bone == TEXT("spine_02") || Bone == TEXT("spine_03")))
+		HitOutcome->StartBend(Result.Reaction >= ERPGPowerReaction::Knockback ? 28.f : 18.f, 0.25f, 0.6f);
+	// Knocked off balance: stumbling steps with the arms thrown out toward the fall.
+	const bool bCatching = Result.Reaction == ERPGPowerReaction::Catch || bFallsCatching;
+	if (HitOutcome && bCatching) HitOutcome->StartBrace(Dir, 0.85f, 0.7f, 0.5f);
+
+	// The push: the Power System's displacement velocity, plus the attacker's momentum over this body's weight.
+	FVector Push = FVector(Result.DisplacementVelocity) * ShoveScale;
+	if (Energy && Push.IsNearlyZero()) Push = Dir * Energy->Impulse * EnergyShovePerImpulse;
+	if (Hit.Attacker) Push += Hit.Attacker->GetVelocity() * MomentumTransfer * RPGBodyMass::TotalKgFor(0.f) / RPGBodyMass::TotalKgFor(BodyWeightLbs);
+	if (Push.IsNearlyZero()) Push = Dir;
+	Shove(Push, Result.Reaction == ERPGPowerReaction::Knockback || bCatching);
+
+	if (bFallsCatching)
+		GetWorldTimerManager().SetTimer(CatchFailTimer, FTimerDelegate::CreateWeakLambda(this, [this, Dir, Point = Hit.ImpactLocation]()
+		{
+			if (bDown || !PhysicsReaction) return;
+			// The catch fails: down it goes, still fighting it.
+			++CatchFallCount;
+			if (HitOutcome) HitOutcome->BeginFall(Dir, false);
+			PhysicsReaction->Launch(FVector(GetVelocity().X, GetVelocity().Y, 0.f) + Dir * 150.f, Point, PhysicsReaction->LimpTime);
+		}), CatchFailDelay, false);
 }
 
-void ARPGNpcCharacter::Shove(FVector Velocity)
+void ARPGNpcCharacter::ReceiveBump(const FVector& Velocity, const FVector& Point, ERPGPowerReaction Reaction)
+{
+	if (bDown) return;
+	if (HitOutcome) HitOutcome->NoteBump(Reaction);
+	// Run into: the torso gives (a nudge barely, a stagger more) and the body takes its share of the momentum on its
+	// feet - a step for a nudge, a stumble for a stagger, several steps back for a knockback. Never a fall.
+	const bool bHard = Reaction != ERPGPowerReaction::Flinch;
+	StopForReaction(bHard ? HitPause : 0.4f);
+	ReactToHit(TEXT("spine_03"), Point, Velocity, bHard ? HitSpeedStagger : HitSpeedFlinch * 0.5f, nullptr);
+	Shove(Velocity, Reaction == ERPGPowerReaction::Knockback);
+	UE_LOG(LogRPGInput, Log, TEXT("%s bumped: %s at %.0f cm/s"), *GetActorNameOrLabel(), *UEnum::GetDisplayValueAsText(Reaction).ToString(), Velocity.Size2D());
+}
+
+void ARPGNpcCharacter::UpdatePushObstacles()
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	const UWorld* World = GetWorld();
+	if (!bShoving || !Move || !World || World->GetTimeSeconds() - ShoveStartTime < 0.08f) return;
+	const FVector Dir = ShoveVelocity.GetSafeNormal2D();
+	const float Speed = float(ShoveVelocity.Size2D());
+	// Driven off a ledge: it goes over, a braced fall.
+	if (Move->IsFalling())
+	{
+		bShoving = false;
+		++LedgeFallCount;
+		if (HitOutcome) HitOutcome->BeginFall(Dir, bKnockedOut);
+		if (PhysicsReaction) PhysicsReaction->Launch(FVector(ShoveVelocity.X, ShoveVelocity.Y, Move->Velocity.Z), GetActorLocation(), PhysicsReaction->LimpTime, true);
+		ShoveVelocity = FVector::ZeroVector;
+		return;
+	}
+	// Driven into a wall (the push is going nowhere): it slams into it, the torso gives off the wall, a hand braces on it.
+	if (Speed < WallSlamSpeed || float(FVector::DotProduct(GetVelocity(), Dir)) > Speed * 0.35f) return;
+	FHitResult Wall;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RPGPushWall), false, this);
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	const float Reach = GetCapsuleComponent()->GetScaledCapsuleRadius() + 35.f;
+	const FVector Chest = GetActorLocation() + FVector(0.f, 0.f, 40.f);
+	if (!World->LineTraceSingleByObjectType(Wall, Chest, Chest + Dir * Reach, Objects, Params) || Cast<APawn>(Wall.GetActor())) return;
+	bShoving = false;
+	ShoveVelocity = FVector::ZeroVector;
+	Move->Velocity = FVector(0.f, 0.f, Move->Velocity.Z);
+	++WallSlamCount;
+	ReactToHit(TEXT("spine_05"), Wall.ImpactPoint, Wall.ImpactNormal, HitSpeedStagger * FMath::Clamp(Speed / 400.f, 0.7f, 1.5f), nullptr);
+	if (HitOutcome)
+	{
+		HitOutcome->StartBrace(-Wall.ImpactNormal, 0.75f, 0.5f, 0.6f);
+		HitOutcome->NoteBump(ERPGPowerReaction::Stagger);
+	}
+	URPGHitOutcomeComponent::PlayImpactSound(this, Wall.ImpactPoint, 0.6f);
+	StopForReaction(HitPause);
+	UE_LOG(LogRPGInput, Log, TEXT("%s slammed into %s at %.0f cm/s"), *GetActorNameOrLabel(), *GetNameSafe(Wall.GetActor()), Speed);
+}
+
+void ARPGNpcCharacter::Shove(FVector Velocity, bool bKnockback)
 {
 	UCharacterMovementComponent* Move = GetCharacterMovement();
 	const UWorld* World = GetWorld();
 	Velocity.Z = 0.f;
-	if (bDown || !Move || !World || Velocity.Size() < MinShove) return;
-	Velocity = Velocity.GetClampedToMaxSize(MaxShove);
+	if (bDown || !Move || !World || Velocity.Size() < (bKnockback ? KINDA_SMALL_NUMBER : MinShove)) return;
+	// A knockback always drives it back several steps; anything else is capped at an ordinary stagger's push.
+	const float Max = bKnockback ? KnockbackMaxShove : MaxShove;
+	Velocity = bKnockback ? Velocity.GetSafeNormal() * FMath::Clamp(float(Velocity.Size()), KnockbackMinShove, Max) : Velocity.GetClampedToMaxSize(Max);
+	const float Time = bKnockback ? KnockbackShoveTime : ShoveTime;
 	// The body moves; with no walking input it brakes to a stop, and motion matching picks the steps for that motion
 	// (the size, angle and speed of every push differ, so do the steps). It keeps facing the way it faced (strafing).
 	// (GASP rewrites braking and friction every frame, so the push is driven here, before movement, each frame - see Tick.)
-	ShoveVelocity = (ShoveVelocity + Velocity).GetClampedToMaxSize(MaxShove);
+	if (!bShoving) ShoveStartTime = World->GetTimeSeconds();
+	ShoveVelocity = (ShoveVelocity + Velocity).GetClampedToMaxSize(Max);
+	ShoveUntil = FMath::Max(bShoving ? ShoveUntil : 0.f, World->GetTimeSeconds() + Time);
 	bShoving = true;
-	ShoveUntil = World->GetTimeSeconds() + ShoveTime;
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
 		AI->ClearFocus(EAIFocusPriority::Gameplay);
 		AI->SetControlRotation(GetActorRotation());
 	}
-	StopForReaction(ShoveTime + 0.3f);
+	StopForReaction(Time + 0.3f);
 	UE_LOG(LogRPGInput, Log, TEXT("%s pushed %.0f cm/s (%.0f deg from facing)"), *GetActorNameOrLabel(), Velocity.Size(),
 		FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(float(FVector::DotProduct(Velocity.GetSafeNormal2D(), GetActorForwardVector())), -1.f, 1.f))));
 }
@@ -284,7 +404,9 @@ void ARPGNpcCharacter::PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Reacti
 	float StopTime = 0.f, Shake = 0.f;
 	switch (Reaction)
 	{
-		case ERPGPowerReaction::Stagger:	StopTime = S->HitStopStagger;	Shake = S->ShakeStagger;	break;
+		case ERPGPowerReaction::Stagger:
+		case ERPGPowerReaction::Knockback:	StopTime = S->HitStopStagger;	Shake = S->ShakeStagger;	break;
+		case ERPGPowerReaction::Catch:	StopTime = S->HitStopKnockdown;	Shake = S->ShakeKnockdown;	break;
 		case ERPGPowerReaction::Knockdown:	StopTime = S->HitStopKnockdown;	Shake = S->ShakeKnockdown;	break;
 		case ERPGPowerReaction::Launch:		StopTime = S->HitStopLaunch;	Shake = S->ShakeLaunch;		break;
 		default: break;

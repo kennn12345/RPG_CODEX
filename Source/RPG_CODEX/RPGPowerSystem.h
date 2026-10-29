@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "RPGEnergySpellTypes.h"
 #include "RPGPlayerTypes.h"
 #include "RPGPowerTypes.h"
 #include "RPGPowerSystem.generated.h"
@@ -31,6 +32,16 @@ public:
 	/** Builds the input for a melee hit: tier from the charge, both sides' stats, direction and closing speed. */
 	UFUNCTION(BlueprintPure, Category = "RPG|Power")
 	static FRPGPowerInput MakeMeleeInput(const FRPGMeleeHitInfo& Hit);
+
+	/** Builds the input for an energy spell hit: power from the charge (Energy Spells settings), the target's stats. */
+	static FRPGPowerInput MakeEnergyInput(const FRPGEnergyImpact& Impact, AActor* Target);
+
+	/** Builds the input for Mover running into Target at ClosingSpeed (cm/s) along Direction (classified by speed). */
+	static FRPGPowerInput MakeBumpInput(AActor* Mover, AActor* Target, const FVector& Direction, float ClosingSpeed);
+
+	/** Head, body, arm or leg, from a bone name. */
+	UFUNCTION(BlueprintPure, Category = "RPG|Power")
+	static ERPGHitZone GetHitZone(FName Bone);
 
 	/** An actor's current stats (defaults if it has no URPGCharacterStatsComponent). */
 	UFUNCTION(BlueprintPure, Category = "RPG|Power")

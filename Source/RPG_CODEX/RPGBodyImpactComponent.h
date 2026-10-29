@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "RPGPowerTypes.h"
 #include "RPGBodyImpactComponent.generated.h"
 
 class ACharacter;
@@ -11,12 +12,15 @@ class UPrimitiveComponent;
 class URPGPhysicsReactionComponent;
 
 DECLARE_MULTICAST_DELEGATE(FRPGOnKnockedDown);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FRPGOnBumped, const FVector& /*Velocity*/, const FVector& /*Point*/, ERPGPowerReaction /*Reaction*/);
 
 /**
  * Body-to-body collisions for any humanoid (player and NPCs), like RDR2 / GTA: when this character's capsule runs into
- * another character fast enough, momentum decides what happens. The struck one is thrown into a whole-body ragdoll with
- * its share of the momentum (both bodies' realistic weights, RPGBodyMass, and a little bounce); if the impact is hard
- * enough for the one moving, it goes down too. Bodies then lie where they land and get up there (a get-up chosen by how
+ * another character, momentum decides what happens. The struck one takes its share of the momentum (both bodies'
+ * realistic weights, RPGBodyMass, and a little bounce) and the Power System classifies the bump by closing speed: walking
+ * into someone nudges them, running staggers them, sprinting knocks them back a few steps. Only a crash well past a
+ * sprint (flying into them) throws them into a whole-body ragdoll; if it is hard enough for the one moving, it goes
+ * down too. Bodies then lie where they land and get up there (a get-up chosen by how
  * the body lies, the same as after a knockdown).
  *
  * While the body is down the capsule follows it, so the camera (for the player) stays with the body.
@@ -31,9 +35,10 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** Closing speed (cm/s) at which the character run into is knocked down. */
+	/** Bumps slower than this (cm/s) do nothing at all. What faster ones do (nudge, stagger, knockback, or a knockdown
+	 *  only for a flying crash) is the Power System's call: Project Settings > RPG Power System > Body Bumps. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Body Impact", meta = (ClampMin = "0"))
-	float KnockDownSpeed = 450.f;
+	float MinBumpSpeed = 60.f;
 	/** Closing speed at which this character goes down too (a hard crash into someone). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Body Impact", meta = (ClampMin = "0"))
 	float SelfKnockDownSpeed = 1100.f;
@@ -50,11 +55,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Body Impact", meta = (ClampMin = "0"))
 	float BodyWeightLbs = 0.f;
 
-	/** Throw this character into a whole-body ragdoll moving at Velocity (world, cm/s), struck at Point. */
-	void KnockDown(const FVector& Velocity, const FVector& Point);
+	/** Throw this character into a whole-body ragdoll moving at Velocity (world, cm/s), struck at Point. It fights the
+	 *  fall (URPGHitOutcomeComponent::BeginFall) unless bFallPrepared says the caller already set that up. */
+	void KnockDown(const FVector& Velocity, const FVector& Point, bool bFallPrepared = false);
 	bool IsDown() const { return bDown; }
 	/** Fired when this character is knocked down by an impact (NPCs stop their AI / step reactions). */
 	FRPGOnKnockedDown OnKnockedDown;
+	/** Run into without going down: its share of the momentum (world, cm/s), where it was touched, and how hard it
+	 *  felt (Flinch = a nudge, Stagger, Knockback). NPCs react on their own; anyone else just takes the push. */
+	FRPGOnBumped OnBumped;
+	/** Take a bump that doesn't knock this character down (see OnBumped). */
+	void Bump(const FVector& Velocity, const FVector& Point, ERPGPowerReaction Reaction);
+	/** How the last bump this character took was classified (tests and the debug readout). */
+	ERPGPowerReaction GetLastBumpReaction() const { return LastBumpReaction; }
+	int32 GetBumpCount() const { return BumpCount; }
 	/** Per-character history, only used to break ties between safe, close pose matches. */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Get Up")
 	FName LastGetUpClip;
@@ -79,6 +93,8 @@ private:
 	bool bOwnLimpHandler = false;
 	float GettingUpUntil = 0.f;
 	float LastImpactTime = -10.f;
+	ERPGPowerReaction LastBumpReaction = ERPGPowerReaction::Flinch;
+	int32 BumpCount = 0;
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> HeldGetUp;
 	float GetUpTargetRate = 1.f;

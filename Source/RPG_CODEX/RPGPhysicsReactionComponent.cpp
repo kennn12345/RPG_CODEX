@@ -302,7 +302,7 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 	}
 	else
 	{
-		EnterPoweredReaction(Hit.HitBone, Result.Reaction == ERPGPowerReaction::Stagger);
+		EnterPoweredReaction(Hit.HitBone, Result.Reaction == ERPGPowerReaction::Stagger || Result.Reaction == ERPGPowerReaction::Knockback || Result.Reaction == ERPGPowerReaction::Catch);
 	}
 
 	// The struck part still takes a local push, so the hit reads on the body (and a knockdown topples away from it).
@@ -426,6 +426,8 @@ void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 	PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Simulated, true, false);
 	PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
 	PhysicsControl->SetControlsEnabled(AllControls, false);
+	// Fighting the fall: the motors drive toward the brace pose from the start (and again on a new hit while down).
+	if (bBraced) { BraceStrength = 1.f; ApplyBraceMotors(); }
 	// Keep the current local weight on takeover; the existing bounded blend-in reaches full ragdoll next.
 	if (bFromAnimation) SetPhysicsBlend(bFromLocalPhysical ? LocalBlend : 1.f);
 
@@ -683,7 +685,19 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 				ApplyPoweredMotorScales(Recover * Recover);
 				if (StateTime >= CurrentYieldTime + CurrentRecoverTime) ReturnToAnimated(ReturnBlendTime);
 			}
-			else if (LimpDuration > 0.f && StateTime >= LimpDuration)
+			if (State == ERPGPhysicsReactionState::Limp && bBraced)
+			{
+				// It keeps resisting through the landing; once the body has come to rest it eases off (still holding its
+				// head and arms a little) so it lies naturally for the get-up.
+				const FBodyInstance* Pelvis = Mesh ? Mesh->GetBodyInstance(AnchorBone) : nullptr;
+				const bool bResting = StateTime > 0.4f && (!Pelvis || Pelvis->GetUnrealWorldVelocity().Size() <= LimpSettleSpeed * 2.f);
+				if (bResting && BraceStrength > BraceRestShare)
+				{
+					BraceStrength = FMath::Max(BraceRestShare, BraceStrength - DeltaTime * (1.f - BraceRestShare) / BraceRelaxTime);
+					ApplyBraceMotors();
+				}
+			}
+			if (State == ERPGPhysicsReactionState::Limp && LimpDuration > 0.f && StateTime >= LimpDuration)
 			{
 				const FBodyInstance* Pelvis = Mesh ? Mesh->GetBodyInstance(AnchorBone) : nullptr;
 				const bool bSettled = !bWaitForSettle || !Pelvis || Pelvis->GetUnrealWorldVelocity().Size() <= LimpSettleSpeed;
@@ -773,6 +787,36 @@ void URPGPhysicsReactionComponent::SetFlightFollow(bool bOn)
 		PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
 		PhysicsControl->SetBodyModifiersMovementType(AllModifiers, EPhysicsMovementType::Kinematic, true, false);
 		PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(AllModifiers, EResetToCachedTargetBehavior::ResetDuringUpdateControls, true, false);
+	}
+}
+
+void URPGPhysicsReactionComponent::SetRagdollBrace(bool bOn)
+{
+	bBraced = bOn;
+	if (!bSetUp || !PhysicsControl || State != ERPGPhysicsReactionState::Limp || bReturning) return;
+	if (bOn) { BraceStrength = 1.f; ApplyBraceMotors(); }
+	else PhysicsControl->SetControlsEnabled(AllControls, false);   // knocked out: no muscle left
+}
+
+void URPGPhysicsReactionComponent::ApplyBraceMotors()
+{
+	if (!PhysicsControl) return;
+	for (const FName& Name : AllControls)
+	{
+		FPhysicsControlData Data;
+		if (!PhysicsControl->GetControlData(Name, Data)) continue;
+		Data.AngularStrength = MotorStrength;
+		Data.AngularDampingRatio = MotorDampingRatio;
+		Data.bEnabled = true;
+		PhysicsControl->SetControlData(Name, Data, true, false);
+	}
+	for (const TPair<FName, TArray<FName>>& Limb : LimbControls)
+	{
+		const FName Name = Limb.Key;
+		const float Scale = Name == TEXT("ArmLeft") || Name == TEXT("ArmRight") ? BraceArmScale
+			: Name == TEXT("LegLeft") || Name == TEXT("LegRight") ? BraceLegScale
+			: Name == TEXT("Head") ? BraceHeadScale : BraceTrunkScale;
+		SetLimbMotorScale(Name, Scale * BraceStrength);
 	}
 }
 

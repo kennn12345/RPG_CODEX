@@ -465,10 +465,10 @@ void ARPGCombatTestDummy::ReceivePowerHit(const FRPGMeleeHitInfo& Hit)
 	PlayImpactFeel(Hit.Attacker, Result.Reaction);
 	// Stagger: steps back (sliding with the shove) and stands dazed a moment, the body wobbling on weak motors.
 	UAnimSequence* StaggerBack = nullptr;
-	if (Result.Reaction == ERPGPowerReaction::Stagger)
+	if (Result.Reaction == ERPGPowerReaction::Stagger || Result.Reaction == ERPGPowerReaction::Knockback || Result.Reaction == ERPGPowerReaction::Catch)
 	{
 		const FVector Push = Hit.StrikeDirection.IsNearlyZero() && Hit.Attacker ? GetActorLocation() - Hit.Attacker->GetActorLocation() : Hit.StrikeDirection;
-		StaggerBack = PickStaggerClip(Push, Result.Displacement >= StaggerHeavyDisplacement);
+		StaggerBack = PickStaggerClip(Push, Result.Reaction == ERPGPowerReaction::Knockback || Result.Displacement >= StaggerHeavyDisplacement);
 		if (!StaggerBack) StaggerBack = StaggerBackAnimation.LoadSynchronous();
 	}
 	if (StaggerBack && PhysicsReaction->GetReactionState() != ERPGPhysicsReactionState::Limp)
@@ -500,7 +500,9 @@ void ARPGCombatTestDummy::PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Rea
 	float StopTime = 0.f, Shake = 0.f;
 	switch (Reaction)
 	{
-		case ERPGPowerReaction::Stagger:	StopTime = S->HitStopStagger;	Shake = S->ShakeStagger;	break;
+		case ERPGPowerReaction::Stagger:
+		case ERPGPowerReaction::Knockback:	StopTime = S->HitStopStagger;	Shake = S->ShakeStagger;	break;
+		case ERPGPowerReaction::Catch:	StopTime = S->HitStopKnockdown;	Shake = S->ShakeKnockdown;	break;
 		case ERPGPowerReaction::Knockdown:	StopTime = S->HitStopKnockdown;	Shake = S->ShakeKnockdown;	break;
 		case ERPGPowerReaction::Launch:		StopTime = S->HitStopLaunch;	Shake = S->ShakeLaunch;		break;
 		default: break;

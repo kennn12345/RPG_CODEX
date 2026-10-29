@@ -166,6 +166,33 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
 	bool IsFlightFollowing() const { return bFlightFollow; }
 
+	/**
+	 * A knockdown that fights the fall (an active ragdoll): while LIMP the body is a real whole-body ragdoll, but its motors
+	 * keep driving it toward the animation's pose, which the owner sets to a brace (URPGHitOutcomeComponent: arms reaching
+	 * for the ground in the fall direction). Arms at BraceArmScale, neck / head firm (protecting the head), trunk firm, legs
+	 * weak. Physics still wins: it falls. Once it has landed and settled the motors ease to BraceRestShare before the
+	 * get-up. Off (a knockout) = fully limp. Applies to the current ragdoll at once and to the next ones until changed.
+	 */
+	void SetRagdollBrace(bool bOn);
+	bool IsRagdollBraced() const { return bBraced; }
+	/** 0-1: how hard the ragdoll is fighting right now (0 when not braced or not LIMP). */
+	float GetBraceStrength() const { return State == ERPGPhysicsReactionState::Limp && bBraced ? BraceStrength : 0.f; }
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float BraceArmScale = 0.8f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float BraceHeadScale = 1.3f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float BraceTrunkScale = 0.9f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float BraceLegScale = 0.2f;
+	/** Share of the brace kept once the body has come to rest (it still holds its head and arms a little), and how
+	 *  quickly it eases there (seconds). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0", ClampMax = "1"))
+	float BraceRestShare = 0.3f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0.01"))
+	float BraceRelaxTime = 0.8f;
+
 	UFUNCTION(CallInEditor, Category = "RPG|Physics Reaction|Debug")
 	void DebugPoweredHit();
 
@@ -380,6 +407,10 @@ private:
 	FCollisionResponseContainer SavedMeshResponses;
 	TArray<TPair<TWeakObjectPtr<class UPrimitiveComponent>, FCollisionResponseContainer>> SavedCapsuleResponses;
 	bool bFlightFollow = false;
+	/** Active-ragdoll brace (SetRagdollBrace). */
+	bool bBraced = false;
+	float BraceStrength = 1.f;
+	void ApplyBraceMotors();
 	float CurrentYieldTime = 0.1f, CurrentRecoverTime = 0.6f, CurrentMotorBase = 1.f;
 	TArray<FName> AllControls;
 
