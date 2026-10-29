@@ -52,6 +52,20 @@ third-person clip is unchanged by the refactor (zero difference); its first-pers
 both views (left fist travel 44.0 cm third person, 20.6 cm first person, where the lead guard already rests far out);
 all pass with the stance tests (`Saved/Mocap8634/Gameplay-H.log`, `review-both.png`).
 
+## Overhand (user request) and left aim
+
+Both punches now throw like a ball: the pull-back draws the fist back and up toward the ear (`LOAD_FIST`) with the
+elbow lifted up and out (`ELBOW_LOADED`, 16-18 cm above the shoulder vs 14 cm below in the stance); the strike arcs
+over the top (`OVERHAND_ARC`, fist 153 cm mid-strike, down to 142 cm at impact) while the elbow rolls to out-to-the-side
+(`ELBOW_STRUCK`). Elbow directions blend by slerp (a straight-line blend flipped the elbow in ~4 frames) and stay
+mostly out to the side (an "up" hint lines up with the arm at the top of the arc). The torso pitches down 12 degrees
+over spine_01-03 and bends 6 degrees toward the lead side (`DRIVE_LEAN`, `DRIVE_SIDE_BEND`; measured 8 degrees chest
+pitch at impact), hips sink and drive (`DRIVE_HIPS` 3 cm forward, 3 cm down; 4.5 cm measured); the neck takes back
+60% so the eyes stay on target, and the guard fist travels with the head (it otherwise met the dropping head).
+`LEFT_AIM`: the left fist lands 1.98 cm further left at impact (measured against a build without it). Worst joint
+step ~15 deg/frame, as smooth bells (cocking, then the throw). PIE: all tests pass; reach 49.1 / 49.6 cm third person,
+42.5 / 27.4 cm first person (`Gameplay-I.log`, `review-both.png`).
+
 ## Code
 
 `RPGPrototypeAnimationComponent.cpp`: `CapturedPunchClip` returns the clip for the right hand, tier 0, on
