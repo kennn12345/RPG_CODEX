@@ -28,8 +28,8 @@ SETTLE = .25                       # Seconds to ease into the exact stance after
 LOAD_TURN = 20.                    # Degrees the torso turns the striking shoulder back, spread over spine_01-03.
 LOAD_PELVIS_TURN = 7.
 LOAD_HIPS = [0., -3., -2.]         # Weight settles back and down (mesh space: +Y forward, -X the character's right).
-LOAD_FIST = [-3., -10., 8.]        # Striking fist draws back and up toward the ear, cocked like a throw (right hand;
-                                   # X flips for the left).
+LOAD_FIST = [1., -8., 3.]          # Striking fist draws back to the cheek, slightly in: elbow and shoulder stay tight;
+                                   # the load comes from the torso coil (right hand; X flips for the left).
 LOAD_GUARD = [0., 2., 0.]          # The other hand holds out a little.
 UNWIND = .7                        # Fraction of the strike over which the pull-back unwinds.
 # Follow-through (user request): the torso keeps rotating through the target and the striking shoulder drives
@@ -43,10 +43,14 @@ DRIVE_CLAVICLE = 8.                # Extra striking-shoulder protraction.
 DRIVE_LEAN = 12.                   # Forward pitch of the torso, over spine_01-03 (the head keeps 40% of it).
 DRIVE_SIDE_BEND = 6.               # Torso bends toward the lead (non-striking) side as the punch comes over.
 DRIVE_HIPS = [0., 3., -3.]         # Weight carried forward and down.
-OVERHAND_ARC = 8.                  # Extra fist height mid-strike: the arc over the top.
-ELBOW_LOADED = [-.85, -.15, .5]    # Elbow direction at the pull-back: out and up, a little back (right arm). Kept mostly
-                                   # out to the side: an "up" hint lines up with the arm as the fist arcs over the top.
-ELBOW_STRUCK = [-1., 0., .15]      # Elbow direction at impact: out to the side, still a little high.
+OVERHAND_ARC = 3.                  # Extra fist height mid-strike: a slight arc over the top.
+# Elbow (user request: tight, then rotate into the release). It stays down and tucked, as in the stance, through the
+# pull-back and the first half of the strike, then turns over to out-to-the-side as the arm extends. A lifted elbow
+# in the pull-back (the earlier overhand) swung the forearm upright and read as a wave.
+ELBOW_TURN = .3                    # Fraction of the strike time after which the elbow starts turning over; it finishes
+ELBOW_TURN_END = .03               # this long after impact. Timed on the clock: driving it from the eased strike
+                                   # amount squeezed the 75-degree turn into ~3 frames.
+ELBOW_STRUCK = [-1., 0., .2]       # Elbow direction at impact: out to the side, a little high (right arm).
 LEFT_AIM = [2., 0., 0.]            # User request: the left punch lands 2 cm further left.
 DRIVE_RISE, DRIVE_PEAK, DRIVE_FALL = .4, .05, .35   # Starts 40% into the strike, peaks 0.05 s after impact, unwinds 0.35 s after the hold.
 SMOOTH_RADIUS, SMOOTH_SIGMA = 3, 1.5   # Frames; temporal smoothing applied after the fit.
@@ -109,13 +113,19 @@ def turn_world(local, bone, degrees, axis=(0., 0., 1.)):
     local[bone] = (p.qnorm(p.qmul(p.qconj(cs[parent][0]), q)) if parent else p.qnorm(q), local[bone][1])
 
 
-def elbow_pole(strike, load=0.):
-    """Striking elbow direction: from the stance's, lifting up and out in the pull-back (cocked like a throw), then
-    rolling over to out-to-the-side as the arm extends. Steered explicitly, because near full extension the elbow is
-    barely defined and, with the torso turning through, it otherwise snaps in a few frames."""
+def elbow_pole(turn):
+    """Striking elbow direction: tucked down as in the stance through the pull-back and early strike, turning over to
+    out-to-the-side in the release (`turn` 0..1). Steered explicitly, because near full extension the elbow is barely
+    defined and, with the torso turning through, it otherwise snaps in a few frames."""
     guard = p.norm(p.sub(REST['lowerarm_'+S][1], REST['upperarm_'+S][1]))
-    cocked = slerp(guard, p.norm(side_x(ELBOW_LOADED)), load)
-    return slerp(cocked, p.norm(side_x(ELBOW_STRUCK)), strike)
+    return slerp(guard, p.norm(side_x(ELBOW_STRUCK)), turn)
+
+
+def turn_weight(t, recover):
+    """How far the elbow and shoulder have turned over into the release at clip time t."""
+    start = LOAD+ELBOW_TURN*(IMPACT-LOAD); end = IMPACT+ELBOW_TURN_END
+    if t <= end: return ease((t-start)/(end-start))
+    return 1.-ease((t-IMPACT-HOLD)/(recover-HOLD))
 
 
 def slerp(a, b, u):
@@ -134,7 +144,7 @@ def drive_weight(t, recover):
     return 1.-ease((t-hold_end)/DRIVE_FALL)
 
 
-def recorded(seconds, strike_weight, load=0., drive=0.):
+def recorded(seconds, strike_weight, load=0., drive=0., turn=0.):
     """Recorded pose at `seconds`, expressed as a change from BASE and applied to the filmed stance, plus `load` of
     the pull-back and `drive` of the follow-through."""
     frame = sample(seconds); source_cs = p.to_cs(frame)
@@ -166,7 +176,8 @@ def recorded(seconds, strike_weight, load=0., drive=0.):
             turn_world(local, bone, SIGN*DRIVE_SIDE_BEND*share*drive, (0., 1., 0.))
         turn_world(local, 'neck_01', .6*DRIVE_LEAN*drive, (1., 0., 0.))
         turn_world(local, 'neck_01', -.6*SIGN*DRIVE_SIDE_BEND*drive, (0., 1., 0.))
-        turn_world(local, 'clavicle_'+S, -SIGN*DRIVE_CLAVICLE*drive)
+        # The shoulder stays in until the release, then drives forward with it.
+        turn_world(local, 'clavicle_'+S, -SIGN*DRIVE_CLAVICLE*drive*turn)
     for s in 'lr':
         # Feet stay planted on the stance footprint.
         cs = p.to_cs(local); foot = 'foot_'+s
@@ -194,7 +205,7 @@ def recorded(seconds, strike_weight, load=0., drive=0.):
             target[2] += OVERHAND_ARC*math.sin(math.pi*strike_weight)*(1. if seconds <= PUNCH['peak'] else 0.)
             fit_punch_shoulder(local, s, target); cs = p.to_cs(local)
         target = elbow_clearance(cs, s, target)
-        pole = elbow_pole(strike_weight, load) if s == S else p.sub(cs['lowerarm_'+s][1], cs['upperarm_'+s][1])
+        pole = elbow_pole(turn) if s == S else p.sub(cs['lowerarm_'+s][1], cs['upperarm_'+s][1])
         repair_chain(local, 'upperarm_'+s, 'lowerarm_'+s, hand, target, pole)
         straight_wrist(local, s, .8*strike_weight if s == S else 0.)
     local['root'] = ([0., 0., 0., 1.], [0., 0., 0.])
@@ -240,7 +251,7 @@ def first_person(pose, t, length, drive, previous):
     return follow_ik(view)
 
 
-def smooth(rows, strikes, loads):
+def smooth(rows, turns):
     """Gaussian smoothing of every bone over neighbouring frames (end frames fixed), then the feet re-planted, so the
     seams between stance, pull-back, strike, hold and recovery carry no velocity pops."""
     weights = [math.exp(-.5*(k/SMOOTH_SIGMA)**2) for k in range(-SMOOTH_RADIUS, SMOOTH_RADIUS+1)]
@@ -260,7 +271,7 @@ def smooth(rows, strikes, loads):
             # Averaged joint rotations would wobble the fist where the elbow twist changes quickly near full
             # extension: re-solve the arm onto the averaged fist path instead.
             cs = p.to_cs(pose)
-            pole = elbow_pole(strikes[i], loads[i]) if s == S else p.sub(cs['lowerarm_'+s][1], cs['upperarm_'+s][1])
+            pole = elbow_pole(turns[i]) if s == S else p.sub(cs['lowerarm_'+s][1], cs['upperarm_'+s][1])
             repair_chain(pose, 'upperarm_'+s, 'lowerarm_'+s, 'hand_'+s, p.mul(hands[s], 1./total), pole, cs['hand_'+s][0])
         pose['root'] = ([0., 0., 0., 1.], [0., 0., 0.])
         out.append(follow_ik(pose))
@@ -285,19 +296,20 @@ def build(side):
     recover = HOLD+(PUNCH['back']-PUNCH['retract'])/RETURN_SPEED
     length = IMPACT+recover+SETTLE
     end_pose = recorded(PUNCH['back'], 0.)
-    rows, strikes, loads = [], [], []
+    rows, turns = [], []
     for i in range(round(length*FPS)+1):
         t = i/FPS
         if t <= IMPACT+recover:
             strike = 0. if t <= LOAD else ease((t-LOAD)/(IMPACT-LOAD)) if t <= IMPACT else 1.-ease((t-IMPACT)/recover)
             load = ease(t/LOAD) if t <= LOAD else 1.-ease((t-LOAD)/((IMPACT-LOAD)*UNWIND))
-            pose = recorded(source_time(t), strike, load, drive_weight(t, recover))
+            turn = turn_weight(t, recover)
+            pose = recorded(source_time(t), strike, load, drive_weight(t, recover), turn)
         else:
-            strike = load = 0.
+            turn = 0.
             pose = blend(end_pose, STANCE, ease((t-IMPACT-recover)/SETTLE))
-        rows.append(pose); strikes.append(strike); loads.append(load)
+        rows.append(pose); turns.append(turn)
     rows[0] = copy.deepcopy(STANCE); rows[-1] = copy.deepcopy(STANCE)
-    rows = smooth(rows, strikes, loads)
+    rows = smooth(rows, turns)
     previous = {s: p.sub(FP_REST['lowerarm_'+s][1], FP_REST['upperarm_'+s][1]) for s in 'lr'}
     views = [first_person(pose, i/FPS, length, drive_weight(i/FPS, recover), previous) for i, pose in enumerate(rows)]
     rows[0] = copy.deepcopy(STANCE); rows[-1] = copy.deepcopy(STANCE)

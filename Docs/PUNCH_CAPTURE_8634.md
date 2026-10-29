@@ -66,6 +66,17 @@ pitch at impact), hips sink and drive (`DRIVE_HIPS` 3 cm forward, 3 cm down; 4.5
 step ~15 deg/frame, as smooth bells (cocking, then the throw). PIE: all tests pass; reach 49.1 / 49.6 cm third person,
 42.5 / 27.4 cm first person (`Gameplay-I.log`, `review-both.png`).
 
+## Tight elbow, rotate on release (user request)
+
+The overhand's lifted elbow in the pull-back swung the forearm upright and read as a wave. Now the elbow stays down
+and tucked as in the stance through the pull-back (~10 cm below the shoulder) and the first third of the strike, and
+the fist draws back to the cheek (`LOAD_FIST`); the load comes from the torso coil. The elbow and shoulder turn over
+together in the release (`elbow_pole(turn)`, clavicle drive scaled by the same `turn`), reaching ~6 cm above the
+shoulder at impact, and unwind over the return. `turn_weight` is timed on the clip clock (from 30% of the strike to
+0.03 s after impact): driving it from the eased strike amount squeezed the ~75-degree turn into ~3 frames (30
+deg/frame). Arc over the top reduced to 3 cm. Worst joint step 15 deg/frame at full punch speed, two smooth surges.
+PIE tests pass (`Gameplay-J.log`; close-ups `arm-right.png`, `arm-left.png`).
+
 ## Code
 
 `RPGPrototypeAnimationComponent.cpp`: `CapturedPunchClip` returns the clip for the right hand, tier 0, on
