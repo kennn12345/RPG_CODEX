@@ -85,8 +85,10 @@ DRIVE_HIPS = [3., 5., -4.]         # Weight shifts toward the lead side, forward
 DRIVE_LEAN = 10.                   # Torso pitches down into the punch (the head keeps 40% of it).
 DRIVE_SIDE_BEND = 6.               # ... and bends toward the lead side.
 DRIVE_CLAVICLE = 10.               # The striking shoulder rolls forward and drives.
-FOOT_PIVOT = 35.                   # Striking-side foot turns on its ball as the hips turn (heel swings out) ...
-HEEL_LIFT = 22.                    # ... with the heel lifted.
+# Striking-side foot turns on its ball as the hips turn (heel swings out), with the heel lifted. The left punch's
+# foot is the lead foot: user request, only a very small pivot there, so the lead knee barely turns.
+FOOT_PIVOT = {'r': 35., 'l': 4.}
+HEEL_LIFT = {'r': 22., 'l': 3.}
 
 # Follow-through (user request): the punch angles down through the target. Contact is unchanged (straight ahead at
 # the chin); just after it the fist carries on forward and down while the striking shoulder drives further forward
@@ -215,8 +217,8 @@ def foot_target(side, w):
     ball = REST['ball_'+side][1]
     toe = p.norm([ball[0]-t[0], ball[1]-t[1], 0.])
     # Heel swings out as the hips turn through: the foot turns the same way as the pelvis drive.
-    yaw = p.qaxis([0., 0., 1.], -SIGN*FOOT_PIVOT*drive)
-    lift = p.qaxis(p.norm(p.cross([0., 0., 1.], toe)), HEEL_LIFT*drive)
+    yaw = p.qaxis([0., 0., 1.], -SIGN*FOOT_PIVOT[side]*drive)
+    lift = p.qaxis(p.norm(p.cross([0., 0., 1.], toe)), HEEL_LIFT[side]*drive)
     rot = p.qmul(yaw, lift)
     return p.qnorm(p.qmul(rot, q)), p.add(ball, p.qrot(rot, p.sub(t, ball))), p.qrot(yaw, KNEE_POLE[side])
 

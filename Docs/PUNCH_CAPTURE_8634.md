@@ -123,6 +123,13 @@ Reviewed with six-angle preview sheets the user marked up by hand (`Tools/Blende
 Checks: all four clips pass; worst joint step ~38 deg/frame at the launch out of the wind-up; no end-frame jump.
 PIE: all punch and stance tests pass (`Gameplay-Q.log`).
 
+## Minimal lead-foot pivot on the left punch (user request)
+
+The striking-side foot pivot is now per side (`FOOT_PIVOT`, `HEEL_LIFT`): the right punch's rear foot keeps 35 /
+22 degrees; the left punch's foot is the lead foot and pivots only 4 / 3 degrees. Left punch, before -> after: lead
+knee swing 32 -> ~7 degrees (the rest is the hips turning over the planted foot), foot turn 41 -> 5 degrees, heel
+lift 5.1 -> 0.8 cm. Right punch unchanged (zero difference). PIE tests pass (`Gameplay-R.log`).
+
 ## Code
 
 `RPGPrototypeAnimationComponent.cpp`: `CapturedPunchClip` returns the clip for the right hand, tier 0, on
