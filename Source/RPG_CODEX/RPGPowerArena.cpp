@@ -3,6 +3,8 @@
 #include "RPG_CODEX.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatTestDummy.h"
+#include "RPGNpcCharacter.h"
+#include "EngineUtils.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
@@ -105,4 +107,17 @@ AStaticMeshActor* RPGPowerArena::BuildFlatFloor(UWorld* World, const FVector& To
 	Floor->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
 	Floor->SetActorScale3D(FVector(SizeMeters, SizeMeters, 1.f));
 	return Floor;
+}
+
+ARPGNpcCharacter* RPGPowerArena::FindReferenceNpc(UWorld* World)
+{
+	if (!World) return nullptr;
+	ARPGNpcCharacter* Found = nullptr;
+	for (TActorIterator<ARPGNpcCharacter> It(World); It; ++It)
+	{
+		It->bWander = false;
+		if (AController* Controller = It->GetController()) Controller->StopMovement();
+		if (!Found || It->DisplayLabel == TEXT("Standard Bandit")) Found = *It;
+	}
+	return Found;
 }

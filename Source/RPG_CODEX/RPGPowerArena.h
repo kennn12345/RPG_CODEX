@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 class AStaticMeshActor;
+class ARPGNpcCharacter;
 class UWorld;
 
 /**
@@ -21,4 +22,8 @@ namespace RPGPowerArena
 {
 	/** A flat, collidable square floor (the engine cube, scaled) whose top surface is centred on Top. */
 	RPG_CODEX_API AStaticMeshActor* BuildFlatFloor(UWorld* World, const FVector& Top, float SizeMeters);
+
+	/** The level's Standard Bandit (the ladder's reference target; any NPC if it isn't there), with every NPC's wandering
+	 *  switched off so the tests' targets stand where they are put. Null until the NPCs exist. */
+	RPG_CODEX_API ARPGNpcCharacter* FindReferenceNpc(UWorld* World);
 }

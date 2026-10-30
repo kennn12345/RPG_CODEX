@@ -1,7 +1,7 @@
 // Power System calibration sweep: Session Frontend > Automation > RPG.Power.Calibration, or
 // UnrealEditor-Cmd RPG_CODEX.uproject -ExecCmds="Automation RunTests RPG.Power.Calibration"
 // -TestExit="Automation Test Queue Empty" -unattended -nullrhi
-// On a flat floor above the level, punches the standard bandit (normal punch) at each Strength in the sweep and
+// On a flat floor above the level, punches the level's Standard Bandit (a GASP NPC; normal punch) at each Strength in the sweep and
 // measures how far it really ended up against the distance the Power System calculated. Prints a table (search the
 // log for RPGCALIB). Launches must end up 70-135% of the calculated distance; ragdolls tumble differently every time.
 
@@ -11,11 +11,13 @@
 
 #include "RPG_CODEX.h"
 #include "RPGCharacterStatsComponent.h"
-#include "RPGCombatTestDummy.h"
+#include "RPGNpcCharacter.h"
+#include "RPGAttributeSet.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "RPGPowerArena.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Editor.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
@@ -37,19 +39,17 @@ namespace
 		{
 			UWorld* World = GEditor ? GEditor->PlayWorld : nullptr;
 			if (!World) return Timeout(TEXT("no play world"));
-			if (!Dummy.IsValid())
-				for (TActorIterator<ARPGCombatTestDummy> It(World); It; ++It) Dummy = *It;
+			if (!Dummy.IsValid()) Dummy = RPGPowerArena::FindReferenceNpc(World);
 			ACharacter* Player = UGameplayStatics::GetPlayerCharacter(World, 0);
 			URPGCharacterStatsComponent* PlayerStats = URPGCharacterStatsComponent::FindStats(Player);
 			if (!Dummy.IsValid() || !Player || !PlayerStats) return Timeout(TEXT("dummy, player or stats not found"));
-			ARPGCombatTestDummy* D = Dummy.Get();
+			ARPGNpcCharacter* D = Dummy.Get();
+			USkeletalMeshComponent* Mesh = D->GetMesh();
 			const float Now = World->GetTimeSeconds();
 
 			if (!bArenaBuilt)
 			{
-				D->Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
-				D->StopWanderingAtHome();
-				D->bUsePowerSystem = true;
+				Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 				ArenaTop = D->GetActorLocation() + FVector(0.f, 0.f, 8000.f);
 				if (!RPGPowerArena::BuildFlatFloor(World, ArenaTop, 300.f)) { Test->AddError(TEXT("RPGTEST could not build the flat floor")); return true; }
 				Player->SetActorLocation(ArenaTop + FVector(0.f, 4000.f, 120.f), false, nullptr, ETeleportType::ResetPhysics);
@@ -64,23 +64,31 @@ namespace
 			switch (Phase)
 			{
 			case 0:   // place: back on its feet, full health, at the arena spot, facing -X (hits throw it that way)
-				D->ResetDummy();
-				D->SetActorLocationAndRotation(ArenaTop + FVector(0.f, 0.f, D->Capsule->GetScaledCapsuleHalfHeight() + 1.f),
+			{
+				// (back on its feet and settled from the last case first; then full health)
+				const bool bReady = !D->IsBusy() && D->PhysicsReaction->GetReactionState() == ERPGPhysicsReactionState::Animated
+					&& !D->PhysicsReaction->IsReturning();
+				if (!bReady && Now - PhaseStart < 20.f) return false;
+				if (const URPGAttributeSet* A = D->Stats->GetAttributes()) D->Stats->SetStatBaseByName(TEXT("Health"), A->GetMaxHealth());
+				D->SetActorLocationAndRotation(ArenaTop + FVector(0.f, 0.f, D->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 1.f),
 					FRotator(0.f, 180.f, 0.f), false, nullptr, ETeleportType::ResetPhysics);
+				D->GetCharacterMovement()->StopMovementImmediately();   // (the retired dummy's reset did this: no slide left over from the last case)
 				PlayerStats->SetStatBaseByName(TEXT("Strength"), Strength);
 				Phase = 1; PhaseStart = Now;
 				return false;
+			}
 
 			case 1:   // settle, then hit
 			{
-				if (Now - PhaseStart < 0.5f) return false;
+				// Settled and standing still (a push from the last case can still be carrying it), then the hit.
+				if ((Now - PhaseStart < 0.5f || D->GetVelocity().Size2D() > 5.f) && Now - PhaseStart < 5.f) return false;
 				StartSpot = D->GetActorLocation();
 				FRPGMeleeHitInfo Hit;
 				Hit.AttackName = TEXT("Calibration Punch");
 				Hit.Attacker = Player;
 				Hit.HitActor = D;
 				Hit.HitBone = TEXT("spine_05");
-				Hit.ImpactLocation = D->Mesh->GetBoneLocation(Hit.HitBone);
+				Hit.ImpactLocation = Mesh->GetBoneLocation(Hit.HitBone);
 				Hit.StrikeDirection = D->GetActorForwardVector();
 				IRPGMeleeTarget::Execute_ReceiveMeleeHit(D, Hit);
 				Expected = D->LastPowerResult;
@@ -133,7 +141,7 @@ namespace
 		}
 
 		FAutomationTestBase* Test;
-		TWeakObjectPtr<ARPGCombatTestDummy> Dummy;
+		TWeakObjectPtr<ARPGNpcCharacter> Dummy;
 		int32 WaitFrames = 0, Case = 0, Phase = 0, Launches = 0;
 		bool bArenaBuilt = false, bSawLimp = false, bAllOk = true;
 		float PhaseStart = 0.f, RatioSum = 0.f;

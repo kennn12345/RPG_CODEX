@@ -1,8 +1,9 @@
-// Editor automation test for the Power System on the combat test dummy: Session Frontend > Automation >
-// RPG.Power.DummyLaunch, or UnrealEditor-Cmd RPG_CODEX.uproject -ExecCmds="Automation RunTests RPG.Power.DummyLaunch"
+// Editor automation test for the Power System on an enemy (the level's Standard Bandit, a GASP NPC; it was written for
+// the retired combat test dummy, hence the name): Session Frontend > Automation > RPG.Power.DummyLaunch, or
+// UnrealEditor-Cmd RPG_CODEX.uproject -ExecCmds="Automation RunTests RPG.Power.DummyLaunch"
 // -TestExit="Automation Test Queue Empty" -unattended -nullrhi
-// Plays the startup map, builds a flat 200 m floor high above the level (the map's dummy stands on a raised platform
-// with drops and slopes around it), stands the dummy on it, gives the player Strength 12 and hits the dummy once: it
+// Plays the startup map, builds a flat 200 m floor high above the level (the level is uneven: slopes and drops change
+// how far a launched body travels), stands the bandit on it, gives the player Strength 12 and hits it once: it
 // must take the calculated damage, be launched (LIMP), land about the calculated distance away (it slides a little
 // after landing), and get up where it landed instead of snapping back to where it stood. The body must never sink
 // below the floor. RPG_SHOT_GETUP=1 (rendered editor, not -nullrhi) also films the fall and get-up from the side into
@@ -15,7 +16,8 @@
 #include "RPG_CODEX.h"
 #include "RPGAttributeSet.h"
 #include "RPGCharacterStatsComponent.h"
-#include "RPGCombatTestDummy.h"
+#include "RPGNpcCharacter.h"
+#include "RPGPowerArena.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -47,18 +49,17 @@ namespace
 		{
 			UWorld* World = GEditor ? GEditor->PlayWorld : nullptr;
 			if (!World) return Timeout(TEXT("no play world"));
-			if (!Dummy.IsValid())
-				for (TActorIterator<ARPGCombatTestDummy> It(World); It; ++It) Dummy = *It;
+			if (!Dummy.IsValid()) Dummy = RPGPowerArena::FindReferenceNpc(World);
 			ACharacter* Player = UGameplayStatics::GetPlayerCharacter(World, 0);
 			URPGCharacterStatsComponent* PlayerStats = URPGCharacterStatsComponent::FindStats(Player);
 			if (!Dummy.IsValid() || !Player || !PlayerStats || !Dummy->Stats) return Timeout(TEXT("dummy, player or stats not found"));
-			ARPGCombatTestDummy* D = Dummy.Get();
+			ARPGNpcCharacter* D = Dummy.Get();
+			USkeletalMeshComponent* Mesh = D->GetMesh();
 			const float Now = World->GetTimeSeconds();
 
 			if (Start < 0.f)
 			{
-				D->Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
-				D->StopWanderingAtHome();
+				Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
 				// Flat floor: the engine cube scaled to 200 m x 200 m x 1 m, its top 80 m above the dummy's spot.
 				const FVector ArenaTop = D->GetActorLocation() + FVector(0.f, 0.f, 8000.f);
@@ -72,9 +73,8 @@ namespace
 				Floor->SetActorScale3D(FVector(200.f, 200.f, 1.f));
 
 				// Dummy standing on it; player parked well off to the side (out of the flight path).
-				D->SetActorLocation(ArenaTop + FVector(0.f, 0.f, D->Capsule->GetScaledCapsuleHalfHeight() + 1.f), false, nullptr, ETeleportType::ResetPhysics);
+				D->SetActorLocation(ArenaTop + FVector(0.f, 0.f, D->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 1.f), false, nullptr, ETeleportType::ResetPhysics);
 				Player->SetActorLocation(ArenaTop + FVector(0.f, 3000.f, 120.f), false, nullptr, ETeleportType::ResetPhysics);
-				D->bUsePowerSystem = true;
 				PlayerStats->SetStatBaseByName(TEXT("Strength"), TestStrength);
 				Start = Now;
 				return false;
@@ -94,7 +94,7 @@ namespace
 				Hit.Attacker = Player;
 				Hit.HitActor = D;
 				Hit.HitBone = TEXT("spine_05");
-				Hit.ImpactLocation = D->Mesh->GetBoneLocation(Hit.HitBone);
+				Hit.ImpactLocation = Mesh->GetBoneLocation(Hit.HitBone);
 				Hit.StrikeDirection = D->GetActorForwardVector();
 				IRPGMeleeTarget::Execute_ReceiveMeleeHit(D, Hit);
 				bHit = true;
@@ -106,7 +106,7 @@ namespace
 
 			const ERPGPhysicsReactionState State = D->PhysicsReaction->GetReactionState();
 			if (State == ERPGPhysicsReactionState::Limp) bSawLimp = true;
-			const FVector Pelvis = D->Mesh->GetBoneLocation(TEXT("pelvis"));
+			const FVector Pelvis = Mesh->GetBoneLocation(TEXT("pelvis"));
 			MinPelvisAboveFloor = FMath::Min(MinPelvisAboveFloor, float(Pelvis.Z - FloorZ));
 			if (FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_SHOT_GETUP")) == TEXT("1") && Now - LastShot >= 0.4f)
 			{
@@ -130,16 +130,18 @@ namespace
 			if (Now - LastTrace >= 0.25f)
 			{
 				LastTrace = Now;
-				const FVector P = D->Mesh->GetBoneLocation(TEXT("pelvis"));
-				const FBodyInstance* Body = D->Mesh->GetBodyInstance(TEXT("pelvis"));
+				const FVector P = Mesh->GetBoneLocation(TEXT("pelvis"));
+				const FBodyInstance* Body = Mesh->GetBodyInstance(TEXT("pelvis"));
 				const FVector V = Body ? Body->GetUnrealWorldVelocity() : FVector::ZeroVector;
 				UE_LOG(LogRPGInput, Display, TEXT("RPGLAUNCH t=%.2f state %d pelvis (%.0f, %.0f, %.0f) %.0f cm out, velocity (%.0f, %.0f, %.0f)"),
 					Now - HitAt, int32(State), P.X, P.Y, P.Z, FVector::Dist2D(P, StartSpot), V.X, V.Y, V.Z);
 			}
 
-			// While fading back to the animation the body must stay near the actor (no snap back to the start).
+			// While fading back to the animation the body must stay near the actor (no snap back to the start, which would be
+			// the launch's whole distance: the retired dummy's was 418 cm). A get-up clip can start with the hips well off its
+			// root (a sit-and-turn ~80 cm), so up to 150 cm is the clip, not a snap.
 			if (D->PhysicsReaction->IsReturning())
-				MaxReturnGap = FMath::Max(MaxReturnGap, float(FVector::Dist2D(D->Mesh->GetBoneLocation(TEXT("pelvis")), D->GetActorLocation())));
+				MaxReturnGap = FMath::Max(MaxReturnGap, float(FVector::Dist2D(Mesh->GetBoneLocation(TEXT("pelvis")), D->GetActorLocation())));
 
 			const bool bDone = bSawLimp && State == ERPGPhysicsReactionState::Animated;
 			if (!bDone && Now - HitAt < 12.f) return false;
@@ -150,7 +152,7 @@ namespace
 			const float Ratio = Expected.Displacement > 0.f ? Landed / Expected.Displacement : 0.f;
 			const bool bDamageOk = FMath::IsNearlyEqual(HealthBefore - HealthAfterHit, FMath::Min(Expected.Damage, HealthBefore), 0.5f);
 			// On flat ground arc + slide should cover the calculated distance; ragdolls tumble differently each time.
-			const bool bPass = bDone && Expected.Reaction == ERPGPowerReaction::Launch && bDamageOk && Ratio > 0.7f && Ratio < 1.35f && MaxReturnGap < 80.f
+			const bool bPass = bDone && Expected.Reaction == ERPGPowerReaction::Launch && bDamageOk && Ratio > 0.7f && Ratio < 1.35f && MaxReturnGap < 150.f
 				&& MinPelvisAboveFloor > 0.f;
 
 			const FString Line = FString::Printf(TEXT("RPGTEST %s  Power launch (Strength %.0f normal punch on the standard bandit): reaction %s, ")
@@ -173,7 +175,7 @@ namespace
 		}
 
 		FAutomationTestBase* Test;
-		TWeakObjectPtr<ARPGCombatTestDummy> Dummy;
+		TWeakObjectPtr<ARPGNpcCharacter> Dummy;
 		int32 WaitFrames = 0;
 		float Start = -1.f, HitAt = 0.f, HealthBefore = 0.f, HealthAfterHit = 0.f, MaxReturnGap = 0.f, LastTrace = -1.f;
 		bool bHit = false, bSawLimp = false;

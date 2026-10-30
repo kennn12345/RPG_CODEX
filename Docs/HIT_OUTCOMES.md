@@ -59,8 +59,9 @@ braced knockdowns), `RPGPhysicsReactionComponent.cpp` (brace motors), `RPGAnimIn
 
 `RPG.Power.Outcomes` (pure), `RPG.Npc.HitOutcomes`, `RPG.Player.HitOutcomes` on `/Game/RPG/Maps/L_DummyField`.
 `RPG_SHOT_OUTCOMES=1` (rendered) saves side views to `Saved/Screenshots/HitOutcomes/` and `PlayerOutcomes/`.
-`RPG.Combat.PhysicsReaction`, `RPG.Power.Calibration`, `RPG.Power.DummyLaunch` need the old `ARPGCombatTestDummy`, which
-L_DummyField doesn't have: they stop at setup (same as the known `RPG.Combat.TestDummy`).
+`RPG.Power.Calibration` and `RPG.Power.DummyLaunch` (2026-10-30) run on the level's Standard Bandit, a GASP NPC
+(`RPGPowerArena::FindReferenceNpc`): launches land 89-120% of the calculated distance. `RPG.Combat.PhysicsReaction` and
+`RPG.Combat.TestDummy` still need the retired `ARPGCombatTestDummy` placed in the level (L_DummyField has none).
 
 ## Knee-down catches (stage 3)
 
