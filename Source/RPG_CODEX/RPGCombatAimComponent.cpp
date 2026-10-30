@@ -136,6 +136,22 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		const float Turn=FRotator::NormalizeAxis(ViewRotation.Yaw-(Natural-Pivot).Rotation().Yaw);
 		AimPoint=Pivot+FQuat(FVector::UpVector,FMath::DegreesToRadians(Turn)).RotateVector(Natural-Pivot);
 	}
+	const FVector ReticlePoint=AimPoint;
+	if(bFilmedStrike && !bFirstPerson && bOnTarget && bAttacking && !bKick && State)
+	{
+		// Third person, a punch at a target: the fist comes in from above and from its own side, and its sweep meets
+		// the body before the knuckles reach the reticle point: contact lands high and out toward the punching hand,
+		// the more the lower the target (a body shot tilts the strike 20-30 degrees down and grazes the chest /
+		// shoulder first). Aim the strike that much low and in; the reticle point itself is unchanged.
+		// (A target at the edge of the fist's reach is met at full stretch, not grazed on the way: none there.)
+		const FTransform& MeshToWorld=Character->GetMesh()->GetComponentTransform();
+		const FVector Pivot=MeshToWorld.TransformPosition(StrikeFrom),Natural=MeshToWorld.TransformPosition(StrikePoint);
+		const float Inside=FMath::Clamp((FVector::Dist(Pivot,Natural)-FVector::Dist(Pivot,AimPoint))/ContactReachFade,0.f,1.f);
+		const float Hand=State->StrikeLimb==ERPGStrikeLimb::RightHand?1.f:State->StrikeLimb==ERPGStrikeLimb::LeftHand?-1.f:0.f;
+		const float Depth=FMath::Max(0.f,Natural.Z-AimPoint.Z);
+		const FVector Right=FRotationMatrix(Character->GetActorRotation()).GetUnitAxis(EAxis::Y);
+		AimPoint-=(Right*Hand*(ContactSideOffset+ContactSidePerCm*Depth)+FVector::UpVector*(ContactLiftOffset+ContactLiftPerCm*Depth))*Inside;
+	}
 	auto MeasureAim = [&](float& OutYaw, float& OutPitch)
 	{
 		// The camera guard is authored to face the view. Do not aim a held coil
@@ -211,7 +227,7 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		const FVector From = bEyePivot ? ViewLocation : MeshToWorld.TransformPosition(StrikeFrom);
 		const FRotator Natural = (MeshToWorld.TransformPosition(StrikePoint) - From).Rotation();
 		// Gameplay aim: the raw (clamped) aim, never the smoothed body. The visible body's own turn is published apart.
-		State->AttackAimPoint = AimPoint;
+		State->AttackAimPoint = ReticlePoint;
 		State->AttackAimYaw = TargetYaw;
 		State->AttackAimPitch = TargetPitch;
 		State->AttackAimVisualYaw = AppliedYaw;

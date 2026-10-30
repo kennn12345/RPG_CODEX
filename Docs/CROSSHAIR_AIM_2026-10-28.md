@@ -62,3 +62,32 @@ The largest punch errors are the out-of-reach case (the fist stops short) and fi
 `RPG.Spells.Energy` and `RPG.Combat.FirstPersonSteadiness` pass. `RPG.Combat.TestDummy` fails before it starts (it
 needs a dummy placed in the level; L_DummyField has none). That failure has nothing to do with this change.
 Screenshots: `Saved/AimReview/` (`aim-before-after.png`, `Baseline/`).
+
+## Third-person body shots (2026-10-30)
+
+The test now also reports where each punch connects (the struck dummy's impact point), not only the fist's closest
+pass (measured on its path between frames: a fist at 6-10 m/s moves 10-16 cm a frame). Connecting, third-person body
+shots were 18-23 cm off, on the collarbone / upper chest: the torso tilts 20-30 degrees down for a low target, so the
+fist comes in steeply from its own side and its 6 cm sweep meets the chest before the knuckles reach the reticle point.
+The closest pass hid it (the fist sometimes carried on after the hit). Since the hit outcomes went in, the dummy also
+staggers on contact, which made that number swing run to run.
+
+Fix (user's choice: keep the torso tilt, re-aim): `URPGCombatAimComponent` aims a third-person punch at a target
+`ContactSideOffset` + `ContactSidePerCm` per cm of depth in toward the body's middle and `ContactLiftOffset` +
+`ContactLiftPerCm` per cm low, depth being how far the target sits below the punch's natural height. It fades out over
+the last `ContactReachFade` (10 cm) of the fist's reach, where the fist meets the target extended. The published
+reticle point (`AttackAimPoint`) is unchanged.
+
+| third person, where the punch connects | before | after |
+|---|---|---|
+| chest | 18.1 cm (clavicle) | 10.0 cm (spine_04) |
+| stomach | 23.0 cm (spine_05) | 9.9-11.0 cm (spine_04) |
+| chin, 4 bearings | 7.5-12.4 cm | 7.1-12.3 cm |
+| chin just out of reach | 2.6 cm | 2.6 cm |
+
+First person was already 6-11 cm. `RPG.Combat.CrosshairAim(FirstPerson)` now also requires the contact within 15 cm.
+
+Scope: the correction covers third-person filmed punches only. Re-filmed punches: rerun the test and retune the five
+`Contact*` values from its contact report (no code). Kicks are excluded as before; swords / weapons (a blade's arc
+meets the target very differently) need their own aim handling and test cases in `RPGCrosshairAimTest.cpp`. Spells
+aim by trace and are unaffected.

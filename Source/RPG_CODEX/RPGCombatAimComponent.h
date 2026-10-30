@@ -72,6 +72,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Aim", meta = (ClampMin = "10"))
 	float ThirdPersonStrikeRadius = 57.f;
 
+	/**
+	 * Third person, punches at a target: how far the fist's contact lands out toward the punching hand (Side) and above
+	 * (Lift) the reticle point, cm, plus per cm the target sits below the punch's natural height. The strike aims that
+	 * much in and low. Measured with RPG.Combat.CrosshairAim (contact at the chin ~7 out / 8 up; chest / stomach, 20-30
+	 * cm lower, 14-17 out / 7-13 up).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Aim")
+	float ContactSideOffset = 6.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Aim")
+	float ContactSidePerCm = .37f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Aim")
+	float ContactLiftOffset = 8.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Aim")
+	float ContactLiftPerCm = .1f;
+
+	/** The correction fades out over this last stretch (cm) of the fist's reach: there it meets the target extended. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Aim", meta = (ClampMin = "1"))
+	float ContactReachFade = 10.f;
+
 	/** Fastest the body turns when the aim is past the torso's reach (degrees / second). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Aim", meta = (ClampMin = "0"))
 	float BodyTurnSpeed = 240.f;

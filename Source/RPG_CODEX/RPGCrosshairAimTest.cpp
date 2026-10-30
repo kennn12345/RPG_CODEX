@@ -135,7 +135,7 @@ public:
                 State->ReportSimpleAction(ERPGPlayerAction::AttackChargeStarted,Hand);
                 State->ReportSimpleAction(ERPGPlayerAction::Attack,Hand);
             }
-            MinFist=1e9f;bLanded=bAirShot=false;Phase=1;PhaseStart=Now;
+            MinFist=SampledMin=1e9f;Contact=ContactMinFist=-1.f;bLanded=bAirShot=bHadKnuckle=false;Phase=1;PhaseStart=Now;
             return false;
         }
         if(Phase==1)
@@ -149,6 +149,20 @@ public:
                 const USkeletalMeshComponent* Mesh=Player->GetMesh();
                 const FName Wrist=Case.bLeft?TEXT("hand_l"):TEXT("hand_r"),Knuckle=Case.bLeft?TEXT("middle_01_l"):TEXT("middle_01_r");
                 const FVector A=Mesh->GetBoneLocation(Wrist),B=Mesh->GetBoneLocation(Knuckle);
+                // A fist at 6-10 m/s moves 10-16 cm a frame: the closest pass is on the path between this frame's
+                // knuckles and the last's, not at either sample.
+                if(!bAir && bHadKnuckle)
+                {
+                    const FVector Point=FMath::ClosestPointOnSegment(Crosshair,LastKnuckle,B);
+                    SampledMin=FMath::Min(SampledMin,FVector::Dist(B,Crosshair));
+                    if(FVector::Dist(Point,Crosshair)<MinFist)
+                    {
+                        MinFist=FVector::Dist(Point,Crosshair);
+                        FistOffset=Player->GetActorRotation().UnrotateVector(Point-Crosshair);
+                        AimAtPass=FVector(State->AttackAimYaw,State->AttackAimPitch,State->AttackAimVisualPitch);
+                    }
+                }
+                LastKnuckle=B;bHadKnuckle=true;
                 for(const FVector& Point:{FMath::Lerp(A,B,.55f),B})
                     if(bAir)
                     {
@@ -175,7 +189,8 @@ public:
                     Miss=FVector::CrossProduct(Crosshair-Hit.TraceStart,D).Size();
                     LandedBone=Hit.BoneName;
                 }
-                else LandedBone=Dummy->LastHit.HitBone;
+                else {LandedBone=Dummy->LastHit.HitBone;Contact=FVector::Dist(Dummy->LastHit.ImpactLocation,Crosshair);ContactMinFist=MinFist;
+                    ContactOffset=Player->GetActorRotation().UnrotateVector(Dummy->LastHit.ImpactLocation-Crosshair);}
                 Shot(TEXT("land"));
             }
             if(T<(Case.bSpell?1.5f:.9f))return false;
@@ -203,9 +218,14 @@ private:
         }
         else
         {
-            Test->AddInfo(FString::Printf(TEXT("%s %s: reticle on %s at %.0f cm high; fist passes %.1f cm from it (forward %.0f, right %.0f, up %.0f), %s %s"),View,Case.Name,
-                *CrosshairBone.ToString(),Crosshair.Z-Home.Z,MinFist,FistOffset.X,FistOffset.Y,FistOffset.Z,bLanded?TEXT("hit"):TEXT("NO HIT"),*LandedBone.ToString()));
+            Test->AddInfo(FString::Printf(TEXT("%s %s: reticle on %s at %.0f cm high; fist passes %.1f cm from it (forward %.0f, right %.0f, up %.0f; nearest frame %.1f; aim yaw %.1f pitch %.1f shown %.1f; contact %.1f cm from it (forward %.0f, right %.0f, up %.0f), fist then %.1f), %s %s"),View,Case.Name,
+                *CrosshairBone.ToString(),Crosshair.Z-Home.Z,MinFist,FistOffset.X,FistOffset.Y,FistOffset.Z,SampledMin,AimAtPass.X,AimAtPass.Y,AimAtPass.Z,Contact,
+                ContactOffset.X,ContactOffset.Y,ContactOffset.Z,ContactMinFist,
+                bLanded?TEXT("hit"):TEXT("NO HIT"),*LandedBone.ToString()));
             Test->TestTrue(FString::Printf(TEXT("%s %s: punch lands on the reticle (%.1f cm)"),View,Case.Name,MinFist),bLanded && MinFist<15.f);   // (chest shots can stop on the dummy's raised guard arm, a few cm in front)
+            // Where it connects: a fist that grazes the body early (a steep body shot) registers there, whatever the
+            // fist does after.
+            if(Case.Bone)Test->TestTrue(FString::Printf(TEXT("%s %s: punch connects at the reticle (%.1f cm)"),View,Case.Name,Contact),Contact>=0.f && Contact<15.f);
         }
         Results+=FString::Printf(TEXT("%s,%s,%d,%.2f,%s,%s\n"),View,Case.Name,bLanded?1:0,Case.bSpell?Miss:MinFist,*CrosshairBone.ToString(),*LandedBone.ToString());
     }
@@ -245,8 +265,8 @@ private:
         FFileHelper::SaveStringToFile(Results,*(FPaths::ProjectSavedDir()/TEXT("AimReview")/(bFirst?TEXT("results-fp.csv"):TEXT("results-tp.csv"))));
     }
     FAutomationTestBase* Test;bool bFirst,bVisual;bool bReady=false,bLanded=false,bAirShot=false;int32 Wait=0,Phase=0,HitsBefore=0,ShotsBefore=0;int32 CaseIndex=0;
-    float PhaseStart=0.f,HomeYaw=0.f,MinFist=0.f,Miss=0.f,DefaultStanceTimeout=8.f;
-    FVector Home,Crosshair,FistOffset=FVector::ZeroVector;FName CrosshairBone,LandedBone;FString Dir,Results;TWeakObjectPtr<ARPGCombatTestDummy> Dummy;
+    float PhaseStart=0.f,HomeYaw=0.f,MinFist=0.f,SampledMin=0.f,Contact=-1.f,ContactMinFist=-1.f,Miss=0.f,DefaultStanceTimeout=8.f;bool bHadKnuckle=false;
+    FVector Home,Crosshair,FistOffset=FVector::ZeroVector,LastKnuckle=FVector::ZeroVector,AimAtPass=FVector::ZeroVector,ContactOffset=FVector::ZeroVector;FName CrosshairBone,LandedBone;FString Dir,Results;TWeakObjectPtr<ARPGCombatTestDummy> Dummy;
 };
 }
 
