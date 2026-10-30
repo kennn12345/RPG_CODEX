@@ -117,9 +117,10 @@ public:
 	/** A failed catch stumbles this long (s) with its arms out before it goes down. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
 	float CatchFailDelay = 0.35f;
-	/** Hit while lying down: share of the standing push the body gets (it slides, it isn't thrown). */
+	/** Hit while lying down: share of the standing push the body gets (it slides, it isn't thrown). (0.35 with the old
+	 *  rigid brace, which slid as one block; the human-strength brace crumples and drags, so it needs a little more.) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
-	float DownedPushScale = 0.35f;
+	float DownedPushScale = 0.5f;
 	/** A push at least this fast (cm/s) into a wall slams into it. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
 	float WallSlamSpeed = 250.f;
@@ -180,6 +181,8 @@ private:
 	FVector ShoveVelocity = FVector::ZeroVector;
 	bool bShoving = false;
 	float ShoveStartTime = 0.f;
+	FVector LastShoveLocation = FVector::ZeroVector;   // (UpdatePushObstacles: how far the push actually carried it)
+	bool bHaveShoveLocation = false;
 	FTimerHandle CatchFailTimer;
 	bool bDown = false;
 	UPROPERTY(Transient)

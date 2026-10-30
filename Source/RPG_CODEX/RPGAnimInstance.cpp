@@ -756,16 +756,21 @@ void FRPGAnimInstanceProxy::ApplyBrace(FPoseContext& Output) const
 	if (Weight <= KINDA_SMALL_NUMBER || !B.A) return;
 	FPoseContext Reach(Output);
 	Reach.ResetToRefPose();
+	auto ClipTime = [&B](const UAnimSequence* Clip)
+	{
+		const float Length = Clip->GetPlayLength();
+		return double(Length > KINDA_SMALL_NUMBER ? FMath::Fmod(FMath::Max(B.Time, 0.f), Length) : 0.f);
+	};
 	{
 		FAnimationPoseData Data(Reach);
-		B.A->GetAnimationPose(Data, FAnimExtractContext(0.0, false));
+		B.A->GetAnimationPose(Data, FAnimExtractContext(ClipTime(B.A), false));
 	}
 	if (B.B && B.Alpha > KINDA_SMALL_NUMBER)
 	{
 		FPoseContext Other(Output);
 		Other.ResetToRefPose();
 		FAnimationPoseData OtherData(Other), ReachData(Reach);
-		B.B->GetAnimationPose(OtherData, FAnimExtractContext(0.0, false));
+		B.B->GetAnimationPose(OtherData, FAnimExtractContext(ClipTime(B.B), false));
 		FAnimationRuntime::BlendTwoPosesTogetherInPlace(ReachData, OtherData, 1.f - FMath::Clamp(B.Alpha, 0.f, 1.f));
 	}
 	const FCompactPoseBoneIndex Root = Find(TEXT("spine_03"));

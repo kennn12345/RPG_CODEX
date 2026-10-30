@@ -21,6 +21,8 @@ struct FRPGBracePose
 	class UAnimSequence* B = nullptr;
 	float Alpha = 0.f;
 	float Bend = 0.f;
+	/** Seconds into the reach clips (a fall plays them through, so the arms keep reaching and adjusting; 0 = first frame). */
+	float Time = 0.f;
 };
 
 /**

@@ -180,14 +180,31 @@ public:
 	/** 0-1: how hard the ragdoll is fighting right now (0 when not braced or not LIMP). */
 	float GetBraceStrength() const { return State == ERPGPhysicsReactionState::Limp && bBraced ? BraceStrength : 0.f; }
 
+	/**
+	 * A bracing body's muscle (drive frequency; MotorStrength is for hits on a standing body, far stiffer). Human: soft
+	 * enough that the fall carries the body and the motors only steer it, so it tumbles, bends and reaches instead of
+	 * holding one shape. At MotorStrength (40) a fall froze the body rigid in the brace pose.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
-	float BraceArmScale = 0.8f;
+	float BraceMotorStrength = 12.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
-	float BraceHeadScale = 1.3f;
+	float BraceDampingRatio = 0.7f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
-	float BraceTrunkScale = 0.9f;
+	float BraceArmScale = 1.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float BraceHeadScale = 1.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float BraceTrunkScale = 0.5f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
 	float BraceLegScale = 0.2f;
+	/** A hard landing knocks the fight out of it: when the pelvis loses more than BraceImpactSpeed (cm/s) in a frame the
+	 *  muscles drop to BraceImpactShare, then come back over BraceImpactRecover seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float BraceImpactSpeed = 120.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0", ClampMax = "1"))
+	float BraceImpactShare = 0.2f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0.01"))
+	float BraceImpactRecover = 0.45f;
 	/** Share of the brace kept once the body has come to rest (it still holds its head and arms a little), and how
 	 *  quickly it eases there (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0", ClampMax = "1"))
@@ -427,6 +444,7 @@ private:
 	 */
 	void DriveWithControls(bool bOn);
 	bool bPoseForced = false;
+	int32 ControlsLingerFrames = 0;
 	bool bSavedParallelAnim = true;
 	bool bSavedURO = false;
 	EVisibilityBasedAnimTickOption SavedTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPose;
@@ -434,6 +452,10 @@ private:
 	/** Active-ragdoll brace (SetRagdollBrace). */
 	bool bBraced = false;
 	float BraceStrength = 1.f;
+	float BraceGive = 0.f;   // 1 just after a hard landing, back to 0 over BraceImpactRecover
+	FVector BracePelvisVelocity = FVector::ZeroVector;
+	bool bHaveBracePelvisVelocity = false;
+	float BraceMotionSum = 0.f, BraceMotionTime = 0.f;
 	void ApplyBraceMotors();
 	float CurrentYieldTime = 0.1f, CurrentRecoverTime = 0.6f, CurrentMotorBase = 1.f;
 	TArray<FName> AllControls;

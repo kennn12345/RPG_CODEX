@@ -52,7 +52,10 @@ void URPGHitOutcomeComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	for (const TCHAR* Name : ReachClipNames)
+	{
 		ReachClips.Add(LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/%s.%s"), Name, Name)));
+		UE_LOG(LogRPGInput, Verbose, TEXT("reach clip %s: %.2f s"), Name, ReachClips.Last() ? ReachClips.Last()->GetPlayLength() : -1.f);
+	}
 	for (const TCHAR* Direction : KneeDirections)
 		for (const TCHAR* Outcome : KneeOutcomes)
 			for (const TCHAR* Strength : KneeStrengths)
@@ -399,6 +402,7 @@ void URPGHitOutcomeComponent::WriteBrace()
 	Anim->Brace.B = BraceB;
 	Anim->Brace.Alpha = BraceAlpha;
 	Anim->Brace.Bend = Bend;
+	Anim->Brace.Time = bFallBrace && GetWorld() ? GetWorld()->GetTimeSeconds() - FallStartTime : 0.f;
 }
 
 void URPGHitOutcomeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

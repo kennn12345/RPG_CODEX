@@ -339,7 +339,14 @@ void ARPGNpcCharacter::UpdatePushObstacles()
 		return;
 	}
 	// Driven into a wall (the push is going nowhere): it slams into it, the torso gives off the wall, a hand braces on it.
-	if (Speed < WallSlamSpeed || float(FVector::DotProduct(GetVelocity(), Dir)) > Speed * 0.35f) return;
+	// "Going nowhere" from how far the body actually moved along the push this frame, not the movement's velocity, which
+	// can still read the push's speed with the capsule pinned against the wall (it isn't always recomputed from the move).
+	const FVector Location = GetActorLocation();
+	const float Dt = World->GetDeltaSeconds();
+	const float Progress = bHaveShoveLocation && Dt > 0.f ? float(FVector::DotProduct(Location - LastShoveLocation, Dir)) / Dt : Speed;
+	LastShoveLocation = Location;
+	bHaveShoveLocation = true;
+	if (Speed < WallSlamSpeed || Progress > Speed * 0.35f) return;
 	FHitResult Wall;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(RPGPushWall), false, this);
 	FCollisionObjectQueryParams Objects;
@@ -376,7 +383,7 @@ void ARPGNpcCharacter::Shove(FVector Velocity, bool bKnockback)
 	// The body moves; with no walking input it brakes to a stop, and motion matching picks the steps for that motion
 	// (the size, angle and speed of every push differ, so do the steps). It keeps facing the way it faced (strafing).
 	// (GASP rewrites braking and friction every frame, so the push is driven here, before movement, each frame - see Tick.)
-	if (!bShoving) ShoveStartTime = World->GetTimeSeconds();
+	if (!bShoving) { ShoveStartTime = World->GetTimeSeconds(); bHaveShoveLocation = false; }
 	ShoveVelocity = (ShoveVelocity + Velocity).GetClampedToMaxSize(Max);
 	ShoveUntil = FMath::Max(bShoving ? ShoveUntil : 0.f, World->GetTimeSeconds() + Time);
 	bShoving = true;

@@ -440,6 +440,9 @@ void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 	PhysicsControl->SetBodyModifiersCollisionType(AllModifiers, ECollisionEnabled::QueryAndPhysics);
 	PhysicsControl->SetControlsEnabled(AllControls, false);
 	// Fighting the fall: the motors drive toward the brace pose from the start (and again on a new hit while down).
+	BraceGive = bWasLimp ? 1.f : 0.f;   // a blow while down knocks the fight out of it for a moment, as a hard landing does
+	bHaveBracePelvisVelocity = false;
+	if (!bWasLimp) BraceMotionSum = BraceMotionTime = 0.f;
 	if (bBraced) { BraceStrength = 1.f; ApplyBraceMotors(); }
 	// Keep the current local weight on takeover; the existing bounded blend-in reaches full ragdoll next.
 	if (bFromAnimation) SetPhysicsBlend(bFromLocalPhysical ? LocalBlend : 1.f);
@@ -566,6 +569,10 @@ void URPGPhysicsReactionComponent::ReturnToAnimated(float BlendTime)
 	bVelocityPending = false;
 	if (State == ERPGPhysicsReactionState::Limp)
 	{
+		if (BraceMotionTime > 0.f)
+			UE_LOG(LogRPGInput, Log, TEXT("%s braced fall: %.1f s, body moves %.0f deg/s within itself"), *GetOwner()->GetActorNameOrLabel(),
+				BraceMotionTime, BraceMotionSum / BraceMotionTime);
+		BraceMotionSum = BraceMotionTime = 0.f;
 		OnLimpEnding.Broadcast();
 		if (State == ERPGPhysicsReactionState::Animated) return;   // a listener already finished it (e.g. an instant reset)
 		// Out of a limp ragdoll: the body is held exactly where it lies (each body kinematic, pinned to where it is in
@@ -710,7 +717,12 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	// A fresh pose while any physics here is driving the body (see KeepPoseFresh), and PhysicsControl itself running
 	// only in ragdolls and flight (see DriveWithControls): staggers keep the motors they were approved with.
 	KeepPoseFresh(State != ERPGPhysicsReactionState::Animated || bFlightFollow || !LocalPhysicalAnimationModifiers.IsEmpty());
-	DriveWithControls(State == ERPGPhysicsReactionState::Limp || bFlightFollow);
+	// (A local reaction - URPGReactivePhysicsComponent's struck body - also needs it: its bodies are switched to simulating
+	// through PhysicsControl's modifiers, which an inactive one never applies, so every push on them was dropped. And it
+	// lingers a few frames after the last need, so the switch back to kinematic is applied too.)
+	const bool bNeedControls = State == ERPGPhysicsReactionState::Limp || bFlightFollow || !LocalPhysicalAnimationModifiers.IsEmpty();
+	ControlsLingerFrames = bNeedControls ? 3 : FMath::Max(0, ControlsLingerFrames - 1);
+	DriveWithControls(bNeedControls || ControlsLingerFrames > 0);
 	ApplyPendingImpulse();
 	ApplyPendingVelocity();
 
@@ -750,10 +762,39 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 				// head and arms a little) so it lies naturally for the get-up.
 				const FBodyInstance* Pelvis = Mesh ? Mesh->GetBodyInstance(AnchorBone) : nullptr;
 				const bool bResting = StateTime > 0.4f && (!Pelvis || Pelvis->GetUnrealWorldVelocity().Size() <= LimpSettleSpeed * 2.f);
+				bool bMotorsChanged = false;
 				if (bResting && BraceStrength > BraceRestShare)
 				{
 					BraceStrength = FMath::Max(BraceRestShare, BraceStrength - DeltaTime * (1.f - BraceRestShare) / BraceRelaxTime);
-					ApplyBraceMotors();
+					bMotorsChanged = true;
+				}
+				// A hard landing (the pelvis brought up short) knocks the fight out of the muscles for a moment.
+				if (Pelvis)
+				{
+					const FVector Velocity = Pelvis->GetUnrealWorldVelocity();
+					if (bHaveBracePelvisVelocity && (BracePelvisVelocity - Velocity).Size() > BraceImpactSpeed && Velocity.Size() < BracePelvisVelocity.Size())
+					{
+						BraceGive = 1.f;
+						bMotorsChanged = true;
+					}
+					BracePelvisVelocity = Velocity;
+					bHaveBracePelvisVelocity = true;
+				}
+				if (BraceGive > 0.f)
+				{
+					BraceGive = FMath::Max(0.f, BraceGive - DeltaTime / BraceImpactRecover);
+					bMotorsChanged = true;
+				}
+				if (bMotorsChanged) ApplyBraceMotors();
+				// For the record: how much the body moves within itself while it fights the fall (limbs and trunk
+				// against the pelvis, degrees a second), so a fall that freezes into one shape shows as a low number.
+				if (Pelvis && Mesh)
+				{
+					const FVector PelvisSpin = Pelvis->GetUnrealWorldAngularVelocityInRadians();
+					float Sum = 0.f; int32 Count = 0;
+					for (const FBodyInstance* Body : Mesh->Bodies)
+						if (Body && Body != Pelvis) { Sum += float((Body->GetUnrealWorldAngularVelocityInRadians() - PelvisSpin).Size()); ++Count; }
+					if (Count) { BraceMotionSum += FMath::RadiansToDegrees(Sum / Count) * DeltaTime; BraceMotionTime += DeltaTime; }
 				}
 			}
 			if (State == ERPGPhysicsReactionState::Limp && LimpDuration > 0.f && StateTime >= LimpDuration)
@@ -866,18 +907,19 @@ void URPGPhysicsReactionComponent::ApplyBraceMotors()
 	{
 		FPhysicsControlData Data;
 		if (!PhysicsControl->GetControlData(Name, Data)) continue;
-		Data.AngularStrength = MotorStrength;
-		Data.AngularDampingRatio = MotorDampingRatio;
+		Data.AngularStrength = BraceMotorStrength;
+		Data.AngularDampingRatio = BraceDampingRatio;
 		Data.bEnabled = true;
 		PhysicsControl->SetControlData(Name, Data, true, false);
 	}
+	const float Muscle = BraceStrength * (1.f - BraceGive * (1.f - BraceImpactShare));
 	for (const TPair<FName, TArray<FName>>& Limb : LimbControls)
 	{
 		const FName Name = Limb.Key;
 		const float Scale = Name == TEXT("ArmLeft") || Name == TEXT("ArmRight") ? BraceArmScale
 			: Name == TEXT("LegLeft") || Name == TEXT("LegRight") ? BraceLegScale
 			: Name == TEXT("Head") ? BraceHeadScale : BraceTrunkScale;
-		SetLimbMotorScale(Name, Scale * BraceStrength);
+		SetLimbMotorScale(Name, Scale * Muscle);
 	}
 }
 

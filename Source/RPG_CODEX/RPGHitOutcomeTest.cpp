@@ -350,7 +350,7 @@ namespace
 				CatchFallsBefore = N->CatchFallCount; WallsBefore = N->WallSlamCount; LedgesBefore = N->LedgeFallCount; DownedBefore = N->DownedHitCount;
 				LimpFallsBefore = N->HitOutcome->LimpFallCount;
 				MaxMoved = 0.f; bSawLimp = false; bSawDown = false; bApplied = false; bSawBraced = false; bSawUnbracedLimp = false; FirstLimpAt = -1.f;
-				Levels.Reset(); Shots = 0; DownedPelvisBefore = FVector::ZeroVector;
+				Levels.Reset(); Shots = 0; DownedPelvisBefore = DownedChestBefore = DownedHeadBefore = FVector::ZeroVector;
 				Phase = 1; PhaseStart = Now;
 				return false;
 			}
@@ -436,12 +436,17 @@ namespace
 				if (C.Kind == EOutcomeKind::Downed && bLimp && DownedPelvisBefore.IsZero() && Now - HitAt > 1.6f && !Reaction->IsReturning())
 				{
 					DownedPelvisBefore = N->GetMesh()->GetBoneLocation(TEXT("pelvis"));
+					DownedChestBefore = N->GetMesh()->GetBoneLocation(TEXT("spine_03"));
+					DownedHeadBefore = N->GetMesh()->GetBoneLocation(TEXT("head"));
 					if (URPGCharacterStatsComponent* PlayerStats = URPGCharacterStatsComponent::FindStats(Player)) PlayerStats->SetStatBaseByName(TEXT("Strength"), 6.f);
 					IRPGMeleeTarget::Execute_ReceiveMeleeHit(N, MakePunch(Player, N, C.Bone, FVector(-Forward.X, -Forward.Y, -0.3f).GetSafeNormal(), 0.f));
 					DownedHitAt = Now;
 				}
-				if (C.Kind == EOutcomeKind::Downed && !DownedPelvisBefore.IsZero() && Now - DownedHitAt > 0.4f && DownedMoved < 0.f)
-					DownedMoved = float(FVector::Dist(DownedPelvisBefore, N->GetMesh()->GetBoneLocation(TEXT("pelvis"))));
+				// How far the blow moves the lying body: the most the hips, chest or head travel in the 0.6 s after it. (One
+				// point at one moment was a coin toss: the slide depends on how the body happens to lie on the ground.)
+				if (C.Kind == EOutcomeKind::Downed && !DownedPelvisBefore.IsZero() && Now - DownedHitAt <= 0.6f)
+					DownedMoved = FMath::Max(DownedMoved, float(FMath::Max3(FVector::Dist(DownedPelvisBefore, N->GetMesh()->GetBoneLocation(TEXT("pelvis"))),
+						FVector::Dist(DownedChestBefore, N->GetMesh()->GetBoneLocation(TEXT("spine_03"))), FVector::Dist(DownedHeadBefore, N->GetMesh()->GetBoneLocation(TEXT("head"))))));
 				if (Now - PhaseStart < (C.bDown ? 4.5f : 3.2f)) return false;
 
 				const ERPGPowerReaction Got = C.Kind == EOutcomeKind::Bump ? N->BodyImpact->GetLastBumpReaction() : N->LastPowerResult.Reaction;
@@ -473,7 +478,7 @@ namespace
 					break;
 				case EOutcomeKind::Downed:
 					bReactionOk &= N->DownedHitCount > DownedBefore && DownedMoved > 3.f;
-					Extra = FString::Printf(TEXT(" hit while down %d, pelvis moved %.0f cm"), N->DownedHitCount - DownedBefore, DownedMoved);
+					Extra = FString::Printf(TEXT(" hit while down %d, body moved %.0f cm"), N->DownedHitCount - DownedBefore, DownedMoved);
 					break;
 				case EOutcomeKind::KnockoutLimp:
 					bReactionOk &= bSawUnbracedLimp && !bSawBraced && N->HitOutcome->LimpFallCount > LimpFallsBefore;
@@ -556,7 +561,7 @@ namespace
 		TArray<AActor*> Props;
 		TMap<FString, float> Moved;
 		TArray<float> Levels;
-		FVector StartSpot = FVector::ZeroVector, Forward = FVector::ForwardVector, DownedPelvisBefore = FVector::ZeroVector;
+		FVector StartSpot = FVector::ZeroVector, Forward = FVector::ForwardVector, DownedPelvisBefore = FVector::ZeroVector, DownedChestBefore = FVector::ZeroVector, DownedHeadBefore = FVector::ZeroVector;
 		int32 KneesBefore = 0, KneeFallsBefore = 0;
 		float StartYaw = 0.f;
 		int32 Frames = 0, Case = 0, Phase = 0, BumpsBefore = 0, Shots = 0, CatchFallsBefore = 0, WallsBefore = 0, LedgesBefore = 0, DownedBefore = 0, LimpFallsBefore = 0;

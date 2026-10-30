@@ -108,3 +108,20 @@ Bone-data warnings (2026-10-30, later): the NPC's animation ran in parallel, and
 empty buffer the task had swapped out (readable 93 bones, editable 0): motors without targets on those frames.
 `URPGAnimInstance::bEvaluateOnGameThread` (overrides `CanRunParallelWork`; both the NPC's GASP ABP and the player's
 are parented to it) is set by `KeepPoseFresh` while physics drives the body. Stress test: 0 warnings (was 350-880).
+
+## Braced falls and cleanup (2026-10-30, later)
+
+- Braced falls looked paralyzed (most on the light bandit): once PhysicsControl actually ran, the brace motors drove
+  the whole body at `MotorStrength` (40, a standing hit's stiffness) toward one still pose (the reach clip's first
+  frame, GASP's standing legs). Now `BraceMotorStrength` 12 / `BraceDampingRatio` 0.7 (arms 1, head 1, trunk 0.5, legs
+  0.2), the reach clips play through the fall (`FRPGBracePose::Time`), and a hard landing or a blow while down knocks
+  the muscles to `BraceImpactShare` (0.2) for `BraceImpactRecover` (0.45 s). Each fall logs how much the body moves
+  within itself ("braced fall: ... deg/s"). A downed hit's slide needed `DownedPushScale` 0.35 -> 0.5 (the soft body
+  drags instead of sliding as a block).
+- Local reactions (`URPGReactivePhysicsComponent`) were dropping their pushes ("REACTIVE impulse body failed to
+  simulate"): their bodies go simulated through PhysicsControl's modifiers, and PhysicsControl was off outside ragdolls.
+  It now also runs during local reactions and for 3 frames after any need, so the switch back to kinematic applies.
+- Wall slams sometimes didn't happen: "the push is going nowhere" read the movement's velocity, which can still show the
+  push's speed against the wall; it now uses how far the body actually moved.
+- The player down in a ragdoll: the capsule follows the body for the camera, which moved the simulated mesh every frame
+  (an engine warning each frame). The mesh is placed absolutely while down and returned under the capsule to get up.
