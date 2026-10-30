@@ -368,6 +368,7 @@ void URPGBodyImpactComponent::FreeMeshFromCapsule(ACharacter* Character)
 	const FTransform World = Mesh->GetComponentTransform();
 	Mesh->SetUsingAbsoluteLocation(true);
 	Mesh->SetUsingAbsoluteRotation(true);
+	Mesh->SetUsingAbsoluteScale(true);   // (all three: a parent only skips a fully absolute child)
 	Mesh->SetRelativeLocationAndRotation(World.GetLocation(), World.Rotator());   // (absolute: the same place, nothing moves)
 	bMeshFreed = true;
 }
@@ -379,6 +380,7 @@ void URPGBodyImpactComponent::ReturnMeshToCapsule(ACharacter* Character)
 	bMeshFreed = false;
 	Mesh->SetUsingAbsoluteLocation(false);
 	Mesh->SetUsingAbsoluteRotation(false);
+	Mesh->SetUsingAbsoluteScale(false);
 	Mesh->SetRelativeLocationAndRotation(MeshOffset, MeshTurn);
 }
 
