@@ -94,6 +94,14 @@ class RPG_CODEX_API URPGAnimInstance : public UAnimInstance
 	GENERATED_BODY()
 
 public:
+	/**
+	 * Set while physics drives the body (URPGPhysicsReactionComponent::KeepPoseFresh): update and evaluate on the game
+	 * thread. Running in parallel, the pose PhysicsControl caches can be the empty buffer the task swapped out (motors
+	 * without targets, "Failed to find bone data").
+	 */
+	bool bEvaluateOnGameThread = false;
+	virtual bool CanRunParallelWork() const override { return !bEvaluateOnGameThread; }
+
 	/** Torso turn toward the attack aim, degrees: + = to the character's right. Already clamped and blended. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|Aim")
 	float AimYaw = 0.f;

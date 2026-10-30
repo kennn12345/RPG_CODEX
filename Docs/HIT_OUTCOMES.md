@@ -102,4 +102,9 @@ the brace motors now actually drive the falls; a SLOW FRAME warning in `URPGHitO
 
 Test: `RPG.Npc.ReactionStress` (replays the session that froze: a flying crash, bumps, energy hits, punches into
 knockdowns). Run it windowed with `-ini:Engine:[Core.System]:HangDuration=15,[Core.System]:GameThreadHeartBeatStackWalk=True`.
-Known: an NPC's ragdoll still logs a few hundred "Failed to find bone data" warnings (a burst on some frames).
+
+
+Bone-data warnings (2026-10-30, later): the NPC's animation ran in parallel, and the pose PhysicsControl cached was the
+empty buffer the task had swapped out (readable 93 bones, editable 0): motors without targets on those frames.
+`URPGAnimInstance::bEvaluateOnGameThread` (overrides `CanRunParallelWork`; both the NPC's GASP ABP and the player's
+are parented to it) is set by `KeepPoseFresh` while physics drives the body. Stress test: 0 warnings (was 350-880).

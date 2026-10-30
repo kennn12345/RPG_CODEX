@@ -15,6 +15,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Animation/AnimInstance.h"
 #include "RPGReactivePhysicsComponent.h"
+#include "RPGAnimInstance.h"
 
 namespace
 {
@@ -663,7 +664,9 @@ void URPGPhysicsReactionComponent::SetSolidRagdoll(bool bSolid)
 void URPGPhysicsReactionComponent::KeepPoseFresh(bool bOn)
 {
 	USkeletalMeshComponent* Mesh = GetMesh();
-	if (!Mesh || bOn == bPoseForced) return;
+	if (!Mesh) return;
+	if (URPGAnimInstance* RPGAnim = Cast<URPGAnimInstance>(Mesh->GetAnimInstance())) RPGAnim->bEvaluateOnGameThread = bOn;
+	if (bOn == bPoseForced) return;
 	if (bOn && GetOwner()->FindComponentByClass<URPGReactivePhysicsComponent>()) return;   // it already keeps the pose synchronous
 	UAnimInstance* Anim = Mesh->GetAnimInstance();
 	if (bOn)
