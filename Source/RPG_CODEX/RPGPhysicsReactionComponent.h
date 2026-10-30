@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Components/SkinnedMeshComponent.h"
 #include "RPGPlayerTypes.h"
 #include "RPGPowerTypes.h"
 #include "RPGEnergySpellTypes.h"
@@ -88,6 +89,7 @@ public:
 	URPGPhysicsReactionComponent();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** Legacy entry point (no Power System): full charge = LIMP, otherwise POWERED, with the TEMPORARY impulse values. */
@@ -407,6 +409,28 @@ private:
 	FCollisionResponseContainer SavedMeshResponses;
 	TArray<TPair<TWeakObjectPtr<class UPrimitiveComponent>, FCollisionResponseContainer>> SavedCapsuleResponses;
 	bool bFlightFollow = false;
+	/**
+	 * While any physics here drives the body (a reaction, a ragdoll, flight follow, a local give), PhysicsControl reads
+	 * the animated pose from the mesh's editable pose buffer, which parallel animation evaluation can leave empty: then
+	 * every motor has no target (the brace does nothing) and PhysicsControl logs "Failed to find bone data" for every
+	 * body, every frame (thousands a second). So for that time the owner's animation is evaluated synchronously with
+	 * its bones always refreshed, and restored afterwards. Owners whose URPGReactivePhysicsComponent already keeps the
+	 * pose synchronous (the NPCs) are left to it.
+	 */
+	void KeepPoseFresh(bool bOn);
+	/**
+	 * The PhysicsControl component this makes at runtime is registered but not active, and an inactive one never
+	 * updates its motors or the pose it caches (so motors - the stagger give, the braced ragdoll - had no target, and it
+	 * logged "Failed to find bone data" for every body, every frame). It runs while a reaction, a ragdoll or flight follow
+	 * drives the body, and is off while the character simply stands on its animation (so standing bodies, which a punch's
+	 * fist meets, behave exactly as before).
+	 */
+	void DriveWithControls(bool bOn);
+	bool bPoseForced = false;
+	bool bSavedParallelAnim = true;
+	bool bSavedURO = false;
+	EVisibilityBasedAnimTickOption SavedTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPose;
+	TWeakObjectPtr<class UAnimInstance> PoseAnim;
 	/** Active-ragdoll brace (SetRagdollBrace). */
 	bool bBraced = false;
 	float BraceStrength = 1.f;

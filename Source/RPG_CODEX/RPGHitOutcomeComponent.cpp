@@ -21,6 +21,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/App.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
 
@@ -407,6 +408,21 @@ void URPGHitOutcomeComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	if (!World) return;
 	const float Now = World->GetTimeSeconds();
 	const URPGPowerSettings* S = URPGPowerSettings::Get();
+
+	// A frame that took far too long while this body is reacting: say what it was in the middle of (the 2026-10-29 play
+	// session slowed to ~17 s a frame after a push; this names the state if it ever happens again).
+	const URPGPhysicsReactionComponent* SlowR = GetReaction();
+	const bool bReacting = (SlowR && SlowR->GetReactionState() != ERPGPhysicsReactionState::Animated) || BraceWeight > 0.f || Bend > 0.f
+		|| bFallBrace || ActiveKneeCatch != nullptr || Now - LastHitTime < 2.f;
+	if (FApp::GetDeltaTime() > 0.3 && bReacting)
+	{
+		const URPGPhysicsReactionComponent* R = SlowR;
+		const AActor* Owner = GetOwner();
+		UE_LOG(LogRPGInput, Warning, TEXT("SLOW FRAME %.2f s: %s reaction %d returning %d braced %d brace %.2f bend %.1f fall-brace %d knee %s at %s vel %s"),
+			FApp::GetDeltaTime(), *Owner->GetActorNameOrLabel(), R ? int32(R->GetReactionState()) : -1, R && R->IsReturning(), R && R->IsRagdollBraced(),
+			BraceWeight, Bend, bFallBrace, ActiveKneeCatch ? *LastKneeClip.ToString() : TEXT("-"), *Owner->GetActorLocation().ToCompactString(),
+			*Owner->GetVelocity().ToCompactString());
+	}
 
 	// A knee-down catch: turning square into the fall, and the hips' velocity (what a failed catch falls with).
 	if (ActiveKneeCatch)

@@ -13,6 +13,8 @@
 #include "PhysicsEngine/BodyInstance.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "Components/CapsuleComponent.h"
+#include "Animation/AnimInstance.h"
+#include "RPGReactivePhysicsComponent.h"
 
 namespace
 {
@@ -112,7 +114,14 @@ bool URPGPhysicsReactionComponent::SetUpControls()
 		PhysicsControl->SetupAttachment(Mesh);
 		PhysicsControl->RegisterComponent();
 	}
+	// On an owner without the NPCs' synchronous-pose setup (the player) the animated pose is only complete after
+	// physics: read before that, PhysicsControl caches an empty pose from the second frame of a ragdoll on (every motor
+	// without a target, ~5000 "Failed to find bone data" warnings a second). It reads it after physics instead; its
+	// targets then take effect on the next physics step.
+	if (!GetOwner()->FindComponentByClass<URPGReactivePhysicsComponent>()) PhysicsControl->SetTickGroup(TG_PostPhysics);
 	PrimaryComponentTick.AddPrerequisite(PhysicsControl, PhysicsControl->PrimaryComponentTick);
+	// (and PhysicsControl reads this frame's pose, so it runs after the mesh has evaluated it)
+	PhysicsControl->PrimaryComponentTick.AddPrerequisite(Mesh, Mesh->PrimaryComponentTick);
 
 	const TMap<FName, FPhysicsControlLimbBones> LimbBones = PhysicsControl->GetLimbBonesFromSkeletalMesh(Mesh, MannequinLimbs());
 	if (LimbBones.IsEmpty()) return false;
@@ -360,6 +369,7 @@ void URPGPhysicsReactionComponent::ApplyPendingVelocity()
 void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDazed)
 {
 	if (!bSetUp || !PhysicsControl) return;
+	KeepPoseFresh(true);
 	OnPhysicsOwnershipRequested.Broadcast();
 	if (bFlightFollow) SetFlightFollow(false);
 	// A hit while already ragdolled keeps it limp.
@@ -406,6 +416,8 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDaz
 void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 {
 	if (!bSetUp || !PhysicsControl) return;
+	KeepPoseFresh(true);
+	DriveWithControls(true);
 	const bool bFromLocalPhysical = !LocalPhysicalAnimationModifiers.IsEmpty();
 	float LocalBlend = 0.f;
 	if (bFromLocalPhysical)
@@ -648,10 +660,54 @@ void URPGPhysicsReactionComponent::SetSolidRagdoll(bool bSolid)
 	}
 }
 
+void URPGPhysicsReactionComponent::KeepPoseFresh(bool bOn)
+{
+	USkeletalMeshComponent* Mesh = GetMesh();
+	if (!Mesh || bOn == bPoseForced) return;
+	if (bOn && GetOwner()->FindComponentByClass<URPGReactivePhysicsComponent>()) return;   // it already keeps the pose synchronous
+	UAnimInstance* Anim = Mesh->GetAnimInstance();
+	if (bOn)
+	{
+		if (!Anim) return;
+		PoseAnim = Anim;
+		bSavedParallelAnim = Anim->bUseMultiThreadedAnimationUpdate;
+		SavedTickOption = Mesh->VisibilityBasedAnimTickOption;
+		bSavedURO = Mesh->bEnableUpdateRateOptimizations;
+		Anim->bUseMultiThreadedAnimationUpdate = false;
+		Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+		Mesh->bEnableUpdateRateOptimizations = false;
+	}
+	else
+	{
+		if (UAnimInstance* Previous = PoseAnim.Get()) Previous->bUseMultiThreadedAnimationUpdate = bSavedParallelAnim;
+		Mesh->VisibilityBasedAnimTickOption = SavedTickOption;
+		Mesh->bEnableUpdateRateOptimizations = bSavedURO;
+		PoseAnim = nullptr;
+	}
+	bPoseForced = bOn;
+}
+
+void URPGPhysicsReactionComponent::DriveWithControls(bool bOn)
+{
+	if (!PhysicsControl || PhysicsControl->IsActive() == bOn) return;
+	if (bOn) PhysicsControl->Activate(true);
+	else PhysicsControl->Deactivate();
+}
+
+void URPGPhysicsReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	KeepPoseFresh(false);
+	Super::EndPlay(EndPlayReason);
+}
+
 void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	if (!bSetUp) return;
+	// A fresh pose while any physics here is driving the body (see KeepPoseFresh), and PhysicsControl itself running
+	// only in ragdolls and flight (see DriveWithControls): staggers keep the motors they were approved with.
+	KeepPoseFresh(State != ERPGPhysicsReactionState::Animated || bFlightFollow || !LocalPhysicalAnimationModifiers.IsEmpty());
+	DriveWithControls(State == ERPGPhysicsReactionState::Limp || bFlightFollow);
 	ApplyPendingImpulse();
 	ApplyPendingVelocity();
 
@@ -759,6 +815,8 @@ void URPGPhysicsReactionComponent::SetFlightFollow(bool bOn)
 	bFlightFollow = bOn;
 	if (bOn)
 	{
+		KeepPoseFresh(true);
+		DriveWithControls(true);
 		TArray<FName> Leaders, Followers;
 		for (const TPair<FName, FName>& Pair : BoneModifiers)
 			(FlightLeaderBones.Contains(Pair.Key) || BoneLimbs.FindRef(Pair.Key) == TEXT("Head") ? Leaders : Followers).Add(Pair.Value);

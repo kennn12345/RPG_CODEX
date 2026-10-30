@@ -86,3 +86,20 @@ in `/Game/RPG/Animations/SK_UEFN_Mannequin` (root motion). Author: `Tools/ProtoA
 - Review: `Tools/Blender/clip_review_video.py` (six-angle video + sheet for any clip; the punch pipeline otherwise).
 
 Known: a failed catch falls gently (~0.6 m/s): the tipping clips end with the hips nearly still.
+
+## Freeze fix (2026-10-30)
+
+The first in-game knee-down froze Unreal: a deadlock. `UPhysicalAnimationComponent`'s tick reads the mesh's pose while
+holding the Chaos scene's write lock; with the NPC's parallel animation still running it waited for that task inside the
+lock, and the task (motion matching's trajectory traces, `UpdatePrediction_SimulateMontage` -> `LineTrace`) waited for
+the lock. A tick prerequisite on the mesh is not enough in UE 5.8 (the mesh's tick doesn't wait for its animation), so
+`URPGReactivePhysicsComponent` ticks its Physical Animation itself: it finishes the mesh's animation
+(`HandleExistingParallelEvaluationTask`) outside the lock, then calls the component's tick.
+
+Also: `URPGPhysicsReactionComponent::KeepPoseFresh` and the player's PhysicsControl in `TG_PostPhysics` (the player's
+"Failed to find bone data" flood, 28,000 -> 0); PhysicsControl runs only in ragdolls and flight (`DriveWithControls`), so
+the brace motors now actually drive the falls; a SLOW FRAME warning in `URPGHitOutcomeComponent`.
+
+Test: `RPG.Npc.ReactionStress` (replays the session that froze: a flying crash, bumps, energy hits, punches into
+knockdowns). Run it windowed with `-ini:Engine:[Core.System]:HangDuration=15,[Core.System]:GameThreadHeartBeatStackWalk=True`.
+Known: an NPC's ragdoll still logs a few hundred "Failed to find bone data" warnings (a burst on some frames).

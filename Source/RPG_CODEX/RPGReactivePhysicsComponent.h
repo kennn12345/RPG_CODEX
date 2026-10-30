@@ -74,6 +74,7 @@ public:
 
 private:
 	USkeletalMeshComponent* ResolveMesh() const;
+	void TickReaction(float Dt);
 	FName ResolveBody(FName Bone) const;
 	bool AcquireBodies();
 	void ReleaseBodies(bool bRestoreAnimation);

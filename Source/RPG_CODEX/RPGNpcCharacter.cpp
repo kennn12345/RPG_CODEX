@@ -330,6 +330,7 @@ void ARPGNpcCharacter::UpdatePushObstacles()
 	// Driven off a ledge: it goes over, a braced fall.
 	if (Move->IsFalling())
 	{
+		UE_LOG(LogRPGInput, Log, TEXT("%s pushed off an edge at %.0f cm/s"), *GetActorNameOrLabel(), Speed);
 		bShoving = false;
 		++LedgeFallCount;
 		if (HitOutcome) HitOutcome->BeginFall(Dir, bKnockedOut);
@@ -347,6 +348,7 @@ void ARPGNpcCharacter::UpdatePushObstacles()
 	const float Reach = GetCapsuleComponent()->GetScaledCapsuleRadius() + 35.f;
 	const FVector Chest = GetActorLocation() + FVector(0.f, 0.f, 40.f);
 	if (!World->LineTraceSingleByObjectType(Wall, Chest, Chest + Dir * Reach, Objects, Params) || Cast<APawn>(Wall.GetActor())) return;
+	UE_LOG(LogRPGInput, Log, TEXT("%s slammed into %s at %.0f cm/s"), *GetActorNameOrLabel(), *GetNameSafe(Wall.GetActor()), Speed);
 	bShoving = false;
 	ShoveVelocity = FVector::ZeroVector;
 	Move->Velocity = FVector(0.f, 0.f, Move->Velocity.Z);
@@ -359,7 +361,6 @@ void ARPGNpcCharacter::UpdatePushObstacles()
 	}
 	URPGHitOutcomeComponent::PlayImpactSound(this, Wall.ImpactPoint, 0.6f);
 	StopForReaction(HitPause);
-	UE_LOG(LogRPGInput, Log, TEXT("%s slammed into %s at %.0f cm/s"), *GetActorNameOrLabel(), *GetNameSafe(Wall.GetActor()), Speed);
 }
 
 void ARPGNpcCharacter::Shove(FVector Velocity, bool bKnockback)

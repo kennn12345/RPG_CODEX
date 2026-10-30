@@ -59,8 +59,10 @@ void URPGReactivePhysicsComponent::BeginPlay()
 	if (UPhysicsControlComponent* PC=GetOwner()->FindComponentByClass<UPhysicsControlComponent>())
 		PrimaryComponentTick.AddPrerequisite(PC,PC->PrimaryComponentTick);
 	PhysicalAnimation=NewObject<UPhysicalAnimationComponent>(GetOwner(),TEXT("RPGReactivePhysicalAnimation"));
+	// Ticked from TickComponent, never on its own (see there).
+	PhysicalAnimation->PrimaryComponentTick.bCanEverTick=false;
 	PhysicalAnimation->RegisterComponent();
-	PhysicalAnimation->PrimaryComponentTick.AddPrerequisite(this,PrimaryComponentTick);
+	PrimaryComponentTick.AddPrerequisite(Mesh,Mesh->PrimaryComponentTick);
 	bReady=true;
 	UE_LOG(LogRPGInput,Display,TEXT("REACTIVE READY %s mesh=%s physics=%s root=%s upperBodies=%d legacy=%d"),*GetOwner()->GetName(),*GetNameSafe(Mesh->GetSkeletalMeshAsset()),*Mesh->GetPhysicsAsset()->GetPathName(),*UpperBodyRoot.ToString(),UpperBodies.Num(),Legacy!=nullptr);
 }
@@ -240,7 +242,19 @@ int32 URPGReactivePhysicsComponent::GetSimulatingUpperBodies() const
 void URPGReactivePhysicsComponent::TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Tick)
 {
 	Super::TickComponent(Dt,Type,Tick);
-	if (!bReady || Dt<=0.f) return;
+	if (!bReady) return;
+	if (Dt>0.f) TickReaction(Dt);
+	// Physical Animation's tick reads the mesh's pose while holding the physics scene's write lock. With the mesh's
+	// parallel animation still running it waited for that task inside the lock, and the task (motion matching's
+	// trajectory traces) waited for the lock: a frozen game. Tick ordering can't rule that out (the mesh's tick doesn't
+	// wait for its animation), so finish the animation here, outside the lock, then tick it directly.
+	if (!PhysicalAnimation || !PhysicalAnimation->GetSkeletalMesh()) return;
+	if (Mesh->IsRunningParallelEvaluation()) Mesh->HandleExistingParallelEvaluationTask(true,true);
+	PhysicalAnimation->TickComponent(Dt,Type,Tick);
+}
+
+void URPGReactivePhysicsComponent::TickReaction(float Dt)
+{
 	EnsurePoseEvaluation();
 	if (Mesh->GetEditableComponentSpaceTransforms().IsEmpty() && !bReportedEmptyPose)
 	{

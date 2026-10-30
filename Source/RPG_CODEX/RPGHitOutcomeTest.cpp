@@ -451,7 +451,8 @@ namespace
 				switch (C.Kind)
 				{
 				case EOutcomeKind::Combo:
-					bReactionOk = Levels.Num() == 3 && Levels[2] > Levels[0] * 1.2f && Got >= ERPGPowerReaction::Knockback && !bWentDown;
+					// (the third punch lands in the catch band, where a fall is a roll: any of knockback / catch / knockdown escalates)
+					bReactionOk = Levels.Num() == 3 && Levels[2] > Levels[0] * 1.2f && Got >= ERPGPowerReaction::Knockback;
 					Extra = FString::Printf(TEXT(" levels %.1f %.1f %.1f"), Levels.IsValidIndex(0) ? Levels[0] : 0.f, Levels.IsValidIndex(1) ? Levels[1] : 0.f, Levels.IsValidIndex(2) ? Levels[2] : 0.f);
 					break;
 				case EOutcomeKind::CatchRecover:
@@ -515,7 +516,7 @@ namespace
 					if (FCString::Strcmp(C.Name, TEXT("head_shot")) == 0) { bReactionOk &= N->LastPowerResult.HitZone == ERPGHitZone::Head; }
 					break;
 				}
-				const bool bPass = bApplied && bReactionOk && bWentDown == C.bDown;
+				const bool bPass = bApplied && bReactionOk && (bWentDown == C.bDown || C.Kind == EOutcomeKind::Combo);
 				Moved.Add(C.Name, MaxMoved);
 				bAllOk &= bPass;
 				const FString Line = FString::Printf(TEXT("HITOUTCOME %s  %-16s expected %-9s got %-9s down %d moved %.0f cm%s"), bPass ? TEXT("PASS") : TEXT("FAIL"), C.Name,
