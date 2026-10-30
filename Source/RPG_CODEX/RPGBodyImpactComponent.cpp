@@ -339,7 +339,7 @@ void URPGBodyImpactComponent::KnockDown(const FVector& Velocity, const FVector& 
 	// Out of the air, no walking: the body is physical now.
 	if (URPGMovementAbilityComponent* Abilities = GetOwner()->FindComponentByClass<URPGMovementAbilityComponent>()) Abilities->StopFlight();
 	if (UCharacterMovementComponent* Move = Character->GetCharacterMovement()) { Move->StopMovementImmediately(); Move->DisableMovement(); }
-	if (bOwnLimpHandler) Character->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	if (bOwnLimpHandler) { Character->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly); FreeMeshFromCapsule(Character); }
 	// Stays limp for its flight (up and down again) and then DownTime once it settles.
 	const float Gravity = 980.f;   // impacts fall under real gravity
 	Reaction->Launch(Velocity, Point, DownTime + FMath::Max(0.f, 2.f * float(Velocity.Z) / Gravity), true);
@@ -355,7 +355,31 @@ void URPGBodyImpactComponent::HandleLimpEnding()
 	float Duration = 0.f;
 	// Holding a direction while down: get up into a run.
 	StandUp(Character, 1.5f, Duration, Character->GetPendingMovementInputVector().SizeSquared() > 0.04f || Character->GetLastMovementInputVector().SizeSquared() > 0.04f);
+	ReturnMeshToCapsule(Character);   // (StandUp does it before placing the capsule; this covers it giving up early)
 	bDown = false;
+}
+
+void URPGBodyImpactComponent::FreeMeshFromCapsule(ACharacter* Character)
+{
+	USkeletalMeshComponent* Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Mesh || bMeshFreed) return;
+	MeshOffset = Mesh->GetRelativeLocation();
+	MeshTurn = Mesh->GetRelativeRotation();
+	const FTransform World = Mesh->GetComponentTransform();
+	Mesh->SetUsingAbsoluteLocation(true);
+	Mesh->SetUsingAbsoluteRotation(true);
+	Mesh->SetRelativeLocationAndRotation(World.GetLocation(), World.Rotator());   // (absolute: the same place, nothing moves)
+	bMeshFreed = true;
+}
+
+void URPGBodyImpactComponent::ReturnMeshToCapsule(ACharacter* Character)
+{
+	USkeletalMeshComponent* Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Mesh || !bMeshFreed) return;
+	bMeshFreed = false;
+	Mesh->SetUsingAbsoluteLocation(false);
+	Mesh->SetUsingAbsoluteRotation(false);
+	Mesh->SetRelativeLocationAndRotation(MeshOffset, MeshTurn);
 }
 
 UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate, float& OutDuration, bool bWantsToMove)
@@ -403,6 +427,8 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	const float MeshYaw = FMath::RadiansToDegrees(FMath::Atan2(Head.Y, Head.X)) - Pick.HeadYaw;
 	const FVector Offset = FRotator(0.f, MeshYaw, 0.f).RotateVector(FVector(Pick.PelvisFromRoot.X, Pick.PelvisFromRoot.Y, 0.f));
 	const float HalfHeight = Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	// (the body's pose has been read: the player's mesh goes back under the capsule before it is placed)
+	if (URPGBodyImpactComponent* Impact = Character->FindComponentByClass<URPGBodyImpactComponent>()) Impact->ReturnMeshToCapsule(Character);
 	Character->SetActorLocationAndRotation(FVector(Pelvis.X - Offset.X, Pelvis.Y - Offset.Y, FloorZ + HalfHeight + 1.f),
 		FRotator(0.f, MeshYaw - Body->GetRelativeRotation().Yaw, 0.f), false, nullptr, ETeleportType::None);
 	if (AController* Controller = Character->GetController())
