@@ -294,7 +294,10 @@ void ARPGNpcCharacter::React(const FRPGMeleeHitInfo& Hit, const FRPGPowerInput& 
 	if (Energy && Push.IsNearlyZero()) Push = Dir * Energy->Impulse * EnergyShovePerImpulse;
 	if (Hit.Attacker) Push += Hit.Attacker->GetVelocity() * MomentumTransfer * RPGBodyMass::TotalKgFor(0.f) / RPGBodyMass::TotalKgFor(BodyWeightLbs);
 	if (Push.IsNearlyZero()) Push = Dir;
-	Shove(Push, Result.Reaction == ERPGPowerReaction::Knockback || bCatching);
+	// Off balance, it stumbles a few steps (2-4 ft) where it was hit, not a knockback's drive.
+	if (bCatching && Result.Reaction != ERPGPowerReaction::Knockback)
+		Push = Push.GetSafeNormal2D() * FMath::Clamp(float(Push.Size2D()), CatchMinShove, CatchMaxShove);
+	Shove(Push, Result.Reaction == ERPGPowerReaction::Knockback);
 
 	if (bFallsCatching)
 		GetWorldTimerManager().SetTimer(CatchFailTimer, FTimerDelegate::CreateWeakLambda(this, [this, Dir, Point = Hit.ImpactLocation]()

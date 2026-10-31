@@ -46,7 +46,20 @@ falls-catching Knockdown the knockback push: clamped to `KnockbackMinShove`..`Kn
 2-5 m of stumbling for a hit the Power System sizes at ~2 ft; a failed catch then hands that speed to the braced ragdoll,
 which slides ~3 m more.
 
-Next (needs the user's call - it changes catches they have seen): how far should a catch stumble? Proposal: catches use
+DONE (user chose 2-4 ft): catches now push `CatchMinShove`-`CatchMaxShove` (200-300 cm/s, normal shove time) instead of
+the knockback push. catch_recovers 104 cm (3.4 ft), a failed catch goes down ~2 ft from the hit (catch_fails total 134 cm,
+was 268-369). RPG.Npc.HitOutcomes passes.
+
+STILL OPEN - the ragdoll slide after going down (the second half of the distance): Strength 10 straight knockdown
+"down at 0.1 ft, still at 12.3 ft" (calculated 4.8); failed catch "down at 2.1, still at 6.7 ft"; a short launch reached
+175% (calculated 6.5 ft, 11.4 ft) and failed the sweep once. With the human-strength brace (b1a33e2) the body rolls and
+tumbles on after landing instead of digging in. Ask the user how far a knockdown should slide; options: more ground
+friction while braced (the `TumbleMaterial` friction 0.35 in `URPGPhysicsReactionComponent::Launch` natural falls, or
+the GASP per-body materials), stronger arms on landing (less `BraceImpactShare` give for the arms), or scale the
+knockdown's ragdoll velocity in `HandlePowerHit` so arc + slide = the calculated `Displacement` (launches were tuned to
+land ~100%: check they still do). Use the RPGCALIB "down at / still at" readout to measure.
+
+(Earlier proposal, kept for reference:) how far should a catch stumble? Proposal: catches use
 their own push (`Shove(Push, false)` capped at `MaxShove`, or a Catch-specific min/max ~150-300 cm/s), so a catch is a few
 steps and a failed catch falls near where it stumbled. Then re-run `RPG.Npc.HitOutcomes` (catch_recovers, catch_fails,
 knee_*, combo_escalates, from_behind) and `RPG.Power.Calibration`, make contact sheets, get user approval, commit.

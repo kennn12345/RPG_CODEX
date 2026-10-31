@@ -117,6 +117,12 @@ public:
 	/** A failed catch stumbles this long (s) with its arms out before it goes down. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
 	float CatchFailDelay = 0.35f;
+	/** A catch's stumble (cm/s, braking at ShoveBraking): 200-300 carries it 2-4 ft, about the Power System's distance.
+	 *  (It used the knockback's 400-600 for 1.5 s: 7-15 ft of stumbling, and a failed catch slid on from there.) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float CatchMinShove = 200.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
+	float CatchMaxShove = 300.f;
 	/** Hit while lying down: share of the standing push the body gets (it slides, it isn't thrown). (0.35 with the old
 	 *  rigid brace, which slid as one block; the human-strength brace crumples and drags, so it needs a little more.) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|NPC|Reactions", meta = (ClampMin = "0"))
