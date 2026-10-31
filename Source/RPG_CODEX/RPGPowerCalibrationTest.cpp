@@ -92,7 +92,7 @@ namespace
 				Hit.StrikeDirection = D->GetActorForwardVector();
 				IRPGMeleeTarget::Execute_ReceiveMeleeHit(D, Hit);
 				Expected = D->LastPowerResult;
-				bSawLimp = false;
+				bSawLimp = false; AtLimp = AtLimpEnd = -30.48f;
 				Phase = 2; PhaseStart = Now;
 				return false;
 			}
@@ -100,6 +100,9 @@ namespace
 			case 2:   // watch until it is standing still on its feet again
 			{
 				const ERPGPhysicsReactionState State = D->PhysicsReaction->GetReactionState();
+				// (where it is at each stage: the push before it goes down, the ragdoll, the get-up)
+				if (State == ERPGPhysicsReactionState::Limp && !bSawLimp) AtLimp = float(FVector::Dist2D(D->GetMesh()->GetBoneLocation(TEXT("pelvis")), StartSpot));
+				if (State == ERPGPhysicsReactionState::Limp) AtLimpEnd = float(FVector::Dist2D(D->GetMesh()->GetBoneLocation(TEXT("pelvis")), StartSpot));
 				bSawLimp |= State == ERPGPhysicsReactionState::Limp;
 				const bool bStill = State == ERPGPhysicsReactionState::Animated && !D->PhysicsReaction->IsReturning();
 				if (!(bStill && Now - PhaseStart > 2.f) && Now - PhaseStart < 15.f) return false;
@@ -111,9 +114,9 @@ namespace
 				bAllOk &= bOk;
 				if (bLaunch) { RatioSum += Ratio; ++Launches; }
 
-				const FString Line = FString::Printf(TEXT("RPGCALIB Strength %4.1f  %-9s  ladder max %6.1f ft  calculated %6.1f ft  actual %6.1f ft  (%3.0f%%)  ragdoll %d  damage %5.1f%s"),
+				const FString Line = FString::Printf(TEXT("RPGCALIB Strength %4.1f  %-9s  ladder max %6.1f ft  calculated %6.1f ft  actual %6.1f ft  (%3.0f%%)  ragdoll %d  damage %5.1f  (down at %.1f ft, still at %.1f ft)%s"),
 					Strength, *UEnum::GetDisplayValueAsText(Expected.Reaction).ToString(), Expected.MaxDisplacement / 30.48f,
-					Expected.Displacement / 30.48f, Actual / 30.48f, Ratio * 100.f, bSawLimp, Expected.Damage, bOk ? TEXT("") : TEXT("   <-- OUT OF RANGE"));
+					Expected.Displacement / 30.48f, Actual / 30.48f, Ratio * 100.f, bSawLimp, Expected.Damage, AtLimp / 30.48f, AtLimpEnd / 30.48f, bOk ? TEXT("") : TEXT("   <-- OUT OF RANGE"));
 				UE_LOG(LogRPGInput, Display, TEXT("%s"), *Line);
 				Test->AddInfo(Line);
 				++Case; Phase = 0;
@@ -144,7 +147,7 @@ namespace
 		TWeakObjectPtr<ARPGNpcCharacter> Dummy;
 		int32 WaitFrames = 0, Case = 0, Phase = 0, Launches = 0;
 		bool bArenaBuilt = false, bSawLimp = false, bAllOk = true;
-		float PhaseStart = 0.f, RatioSum = 0.f;
+		float PhaseStart = 0.f, RatioSum = 0.f, AtLimp = -30.48f, AtLimpEnd = -30.48f;
 		FVector ArenaTop = FVector::ZeroVector, StartSpot = FVector::ZeroVector;
 		FRPGPowerResult Expected;
 	};

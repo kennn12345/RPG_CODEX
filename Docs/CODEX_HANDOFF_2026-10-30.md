@@ -31,13 +31,30 @@ Likely mechanism (read, not yet proven) in `ARPGNpcCharacter::React` (`Source/RP
 - After `CatchFailDelay` (0.35 s) the `CatchFailTimer` calls Fall / ragdoll with the body's speed, and the braced
   ragdoll slides on; then the get-up. Stumble + slide + get-up = 4-5 m.
 
-Steps: log the actor distance at each stage (hit, catch fail, limp start, limp end, get-up end) in the calibration run;
-confirm which stage adds the distance; then ask the user whether a knockdown should stay near the Power System's
-`Displacement` (the ladder's numbers) or the stumble-then-fall is intended. If it should match, make the catch-fail
-shove use the knockdown's own displacement (not the knockback minimum) and consider adding a knockdown-distance
-check to `RPGPowerCalibrationTest.cpp` (e.g. within 2x calculated + a stumble allowance). Re-run
-`RPG.Npc.HitOutcomes` (catch_fails, knee_fwd_fails, knockdown_braced cases) and get user preview before committing
-any look change.
+PROVEN (Claude, 4 calibration runs; the RPGCALIB line now reports "down at X ft, still at Y ft" = pelvis distance when
+the ragdoll starts / last limp frame):
+
+| Strength 8 | calculated | pushed | down at | still at | final |
+|---|---|---|---|---|---|
+| Catch (no fall) | 1.8 ft | 588 cm/s | - | - | 14.0 ft |
+| Knockdown (catch fails) | 1.9 ft | 600 cm/s | 5.6 ft | 15.4 ft | 16.8 ft |
+| Knockdown (catch fails) | 1.7 ft | 421 cm/s | 1.5 ft | 4.5 ft | 6.4 ft |
+
+Cause: `Shove(Push, Result.Reaction == ERPGPowerReaction::Knockback || bCatching)` gives every Catch and every
+falls-catching Knockdown the knockback push: clamped to `KnockbackMinShove`..`KnockbackMaxShove` (400-600 cm/s) for
+`KnockbackShoveTime` 1.5 s, on top of Push = `DisplacementVelocity * ShoveScale` (2.5). With `ShoveBraking` 380 that is
+2-5 m of stumbling for a hit the Power System sizes at ~2 ft; a failed catch then hands that speed to the braced ragdoll,
+which slides ~3 m more.
+
+Next (needs the user's call - it changes catches they have seen): how far should a catch stumble? Proposal: catches use
+their own push (`Shove(Push, false)` capped at `MaxShove`, or a Catch-specific min/max ~150-300 cm/s), so a catch is a few
+steps and a failed catch falls near where it stumbled. Then re-run `RPG.Npc.HitOutcomes` (catch_recovers, catch_fails,
+knee_*, combo_escalates, from_behind) and `RPG.Power.Calibration`, make contact sheets, get user approval, commit.
+Consider adding a catch/knockdown distance check to `RPGPowerCalibrationTest.cpp` once the user picks the intent.
+
+Also: the calibration sweep is not fully stable: in ~1 of 10 sweeps a short Strength 10 launch lands at ~60% of a 5-6 ft
+calculation (a short low arc tumbles short). Every long launch is 89-120%. If it bothers CI, judge short launches
+(< 8 ft calculated) on an absolute tolerance (e.g. within 3 ft) instead of 70-135%.
 
 ## Open task 2: user review pending
 
