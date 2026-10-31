@@ -28,6 +28,8 @@ class RPG_CODEX_API URPGMeleeHitComponent : public UActorComponent
 public:
 	URPGMeleeHitComponent();
 
+	virtual void BeginPlay() override;
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** Sphere radius on the fist (knuckles and the middle of the fist). */
@@ -53,6 +55,13 @@ public:
 	/** Fires once per target per strike. The Power System can bind here later. */
 	UPROPERTY(BlueprintAssignable, Category = "RPG|Melee")
 	FRPGOnMeleeHitSignature OnMeleeHit;
+
+	/** Most recent confirmation, for live inspection and end-to-end combat checks. */
+	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Melee|Debug")
+	FRPGMeleeHitInfo LastHit;
+
+	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Melee|Debug")
+	int32 ConfirmedHitCount = 0;
 
 private:
 	/** World positions of the striking limb's sweep spheres this frame (2 per limb). */

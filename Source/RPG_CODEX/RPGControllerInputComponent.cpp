@@ -93,8 +93,11 @@ void URPGControllerInputComponent::EnsureHelperComponents()
 	CameraMode = FindOrCreateComponent<URPGCameraModeComponent>(Owner, TEXT("RPGCameraMode"));
 	Interaction = FindOrCreateComponent<URPGInteractionComponent>(Owner, TEXT("RPGInteraction"));
 	FindOrCreateComponent<URPGPrototypeAnimationComponent>(Owner, TEXT("RPGPrototypeAnimations"));
-	FindOrCreateComponent<URPGMeleeHitComponent>(Owner, TEXT("RPGMeleeHits"));
-	FindOrCreateComponent<URPGStrikeContactComponent>(Owner, TEXT("RPGStrikeContact"));
+	URPGMeleeHitComponent* Melee = FindOrCreateComponent<URPGMeleeHitComponent>(Owner, TEXT("RPGMeleeHits"));
+	URPGStrikeContactComponent* Contact = FindOrCreateComponent<URPGStrikeContactComponent>(Owner, TEXT("RPGStrikeContact"));
+	// Helpers can be registered during BeginPlay: the contact producer may not exist when Melee begins play.
+	// Both run post-physics; make its current-pose correction available before hit velocity is measured.
+	Melee->AddTickPrerequisiteComponent(Contact);
 	FindOrCreateComponent<URPGCombatAimComponent>(Owner, TEXT("RPGCombatAim"));
 	FindOrCreateComponent<URPGCharacterStatsComponent>(Owner, TEXT("RPGStats"));	// Player defaults: Strength 5
 	FindOrCreateComponent<URPGFlightAnimationComponent>(Owner, TEXT("RPGFlightAnimation"));

@@ -50,6 +50,14 @@ USkeletalMeshComponent* URPGMeleeHitComponent::GetMesh() const
 	return GetOwner() ? GetOwner()->FindComponentByClass<USkeletalMeshComponent>() : nullptr;
 }
 
+void URPGMeleeHitComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	if (USkeletalMeshComponent* Mesh = GetMesh()) AddTickPrerequisiteComponent(Mesh);
+	if (URPGStrikeContactComponent* Contact = GetOwner()->FindComponentByClass<URPGStrikeContactComponent>())
+		AddTickPrerequisiteComponent(Contact);
+}
+
 bool URPGMeleeHitComponent::GetLimbPoints(ERPGStrikeLimb Limb, TArray<FVector>& OutPoints) const
 {
 	OutPoints.Reset();
@@ -136,7 +144,9 @@ void URPGMeleeHitComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 			FHitResult Hit(Touched->GetOwner(), Touched, Point, Normal);
 			Hit.BoneName = Bone;
 			Hit.ImpactNormal = Normal;
-			FVector Travel = Points[0] - From[0] - CorrectionChange;
+			// The contact producer has sampled this pose and its correction together. Use that same snapshot;
+			// mixing a newly evaluated fist with last frame's correction can report withdrawal or near-zero speed.
+			const FVector Travel = Contact->GetAnimatedTravel(State->StrikeLimb);
 			ReportHit(Hit, Points[0], Travel, State);
 		}
 	}
@@ -218,6 +228,8 @@ void URPGMeleeHitComponent::ReportHit(const FHitResult& Hit, const FVector& End,
 			nullptr, FColor::Green, DebugDrawTime, true);
 	}
 
+	LastHit = Info;
+	++ConfirmedHitCount;
 	if (Target->Implements<URPGMeleeTarget>()) IRPGMeleeTarget::Execute_ReceiveMeleeHit(Target, Info);
 	else if (URPGHitOutcomeComponent* Outcome = Target->FindComponentByClass<URPGHitOutcomeComponent>()) Outcome->ReceiveMeleeHit(Info);   // the player
 	OnMeleeHit.Broadcast(Info);

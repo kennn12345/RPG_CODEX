@@ -403,6 +403,7 @@ void URPGPhysicsReactionComponent::EnterPoweredReaction(FName HitBone, bool bDaz
 		if (!PhysicsControl->GetControlData(Name, Data)) continue;
 		Data.AngularStrength = MotorStrength;
 		Data.AngularDampingRatio = MotorDampingRatio;
+		Data.AngularTargetVelocityMultiplier = 1.f;
 		Data.bEnabled = true;
 		PhysicsControl->SetControlData(Name, Data, true, false);
 	}
@@ -898,6 +899,7 @@ void URPGPhysicsReactionComponent::SetFlightFollow(bool bOn)
 			if (!PhysicsControl->GetControlData(Name, Data)) continue;
 			Data.AngularStrength = MotorStrength * FlightMotorScale;
 			Data.AngularDampingRatio = MotorDampingRatio;
+			Data.AngularTargetVelocityMultiplier = 1.f;
 			Data.bEnabled = true;
 			PhysicsControl->SetControlData(Name, Data, true, false);
 		}
@@ -933,6 +935,10 @@ void URPGPhysicsReactionComponent::ApplyBraceMotors()
 		if (!PhysicsControl->GetControlData(Name, Data)) continue;
 		Data.AngularStrength = BraceMotorStrength;
 		Data.AngularDampingRatio = BraceDampingRatio;
+		// A brace is a changing pose goal, not an instruction to inherit the animation's angular speed.
+		// The standing-to-reach pose discontinuity otherwise feeds an extreme velocity into damping at takeover.
+		// Keep orientation drive and damping; let simulated momentum carry the fall between those goals.
+		Data.AngularTargetVelocityMultiplier = 0.f;
 		Data.bEnabled = true;
 		PhysicsControl->SetControlData(Name, Data, true, false);
 	}
