@@ -452,7 +452,6 @@ void URPGHitOutcomeComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	// Balance comes back a moment after the last hit.
 	if (Now - LastHitTime > S->BalanceRefillDelay) Balance = FMath::Min(1.f, Balance + DeltaTime / S->BalanceRefillTime);
 
-	const bool bHadPose = BraceWeight > 0.f || Bend > 0.f;
 	URPGPhysicsReactionComponent* Reaction = GetReaction();
 	const bool bLimp = Reaction && Reaction->GetReactionState() == ERPGPhysicsReactionState::Limp && !Reaction->IsReturning();
 	if (bFallBrace)
@@ -473,7 +472,9 @@ void URPGHitOutcomeComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 	PeakBrace = FMath::Max(PeakBrace, BraceWeight);
 	PeakBend = FMath::Max(PeakBend, Bend);
-	if (bHadPose || BraceWeight > 0.f || Bend > 0.f) WriteBrace();
+	// Zero is a state update too: knockout and knee-catch transitions can clear the weights before this tick.
+	// Skipping that write left the animation instance holding the previous arms-out pose after recovery.
+	WriteBrace();
 
 	// Knocked out cold (owners without reactions of their own): back to full health once it is up again.
 	if (bOutCold && !bLimp && Now - FallStartTime > 1.f && !Cast<ARPGNpcCharacter>(GetOwner()))

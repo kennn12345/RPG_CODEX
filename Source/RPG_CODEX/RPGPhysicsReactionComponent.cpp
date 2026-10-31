@@ -651,13 +651,14 @@ void URPGPhysicsReactionComponent::SetSolidRagdoll(bool bSolid)
 	bSolidRagdoll = bSolid;
 	if (bSolid)
 	{
-		// The body parts: a physics body that blocks the world, characters, other ragdolls (and itself: the physics
-		// asset's own pairs), and still takes traces (spells, aim).
+		// Bodies collide with the world and other simulated bodies, and still take traces (spells, aim).
+		// Walking capsules must not push individual ragdoll bones: CharacterMovement's physics push can catapult
+		// a light segment independently of our bounded body-impact response. Simulated characters remain PhysicsBody.
 		SavedMeshObjectType = Mesh->GetCollisionObjectType();
 		SavedMeshResponses = Mesh->GetCollisionResponseToChannels();
 		Mesh->SetCollisionObjectType(ECC_PhysicsBody);
 		Mesh->SetCollisionResponseToAllChannels(ECR_Ignore);
-		for (const ECollisionChannel Channel : { ECC_WorldStatic, ECC_WorldDynamic, ECC_Pawn, ECC_PhysicsBody, ECC_Visibility, ECC_Destructible })
+		for (const ECollisionChannel Channel : { ECC_WorldStatic, ECC_WorldDynamic, ECC_PhysicsBody, ECC_Visibility, ECC_Destructible })
 			Mesh->SetCollisionResponseToChannel(Channel, ECR_Block);
 		// The owner's own capsules let the body (and other characters) through: the body has left them behind.
 		SavedCapsuleResponses.Reset();

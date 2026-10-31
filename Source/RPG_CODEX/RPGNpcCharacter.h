@@ -160,6 +160,8 @@ public:
 
 	/** Walking is off while it reacts, is down or is getting up (the AI controller waits). */
 	bool IsBusy() const;
+	/** Current driven step velocity (diagnostics); distinct from a montage's root-motion velocity. */
+	FVector GetDrivenShoveVelocity() const { return bShoving ? ShoveVelocity : FVector::ZeroVector; }
 	FVector GetHome() const { return Home; }
 
 private:
@@ -170,7 +172,7 @@ private:
 	void UpdatePushObstacles();
 	/** Push the body at Velocity (world, horizontal): it keeps facing its way while GASP steps it to a stop. A knockback
 	 *  pushes harder and longer (KnockbackMinShove-KnockbackMaxShove) so it is driven back several steps. */
-	void Shove(FVector Velocity, bool bKnockback = false);
+	void Shove(FVector Velocity, bool bKnockback = false, bool bEnforceKnockbackMinimum = true);
 	/** Run into (URPGBodyImpactComponent): a nudge, a stagger or a knockback, never a fall. */
 	void ReceiveBump(const FVector& Velocity, const FVector& Point, ERPGPowerReaction Reaction);
 	void PlayImpactFeel(AActor* Attacker, ERPGPowerReaction Reaction);

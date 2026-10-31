@@ -320,7 +320,10 @@ void ARPGNpcCharacter::ReceiveBump(const FVector& Velocity, const FVector& Point
 	const bool bHard = Reaction != ERPGPowerReaction::Flinch;
 	StopForReaction(bHard ? HitPause : 0.4f);
 	ReactToHit(TEXT("spine_03"), Point, Velocity, bHard ? HitSpeedStagger : HitSpeedFlinch * 0.5f, nullptr);
-	Shove(Velocity, Reaction == ERPGPowerReaction::Knockback);
+	// A light bump gives locally while a knee-catch's root motion carries the feet. Do not queue a second movement
+	// drive underneath it, which can persist as the catch ends. Hard impacts retain their normal response.
+	const bool bLightKneeBump = HitOutcome && HitOutcome->ActiveKneeCatch && Velocity.Size2D() <= CatchMaxShove;
+	if (!bLightKneeBump) Shove(Velocity, Reaction == ERPGPowerReaction::Knockback, false);
 	UE_LOG(LogRPGInput, Log, TEXT("%s bumped: %s at %.0f cm/s"), *GetActorNameOrLabel(), *UEnum::GetDisplayValueAsText(Reaction).ToString(), Velocity.Size2D());
 }
 
@@ -374,7 +377,7 @@ void ARPGNpcCharacter::UpdatePushObstacles()
 	StopForReaction(HitPause);
 }
 
-void ARPGNpcCharacter::Shove(FVector Velocity, bool bKnockback)
+void ARPGNpcCharacter::Shove(FVector Velocity, bool bKnockback, bool bEnforceKnockbackMinimum)
 {
 	UCharacterMovementComponent* Move = GetCharacterMovement();
 	const UWorld* World = GetWorld();
@@ -382,7 +385,10 @@ void ARPGNpcCharacter::Shove(FVector Velocity, bool bKnockback)
 	if (bDown || !Move || !World || Velocity.Size() < (bKnockback ? KINDA_SMALL_NUMBER : MinShove)) return;
 	// A knockback always drives it back several steps; anything else is capped at an ordinary stagger's push.
 	const float Max = bKnockback ? KnockbackMaxShove : MaxShove;
-	Velocity = bKnockback ? Velocity.GetSafeNormal() * FMath::Clamp(float(Velocity.Size()), KnockbackMinShove, Max) : Velocity.GetClampedToMaxSize(Max);
+	// Attack knockbacks retain their authored minimum. A body bump already carries a mass-split velocity; its
+	// reaction category must not multiply a gentle walking collision into an attack-strength shove.
+	const float Minimum = bEnforceKnockbackMinimum ? KnockbackMinShove : 0.f;
+	Velocity = bKnockback ? Velocity.GetSafeNormal() * FMath::Clamp(float(Velocity.Size()), Minimum, Max) : Velocity.GetClampedToMaxSize(Max);
 	const float Time = bKnockback ? KnockbackShoveTime : ShoveTime;
 	// The body moves; with no walking input it brakes to a stop, and motion matching picks the steps for that motion
 	// (the size, angle and speed of every push differ, so do the steps). It keeps facing the way it faced (strafing).
