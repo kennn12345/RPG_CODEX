@@ -205,6 +205,14 @@ public:
 	float BraceImpactShare = 0.2f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0.01"))
 	float BraceImpactRecover = 0.45f;
+	/** A fall (knockdown, failed catch, off a ledge) grips the ground once it has hit it: every body's linear damping goes
+	 *  to this, so it comes to rest within a foot or two (about landing speed / damping) instead of rolling on. Not
+	 *  launches: their slide is part of the calculated distance. A new hit while down lets go until it lands again. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float GroundGripDamping = 8.f;
+	/** Launch() slower than this (cm/s) is a fall and grips too; a faster one (a crash) tumbles on. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0"))
+	float GroundGripMaxSpeed = 600.f;
 	/** Share of the brace kept once the body has come to rest (it still holds its head and arms a little), and how
 	 *  quickly it eases there (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Brace", meta = (ClampMin = "0", ClampMax = "1"))
@@ -456,6 +464,10 @@ private:
 	FVector BracePelvisVelocity = FVector::ZeroVector;
 	bool bHaveBracePelvisVelocity = false;
 	float BraceMotionSum = 0.f, BraceMotionTime = 0.f;
+	bool bGripOnLanding = false, bGripping = false, bHaveGripVelocity = false;
+	FVector GripPelvisVelocity = FVector::ZeroVector;
+	TArray<float> GripSavedDamping;
+	void SetGroundGrip(bool bOn);
 	void ApplyBraceMotors();
 	float CurrentYieldTime = 0.1f, CurrentRecoverTime = 0.6f, CurrentMotorBase = 1.f;
 	TArray<FName> AllControls;

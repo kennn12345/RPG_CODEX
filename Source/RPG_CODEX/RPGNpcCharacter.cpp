@@ -306,7 +306,8 @@ void ARPGNpcCharacter::React(const FRPGMeleeHitInfo& Hit, const FRPGPowerInput& 
 			// The catch fails: down it goes, still fighting it.
 			++CatchFallCount;
 			if (HitOutcome) HitOutcome->BeginFall(Dir, false);
-			PhysicsReaction->Launch(FVector(GetVelocity().X, GetVelocity().Y, 0.f) + Dir * 150.f, Point, PhysicsReaction->LimpTime);
+			// (its stumble's speed and a little more toward the fall: it goes down a foot or two on, not sliding away)
+			PhysicsReaction->Launch(FVector(GetVelocity().X, GetVelocity().Y, 0.f) + Dir * 50.f, Point, PhysicsReaction->LimpTime);
 		}), CatchFailDelay, false);
 }
 

@@ -6,7 +6,44 @@ finishes. Nothing pushed. Leave the user's own uncommitted files alone (`Config/
 `Tools/Blender/build_fight_stance.py`, `clear_fightstance_edits.py`, `render_views.py`). Unreal must be closed for C++
 builds (the user closes it). Commit only true, verified fixes. Ragdoll is whole-body or none.
 
-## Done today (all committed, full regression 23/23 green)
+## Everything Claude did since the last handoff (Codex's `8f74600` / `e2f7c03`, 2026-10-27)
+
+Oldest first; `git log e2f7c03..HEAD` has every commit. Details live in the docs named.
+
+**Punch reference and melee rebuild (10-27 to 10-28)** - `Docs/PUNCH_*`, memory "Melee rebuild".
+- 6ad951f, 2ddaf0a, 5b4986e: reference punch versions G and I (level stance, smooth key timing, fitted elbows, shoulder
+  rises only with a cocked elbow) with review files.
+- 97a9388, c7fb0fe: punch stance tuning (near-standing guard, then lower/wider: hips 5 cm lower, knees ~40 deg, feet 40 cm).
+- 281759d: fast flight +15% (2300 cm/s); get-ups +50% (player 1.5x, NPC 1.725x healthy / 1.05x hurt).
+- 0178728: melee reset - all old punch/kick/guard/stance clips deleted; new authored boxing FightStance.
+- c1def3b, d86646d, 58b1ced: fight stance and right punch captured from the user's videos (IMG_8635 / IMG_8634);
+  lead foot out, closed fists, bowed lead knee fixed, wider stance.
+- 411f7bd, 202b006, 224ca67, 0c112ec, 0006823, 941d3a2, ca7bf36: right punch refined (pull-back, follow-through,
+  hand-off); left punch mirrored from it; both made overhands; elbow/shoulder tight with rotation on release;
+  whole-body kinetic chain; sketch-driven arm path; minimal lead-foot pivot on the left.
+
+**Aim and camera (10-28)** - `Docs/CROSSHAIR_AIM_2026-10-28.md`.
+- 3ac07e2: punches aim from the filmed clips' real impact points (were 15 cm high from a stale strike point); test
+  `RPG.Combat.CrosshairAim(FirstPerson)`.
+- d8a0547: third-person punches at empty air land on the crosshair.
+- 9d81004: camera centred behind for melee, over the shoulder only while casting (`HoldReticleSpot`).
+- b012a4d: D-Pad Left toggles the fighting stance, armed or not.
+
+**Hit outcomes (10-29)** - `Docs/HIT_OUTCOMES.md`.
+- 4e81af0: stagger / knockback / catch-yourself / braced knockdown for NPCs and the player (Power System balance and
+  situation, `URPGHitOutcomeComponent`, wall slams, ledge falls, hits while down).
+- 80174bf: 12 hand-keyed knee-down catch clips (forward/back x recover/fall x soft/mid/hard), realism-gated
+  (`Tools/ProtoAnim/realism.py`), momentum-driven.
+
+**Freeze, stability and cleanup (10-30 to 10-31)** - table below and `Docs/HIT_OUTCOMES.md`.
+- 7c7f64b: the in-game freeze (deadlock) fixed; also KeepPoseFresh, player PhysicsControl post-physics, SLOW FRAME
+  log, `RPG.Npc.ReactionStress`.
+- be60888, d5c60a5, eb09ac8, b1a33e2, 1dc1e82, 2edb538: see the table.
+- 4232a19, 15c9262: this handoff; calibration "down at / still at" readout.
+- 508c00b: catches stumble 2-4 ft (were driven 7-15 ft by the knockback push).
+- (last commit, regression 23/23) ground grip: knocked-down bodies stop within a foot or two of landing; failed-catch fall push 150 -> 50.
+
+## Done 10-30 / 10-31 (all committed)
 
 | commit | what |
 |---|---|
@@ -50,7 +87,17 @@ DONE (user chose 2-4 ft): catches now push `CatchMinShove`-`CatchMaxShove` (200-
 the knockback push. catch_recovers 104 cm (3.4 ft), a failed catch goes down ~2 ft from the hit (catch_fails total 134 cm,
 was 268-369). RPG.Npc.HitOutcomes passes.
 
-STILL OPEN - the ragdoll slide after going down (the second half of the distance): Strength 10 straight knockdown
+UPDATE (user chose "barely, a foot or two" of slide): `URPGPhysicsReactionComponent` ground grip - once a fall
+(knockdown via HandlePowerHit, or Launch() slower than `GroundGripMaxSpeed` 600) hits the ground (hips' velocity drops by
+`BraceImpactSpeed` after 0.15 s), every body's linear damping goes to `GroundGripDamping` 8 ("grips the ground at"
+log); a new hit while down lets go. Failed-catch fall push `Dir * 150` -> `Dir * 50` (RPGNpcCharacter.cpp catch-fail
+timer). Results: straight knockdown rests ~3.7 ft (calc 4.7, was 12.3); catch_fails total 89-93 cm (was 268-369).
+STILL: in RPG.Power.Calibration a Strength 8 failed catch went down at 2.5 ft and rested at 6.9 ft (~4 ft of topple +
+slide before the grip engages); and the sweep still fails ~1 in 3-5 runs on the short Strength 10 launch (59-175% of a
+5-7 ft calculation). Suggested: judge launches under 8 ft calculated on an absolute tolerance, and/or engage the grip
+on the first ground contact (a body's hit event) instead of the hips' velocity drop.
+
+(Before the update:) the ragdoll slide after going down (the second half of the distance): Strength 10 straight knockdown
 "down at 0.1 ft, still at 12.3 ft" (calculated 4.8); failed catch "down at 2.1, still at 6.7 ft"; a short launch reached
 175% (calculated 6.5 ft, 11.4 ft) and failed the sweep once. With the human-strength brace (b1a33e2) the body rolls and
 tumbles on after landing instead of digging in. Ask the user how far a knockdown should slide; options: more ground

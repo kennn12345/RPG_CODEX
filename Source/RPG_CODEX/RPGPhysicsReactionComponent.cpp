@@ -298,6 +298,7 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 		const float Gravity = URPGPowerSettings::Get()->GetRagdollGravity();
 		const float FlightTime = Result.DisplacementVelocity.Z > 0.f ? 2.f * float(Result.DisplacementVelocity.Z) / Gravity : 0.f;
 		EnterFullRagdoll(LimpTime + FlightTime);
+		bGripOnLanding = Result.Reaction != ERPGPowerReaction::Launch;
 		bWaitForSettle = true;
 
 		// The whole body moves (a launch or a sliding fall), not only the struck part.
@@ -441,6 +442,8 @@ void URPGPhysicsReactionComponent::EnterFullRagdoll(float InLimpTime)
 	PhysicsControl->SetControlsEnabled(AllControls, false);
 	// Fighting the fall: the motors drive toward the brace pose from the start (and again on a new hit while down).
 	BraceGive = bWasLimp ? 1.f : 0.f;   // a blow while down knocks the fight out of it for a moment, as a hard landing does
+	SetGroundGrip(false);   // (it moves with this blow; it grips again once it lands)
+	bGripOnLanding = false; bHaveGripVelocity = false;
 	bHaveBracePelvisVelocity = false;
 	if (!bWasLimp) BraceMotionSum = BraceMotionTime = 0.f;
 	if (bBraced) { BraceStrength = 1.f; ApplyBraceMotors(); }
@@ -573,6 +576,7 @@ void URPGPhysicsReactionComponent::ReturnToAnimated(float BlendTime)
 			UE_LOG(LogRPGInput, Log, TEXT("%s braced fall: %.1f s, body moves %.0f deg/s within itself"), *GetOwner()->GetActorNameOrLabel(),
 				BraceMotionTime, BraceMotionSum / BraceMotionTime);
 		BraceMotionSum = BraceMotionTime = 0.f;
+		SetGroundGrip(false);
 		OnLimpEnding.Broadcast();
 		if (State == ERPGPhysicsReactionState::Animated) return;   // a listener already finished it (e.g. an instant reset)
 		// Out of a limp ragdoll: the body is held exactly where it lies (each body kinematic, pinned to where it is in
@@ -756,6 +760,20 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 				ApplyPoweredMotorScales(Recover * Recover);
 				if (StateTime >= CurrentYieldTime + CurrentRecoverTime) ReturnToAnimated(ReturnBlendTime);
 			}
+			// A fall that has hit the ground (the hips brought up short) grips it: no rolling on (see GroundGripDamping).
+			// (not the hit's own kick: from 0.15 s on)
+			if (State == ERPGPhysicsReactionState::Limp && bGripOnLanding && !bGripping && StateTime > 0.15f)
+				if (const FBodyInstance* Hips = Mesh ? Mesh->GetBodyInstance(AnchorBone) : nullptr)
+				{
+					const FVector Velocity = Hips->GetUnrealWorldVelocity();
+					if (bHaveGripVelocity && (GripPelvisVelocity - Velocity).Size() > BraceImpactSpeed && Velocity.Size() < GripPelvisVelocity.Size())
+					{
+						SetGroundGrip(true);
+						UE_LOG(LogRPGInput, Log, TEXT("%s grips the ground at %.0f cm/s, %.2f s down"), *GetOwner()->GetActorNameOrLabel(), Velocity.Size(), StateTime);
+					}
+					GripPelvisVelocity = Velocity;
+					bHaveGripVelocity = true;
+				}
 			if (State == ERPGPhysicsReactionState::Limp && bBraced)
 			{
 				// It keeps resisting through the landing; once the body has come to rest it eases off (still holding its
@@ -927,6 +945,8 @@ void URPGPhysicsReactionComponent::Launch(const FVector& Velocity, const FVector
 {
 	if (!bSetUp) return;
 	EnterFullRagdoll(LimpSeconds);
+	// (falls - a failed catch, off a ledge, a knee-down tipping over - grip; a fast crash tumbles on)
+	bGripOnLanding = Velocity.Size2D() < GroundGripMaxSpeed;
 	bNaturalFall = bInNaturalFall;
 	if (bNaturalFall)
 		if (USkeletalMeshComponent* Mesh = GetMesh())
@@ -945,4 +965,20 @@ void URPGPhysicsReactionComponent::Launch(const FVector& Velocity, const FVector
 	PendingVelocityPoint = Point;
 	PendingVelocityFrames = 0;
 	ApplyPendingVelocity();
+}
+
+void URPGPhysicsReactionComponent::SetGroundGrip(bool bOn)
+{
+	USkeletalMeshComponent* Mesh = GetMesh();
+	if (!Mesh || bOn == bGripping) return;
+	if (bOn) GripSavedDamping.Reset();
+	for (int32 I = 0; I < Mesh->Bodies.Num(); ++I)
+		if (FBodyInstance* Body = Mesh->Bodies[I])
+		{
+			if (bOn) { GripSavedDamping.Add(Body->LinearDamping); Body->LinearDamping = FMath::Max(Body->LinearDamping, GroundGripDamping); }
+			else if (GripSavedDamping.IsValidIndex(I)) Body->LinearDamping = GripSavedDamping[I];
+			Body->UpdateDampingProperties();
+		}
+		else if (bOn) GripSavedDamping.Add(0.f);
+	bGripping = bOn;
 }
