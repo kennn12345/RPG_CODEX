@@ -138,6 +138,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
 	ERPGPhysicsReactionState GetReactionState() const { return State; }
+	bool IsGroundGripping() const { return bGripping; }
 
 	/** True while fading back to the animation. */
 	UFUNCTION(BlueprintPure, Category = "RPG|Physics Reaction")
@@ -292,6 +293,11 @@ public:
 	 *  are only dragged along, 1 = the whole body moves as one). The body's total momentum is the same either way. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0", ClampMax = "1"))
 	float LimbVelocityShare = 0.55f;
+	/** A standing knockdown first topples through the air: its slide-only launch estimate otherwise carries it far
+	 *  beyond the intended distance before ground grip can act. Only the initial non-launch knockdown is softened;
+	 *  launches, failed-catch momentum and blows on an already down body retain their existing velocity. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Limp", meta = (ClampMin = "0", ClampMax = "1"))
+	float KnockdownHorizontalVelocityScale = 0.45f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RPG|Physics Reaction|Powered", meta = (ClampMin = "0"))
 	float MotorDampingRatio = 1.f;
@@ -468,6 +474,7 @@ private:
 	FVector GripPelvisVelocity = FVector::ZeroVector;
 	TArray<float> GripSavedDamping;
 	void SetGroundGrip(bool bOn);
+	bool TryGroundSupport();
 	void ApplyBraceMotors();
 	float CurrentYieldTime = 0.1f, CurrentRecoverTime = 0.6f, CurrentMotorBase = 1.f;
 	TArray<FName> AllControls;

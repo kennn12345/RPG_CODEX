@@ -294,6 +294,7 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 
 	if (bLimp)
 	{
+		const bool bInitialKnockdown = Result.Reaction == ERPGPowerReaction::Knockdown && State != ERPGPhysicsReactionState::Limp;
 		// A launch stays limp for its whole flight (up and back down) before the usual LimpTime on the ground.
 		const float Gravity = URPGPowerSettings::Get()->GetRagdollGravity();
 		const float FlightTime = Result.DisplacementVelocity.Z > 0.f ? 2.f * float(Result.DisplacementVelocity.Z) / Gravity : 0.f;
@@ -306,6 +307,11 @@ void URPGPhysicsReactionComponent::HandlePowerHit(const FRPGMeleeHitInfo& Hit, c
 		{
 			bVelocityPending = true;
 			PendingVelocity = Result.DisplacementVelocity;
+			if (bInitialKnockdown)
+			{
+				PendingVelocity.X *= KnockdownHorizontalVelocityScale;
+				PendingVelocity.Y *= KnockdownHorizontalVelocityScale;
+			}
 			PendingVelocityPoint = Hit.ImpactLocation;
 			PendingVelocityFrames = 0;
 			ApplyPendingVelocity();
@@ -760,9 +766,9 @@ void URPGPhysicsReactionComponent::TickComponent(float DeltaTime, ELevelTick Tic
 				ApplyPoweredMotorScales(Recover * Recover);
 				if (StateTime >= CurrentYieldTime + CurrentRecoverTime) ReturnToAnimated(ReturnBlendTime);
 			}
-			// A fall that has hit the ground (the hips brought up short) grips it: no rolling on (see GroundGripDamping).
+			// Grip on upper-body support; retain the pelvis deceleration fallback for missed / unusual surfaces.
 			// (not the hit's own kick: from 0.15 s on)
-			if (State == ERPGPhysicsReactionState::Limp && bGripOnLanding && !bGripping && StateTime > 0.15f)
+			if (State == ERPGPhysicsReactionState::Limp && bGripOnLanding && !bGripping && StateTime > 0.15f && !TryGroundSupport())
 				if (const FBodyInstance* Hips = Mesh ? Mesh->GetBodyInstance(AnchorBone) : nullptr)
 				{
 					const FVector Velocity = Hips->GetUnrealWorldVelocity();
@@ -981,4 +987,35 @@ void URPGPhysicsReactionComponent::SetGroundGrip(bool bOn)
 		}
 		else if (bOn) GripSavedDamping.Add(0.f);
 	bGripping = bOn;
+}
+
+
+bool URPGPhysicsReactionComponent::TryGroundSupport()
+{
+	USkeletalMeshComponent* Mesh = GetMesh();
+	if (!Mesh || !GetWorld()) return false;
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RPGGroundGrip), false, GetOwner());
+	// Feet already support a standing character. Only upper-body landing support should arrest this fall.
+	// At most five short floor queries per eligible falling character; no queries after grip or for Power launches.
+	for (const FName Bone : { AnchorBone, FName(TEXT("spine_05")), FName(TEXT("head")), FName(TEXT("hand_l")), FName(TEXT("hand_r")) })
+	{
+		const FBodyInstance* Body = Mesh->GetBodyInstance(Bone);
+		if (!Body || !Body->IsInstanceSimulatingPhysics()) continue;
+		const FVector COM = Body->GetCOMPosition();
+		FHitResult Floor;
+		if (!GetWorld()->LineTraceSingleByObjectType(Floor, COM, COM - FVector(0, 0, 150), Objects, Params)
+			|| Floor.ImpactNormal.Z < 0.5f) continue;
+		float DistanceSquared = 0.f;
+		FVector Closest;
+		// Shape distance, not the rotated body's bounding box, prevents grip while still clearly airborne.
+		if (!Body->GetSquaredDistanceToBody(Floor.ImpactPoint, DistanceSquared, Closest) || DistanceSquared > 9.f) continue;
+		SetGroundGrip(true);
+		UE_LOG(LogRPGInput, Log, TEXT("%s grips the ground on %s support (gap %.1f cm), %.2f s down"),
+			*GetOwner()->GetActorNameOrLabel(), *Bone.ToString(), FMath::Sqrt(DistanceSquared), StateTime);
+		return true;
+	}
+	return false;
 }

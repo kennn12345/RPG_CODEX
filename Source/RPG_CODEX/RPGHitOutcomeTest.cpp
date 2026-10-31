@@ -350,6 +350,7 @@ namespace
 				CatchFallsBefore = N->CatchFallCount; WallsBefore = N->WallSlamCount; LedgesBefore = N->LedgeFallCount; DownedBefore = N->DownedHitCount;
 				LimpFallsBefore = N->HitOutcome->LimpFallCount;
 				MaxMoved = 0.f; bSawLimp = false; bSawDown = false; bApplied = false; bSawBraced = false; bSawUnbracedLimp = false; FirstLimpAt = -1.f;
+				bSawGrip = false; AfterGripMoved = 0.f;
 				Levels.Reset(); Shots = 0; DownedPelvisBefore = DownedChestBefore = DownedHeadBefore = FVector::ZeroVector;
 				Phase = 1; PhaseStart = Now;
 				return false;
@@ -426,6 +427,12 @@ namespace
 			{
 				Film.Shoot(World, N->GetMesh()->GetBoneLocation(TEXT("pelvis")), Forward, TEXT("HitOutcomes"), Case, C.Name, Now, Now - HitAt);
 				MaxMoved = FMath::Max(MaxMoved, float(FVector::Dist2D(N->GetActorLocation(), StartSpot)));
+				if (bLimp && Reaction->IsGroundGripping())
+				{
+					const FVector Pelvis = N->GetMesh()->GetBoneLocation(TEXT("pelvis"));
+					if (!bSawGrip) { GripSpot = Pelvis; bSawGrip = true; }
+					AfterGripMoved = FMath::Max(AfterGripMoved, float(FVector::Dist2D(Pelvis, GripSpot)));
+				}
 				if (bLimp && FirstLimpAt < 0.f) FirstLimpAt = Now - HitAt;
 				bSawLimp |= bLimp;
 				bSawDown |= N->BodyImpact->IsDown();
@@ -462,11 +469,14 @@ namespace
 					break;
 				case EOutcomeKind::CatchRecover:
 					bReactionOk &= N->HitOutcome->PeakBrace > 0.6f && N->CatchFallCount == CatchFallsBefore;
+					// A few steps (2-4 ft nominal), with room for pose/capsule offsets. The old knockback push travelled 7-15 ft.
+					bReactionOk &= MaxMoved >= 30.48f && MaxMoved <= 5.f * 30.48f;
 					Extra = FString::Printf(TEXT(" arms out %.2f"), N->HitOutcome->PeakBrace);
 					break;
 				case EOutcomeKind::CatchFail:
 					bReactionOk &= N->CatchFallCount > CatchFallsBefore && FirstLimpAt >= 0.25f && bSawBraced;
-					Extra = FString::Printf(TEXT(" stumbled %.2f s first, braced fall %d"), FirstLimpAt, bSawBraced);
+					bReactionOk &= MaxMoved <= 6.f * 30.48f && bSawGrip && AfterGripMoved <= 2.f * 30.48f;
+					Extra = FString::Printf(TEXT(" stumbled %.2f s first, braced fall %d, grip %d, after grip %.0f cm"), FirstLimpAt, bSawBraced, bSawGrip, AfterGripMoved);
 					break;
 				case EOutcomeKind::Wall:
 					bReactionOk &= N->WallSlamCount > WallsBefore;
@@ -516,7 +526,12 @@ namespace
 					Extra = FString::Printf(TEXT(" level %.1f from relative %.1f"), N->LastPowerResult.ReactionLevel, N->LastPowerResult.RelativePower);
 					break;
 				default:
-					if (FCString::Strcmp(C.Name, TEXT("knockdown_braced")) == 0) { bReactionOk &= bSawBraced && !bSawUnbracedLimp; Extra = FString::Printf(TEXT(" braced %d"), bSawBraced); }
+					if (FCString::Strcmp(C.Name, TEXT("knockdown_braced")) == 0)
+					{
+						bReactionOk &= bSawBraced && !bSawUnbracedLimp;
+						if (Got == ERPGPowerReaction::Knockdown) bReactionOk &= bSawGrip && AfterGripMoved <= 2.f * 30.48f;
+						Extra = FString::Printf(TEXT(" braced %d, grip %d, after grip %.0f cm"), bSawBraced, bSawGrip, AfterGripMoved);
+					}
 					if (FCString::Strcmp(C.Name, TEXT("body_shot")) == 0) { bReactionOk &= N->HitOutcome->PeakBend > 10.f; Extra = FString::Printf(TEXT(" doubled over %.0f deg"), N->HitOutcome->PeakBend); }
 					if (FCString::Strcmp(C.Name, TEXT("head_shot")) == 0) { bReactionOk &= N->LastPowerResult.HitZone == ERPGHitZone::Head; }
 					break;
@@ -567,6 +582,9 @@ namespace
 		int32 Frames = 0, Case = 0, Phase = 0, BumpsBefore = 0, Shots = 0, CatchFallsBefore = 0, WallsBefore = 0, LedgesBefore = 0, DownedBefore = 0, LimpFallsBefore = 0;
 		float PhaseStart = 0.f, HitAt = 0.f, MaxMoved = 0.f, LastShot = -10.f, FirstLimpAt = -1.f, DownedHitAt = 0.f, DownedMoved = -1.f;
 		bool bSawLimp = false, bSawDown = false, bApplied = false, bAllOk = true, bSawBraced = false, bSawUnbracedLimp = false;
+		bool bSawGrip = false;
+		float AfterGripMoved = 0.f;
+		FVector GripSpot = FVector::ZeroVector;
 	};
 
 	// ---------------- The player: the same outcomes through URPGHitOutcomeComponent ----------------
