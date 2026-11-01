@@ -1,6 +1,8 @@
 #include "RPGCombatAimComponent.h"
 
 #include "RPGAnimInstance.h"
+#include "RPGMeleeHitComponent.h"
+#include "RPGStrikeContactComponent.h"
 #include "RPGCameraModeComponent.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGPrototypeAnimationComponent.h"
@@ -146,9 +148,12 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		// (A target at the edge of the fist's reach is met at full stretch, not grazed on the way: none there.)
 		const FTransform& MeshToWorld=Character->GetMesh()->GetComponentTransform();
 		const FVector Pivot=MeshToWorld.TransformPosition(StrikeFrom),Natural=MeshToWorld.TransformPosition(StrikePoint);
-		const float Inside=FMath::Clamp((FVector::Dist(Pivot,Natural)-FVector::Dist(Pivot,AimPoint))/ContactReachFade,0.f,1.f);
+		float Inside=FMath::Clamp((FVector::Dist(Pivot,Natural)-FVector::Dist(Pivot,AimPoint))/ContactReachFade,0.f,1.f);
 		const float Hand=State->StrikeLimb==ERPGStrikeLimb::RightHand?1.f:State->StrikeLimb==ERPGStrikeLimb::LeftHand?-1.f:0.f;
 		const float Depth=FMath::Max(0.f,Natural.Z-AimPoint.Z);
+        // Low body shots meet the torso on the downward arc. Retain the filmed in/down compensation there,
+        // fading it out above the chest so a chin target keeps its measured knuckle delivery.
+        if(Animation->IsCapturedStandardPunchPlaying())Inside*=FMath::Clamp((Depth-8.f)/16.f,0.f,1.f);
 		const FVector Right=FRotationMatrix(Character->GetActorRotation()).GetUnitAxis(EAxis::Y);
 		AimPoint-=(Right*Hand*(ContactSideOffset+ContactSidePerCm*Depth)+FVector::UpVector*(ContactLiftOffset+ContactLiftPerCm*Depth))*Inside;
 	}
@@ -221,6 +226,31 @@ void URPGCombatAimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		Instance->AimPitch = AppliedPitch;
 		Instance->bPitchAboutPivot = bEyePivot;
 		Instance->PitchPivot = MeshToWorld.InverseTransformPosition(ViewLocation);
+        Instance->FilmedAim={bFilmedStrike && bAttacking && !bKick,StrikePoint,StrikeFrom,
+            MaxTorsoYaw,MaxAimPitchUp,MaxAimPitchDown,AimAlpha,AimAlpha*AttackPitchAlpha};
+        const auto* Melee=bFilmedStrike?Character->FindComponentByClass<URPGMeleeHitComponent>():nullptr;
+        const bool bLanded=State && Melee && Melee->ConfirmedHitCount>0 && Melee->LastHit.StrikeId==State->StrikeId
+            && Melee->LastHitTime>=State->LastReleaseTime;
+        if(bFilmedStrike && (bOnTarget || bLanded) && bAttacking && !bKick && State
+            && (State->AttackPhase==ERPGAttackPhase::Strike || State->AttackPhase==ERPGAttackPhase::Recovery))
+        {
+            FVector DeliveryPoint=ReticlePoint;
+            if(bLanded)
+                DeliveryPoint=Melee->LastHit.AimPoint; // follow through the landing point, never chase a launched target
+            // Deliver the leading knuckles to the reticle surface, with their existing half-width outside it.
+            // A palm-centre target plus an upward offset made the knuckles graze the upper face first.
+            const int32 HandIndex=State->StrikeLimb==ERPGStrikeLimb::LeftHand?RPGStrikeContact::LeftHand:RPGStrikeContact::RightHand;
+            const float HalfKnuckle=RPGStrikeContact::Limb(HandIndex).Samples[1].Radius;
+            DeliveryPoint-=(DeliveryPoint-ViewLocation).GetSafeNormal()*HalfKnuckle;
+            Instance->FilmedAim.DeliveryPoint=MeshToWorld.InverseTransformPosition(DeliveryPoint);
+            // The release action can reach this tick before its first strike-time publication. Reading that old
+            // zero produces a one-frame full correction and withdrawal. Use the actual montage clock, and enter
+            // continuously from zero at the load pose (including a release after holding there).
+            float FromLoad=0.f,FromImpact=0.f;
+            if(Animation->GetFilmedStrikeTiming(FromLoad,FromImpact))
+                Instance->FilmedAim.DeliveryWeight=FMath::SmoothStep(0.f,.04f,FromLoad)*(1.f-FMath::SmoothStep(.02f,.10f,FromImpact));
+            Instance->FilmedAim.bLeft=State->StrikeLimb==ERPGStrikeLimb::LeftHand;
+        }
 	}
 	if (State)
 	{

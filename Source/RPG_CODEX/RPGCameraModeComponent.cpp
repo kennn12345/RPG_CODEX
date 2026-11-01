@@ -5,6 +5,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Components/CapsuleComponent.h"
 #include "RPGAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "RPGPrototypeAnimationComponent.h"
@@ -240,10 +242,18 @@ void URPGCameraModeComponent::HoldReticleSpot(bool bActive)
 	{
 		// Starting, or the player turned the view: hold what is under the reticle now (the first thing along the view,
 		// else far down it).
-		HeldReticleSpot = Eye + View.Vector() * ReticleHoldRange;
-		FHitResult Hit;
-		if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, HeldReticleSpot, ECC_Visibility, FCollisionQueryParams(SCENE_QUERY_STAT(RPGReticleHold), false, GetOwner())))
-			HeldReticleSpot = Hit.ImpactPoint;
+        // The new look input was made from the last rendered camera. The component may already have moved
+        // beneath it this frame; acquiring from that new origin would bake the first camera jump into the aim.
+        const FVector IntentEye=Player->PlayerCameraManager?Player->PlayerCameraManager->GetLastFrameCameraCacheView().Location:Eye;
+        HeldReticleSpot = IntentEye + View.Vector() * ReticleHoldRange;
+        FHitResult Hit;
+        FCollisionQueryParams Params(SCENE_QUERY_STAT(RPGReticleHold),false,GetOwner());
+        for(int32 Attempt=0;Attempt<4;++Attempt)
+        {
+            if(!GetWorld()->LineTraceSingleByChannel(Hit,IntentEye,HeldReticleSpot,ECC_Visibility,Params))break;
+            if(Cast<UCapsuleComponent>(Hit.GetComponent())){Params.AddIgnoredComponent(Hit.GetComponent());continue;}
+            HeldReticleSpot=Hit.ImpactPoint;break;
+        }
 		bHoldingReticleSpot = true;
 	}
 	const FRotator Kept = (HeldReticleSpot - Eye).Rotation();
@@ -254,8 +264,18 @@ void URPGCameraModeComponent::HoldReticleSpot(bool bActive)
 void URPGCameraModeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	UCameraComponent* Camera = GetCamera();
-	if (!bIsFirstPerson)
+    UCameraComponent* Camera = GetCamera();
+    const auto* OwnerCharacter=Cast<ACharacter>(GetOwner());
+    const auto* Movement=OwnerCharacter?OwnerCharacter->GetCharacterMovement():nullptr;
+    const auto* CombatAnimation=GetOwner()->FindComponentByClass<URPGPrototypeAnimationComponent>();
+    const auto* CombatState=GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
+    // A stationary punch can turn the body beneath the shoulder camera or move the animated eyes. Keep the
+    // existing world point under the reticle through that internal camera motion. Looking input immediately picks
+    // a new point; this does not track an enemy, and movement keeps its normal free look.
+    const bool bHoldMeleeReticle=CombatAnimation && CombatAnimation->IsCapturedStandardPunchPlaying()
+        && CombatState && CombatState->AttackPhase!=ERPGAttackPhase::None && Movement && Movement->IsMovingOnGround()
+        && Movement->Velocity.SizeSquared2D()<400.f && Movement->GetCurrentAcceleration().IsNearlyZero();
+    if (!bIsFirstPerson)
 	{
         UpdateFlightPresentation(DeltaTime);
         // Nearly straight behind for exploring and melee; over the right shoulder while casting.
@@ -275,7 +295,7 @@ void URPGCameraModeComponent::TickComponent(float DeltaTime, ELevelTick TickType
             // the reticle on the spot it was on: a quick cast lands where it was aimed when pressed.
             if(!Offset.Equals(Boom->SocketOffset,0.01f))ReticleHoldTime=0.4f;
             else ReticleHoldTime=FMath::Max(0.f,ReticleHoldTime-DeltaTime);
-            HoldReticleSpot(ReticleHoldTime>0.f);
+            HoldReticleSpot(ReticleHoldTime>0.f || bHoldMeleeReticle);
             Boom->SocketOffset = Offset;
 		}
 		return;
@@ -299,4 +319,5 @@ void URPGCameraModeComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	bHaveSmoothedEye = true;
 	// Position only: the camera keeps the control rotation (where the player aims).
 	Camera->SetWorldLocation(GetOwner()->GetActorTransform().TransformPosition(SmoothedEye));
+    HoldReticleSpot(bHoldMeleeReticle);
 }

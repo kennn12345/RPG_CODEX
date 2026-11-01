@@ -251,6 +251,10 @@ public:
      * both hands' landings when none is. False without the filmed clips.
      */
     bool GetFilmedStrikePoint(FVector& OutPoint, FVector& OutPivot) const;
+    /** Current montage clock relative to the authored load and impact, for continuous visible aim on release. */
+    bool GetFilmedStrikeTiming(float& OutFromLoad, float& OutFromImpact) const;
+    /** Recheck a released filmed punch after this frame's contact snapshot, before melee reports it. */
+    void RefreshFilmedContactWindow();
 
     /**
      * Editor-only: makes URPGAnimInstance the parent class of ABP_Unarmed (the graph is untouched), so the attack aim can

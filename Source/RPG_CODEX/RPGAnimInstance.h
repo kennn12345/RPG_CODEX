@@ -25,6 +25,17 @@ struct FRPGBracePose
 	float Time = 0.f;
 };
 
+/** Filmed clip calibration before GASP's evaluated root offset. Plain pose data copied to the worker proxy. */
+struct FRPGFilmedAimCalibration
+{
+    bool bEnabled=false;
+    FVector Point=FVector::ZeroVector, Pivot=FVector::ZeroVector;
+    float MaxYaw=40.f, MaxUp=25.f, MaxDown=30.f, YawAlpha=0.f, PitchAlpha=0.f;
+    FVector DeliveryPoint=FVector::ZeroVector;
+    float DeliveryWeight=0.f;
+    bool bLeft=false;
+};
+
 /**
  * Proxy that evaluates the Animation Blueprint's graph unchanged, then turns the spine toward the attack aim:
  * yaw about the vertical and pitch about the (aimed) side axis, spread up the spine so it bends rather than
@@ -44,6 +55,8 @@ struct FRPGAnimInstanceProxy : public FAnimInstanceProxy
 
 private:
 	void ApplySpineAim(FPoseContext& Output) const;
+    void ApplyFilmedRoot(FPoseContext& Output) const;
+    void ApplyFilmedFistAim(FPoseContext& Output) const;
 	void ApplyGuardSteady(FPoseContext& Output) const;
 	void ApplyStrikeContact(FPoseContext& Output);
 	void ApplyFlight(FPoseContext& Output) const;
@@ -63,6 +76,7 @@ private:
 	float AimPitch = 0.f;
 	bool bPitchAboutPivot = false;
 	FVector PitchPivot = FVector::ZeroVector;
+    FRPGFilmedAimCalibration FilmedAim;
 	float GuardSteady = 0.f;
 	FVector GuardChestRest = FVector::ZeroVector;
 	const UAnimMontage* GuardSteadyMontage = nullptr;
@@ -118,6 +132,7 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RPG|Aim")
 	FVector PitchPivot = FVector::ZeroVector;
+    FRPGFilmedAimCalibration FilmedAim;
 
 	/**
 	 * First person, guard up (written by URPGPrototypeAnimationComponent): share 0..1 of the way the shoulders are moved

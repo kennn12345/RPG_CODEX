@@ -4,6 +4,7 @@
 #include "Animation/AnimMontageEvaluationState.h"
 #include "Animation/AnimNodeBase.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimationPoseData.h"
 #include "AnimationRuntime.h"
 #include "GameFramework/Character.h"
@@ -81,6 +82,10 @@ void FRPGAnimInstanceProxy::PreUpdate(UAnimInstance* InAnimInstance, float Delta
 		AimYaw = Instance->AimYaw*MeleeAimShare;
 		AimPitch = Instance->AimPitch*MeleeAimShare;
 		bPitchAboutPivot = Instance->bPitchAboutPivot;
+        FilmedAim=Instance->FilmedAim;
+        FilmedAim.YawAlpha*=MeleeAimShare;
+        FilmedAim.PitchAlpha*=MeleeAimShare;
+        FilmedAim.DeliveryWeight*=MeleeAimShare;
 		PitchPivot = Instance->PitchPivot;
 		GuardSteady = Instance->GuardSteady;
 		GuardChestRest = Instance->GuardChestRest;
@@ -110,6 +115,7 @@ bool FRPGAnimInstanceProxy::Evaluate_WithRoot(FPoseContext& Output, FAnimNode_Ba
 	// Only the main graph; linked layers evaluate as usual.
 	if (InRootNode != GetRootNode()) return false;
 	EvaluateAnimationNode_WithRoot(Output, InRootNode);
+    ApplyFilmedRoot(Output);
 	ApplyFlight(Output);
     ApplyDirectionalHover(Output);
 	ApplyGuardSteady(Output);   // before the aim, which then swings the steadied chest about the eyes
@@ -118,8 +124,39 @@ bool FRPGAnimInstanceProxy::Evaluate_WithRoot(FPoseContext& Output, FAnimNode_Ba
 	ApplyBrace(Output);
     ApplyRearSway(Output);
     ApplySpellPose(Output);
+	ApplyFilmedFistAim(Output);
 	ApplyStrikeContact(Output);   // last: on the final arm and leg positions
 	return true;
+}
+
+void FRPGAnimInstanceProxy::ApplyFilmedRoot(FPoseContext& Output) const
+{
+    // GASP applies its locomotion root offset after the montage slots. A full-body in-place filmed performance
+    // already owns that root. Blend out the leftover locomotion offset with the actual slot weights, rather than
+    // making the spine and fists compensate a drifting whole-body frame. Upper-body moving punches keep GASP's root.
+    float Weight=0.f;
+    for(const FMontageEvaluationState& State:GetMontageEvaluationData())
+    {
+        const UAnimMontage* Montage=State.Montage.Get();
+        if(!Montage)continue;
+        bool bFilmed=false;
+        for(const auto& Track:Montage->SlotAnimTracks)
+            if(Track.SlotName==TEXT("DefaultSlot"))
+                for(const auto& Segment:Track.AnimTrack.AnimSegments)
+                    if(const UAnimSequenceBase* Clip=Segment.GetAnimReference())
+                    {
+                        const FString Name=Clip->GetName();
+                        bFilmed|=Name.Contains(TEXT("FightStance_Capture8635")) || Name.Contains(TEXT("Punch_R_Capture8634")) || Name.Contains(TEXT("Punch_L_Capture8634"));
+                    }
+        if(bFilmed)Weight+=State.BlendInfo.GetBlendedValue();
+    }
+    Weight=FMath::Clamp(Weight,0.f,1.f);
+    if(Weight<=0.f)return;
+    FCompactPose& Pose=Output.Pose;const auto& Bones=Pose.GetBoneContainer();
+    const int32 I=Bones.GetPoseBoneIndexForBoneName(TEXT("root"));
+    if(I==INDEX_NONE)return;
+    const auto Root=Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(I));
+    if(Root.IsValid())Pose[Root].Blend(Pose[Root],FTransform::Identity,Weight);
 }
 
 void FRPGAnimInstanceProxy::ApplyDirectionalHover(FPoseContext& Output) const
@@ -479,9 +516,35 @@ void FRPGAnimInstanceProxy::ApplyRearSway(FPoseContext& Output) const
 
 void FRPGAnimInstanceProxy::ApplySpineAim(FPoseContext& Output) const
 {
-	if (FMath::IsNearlyZero(AimYaw, 0.01f) && FMath::IsNearlyZero(AimPitch, 0.01f)) return;
 	FCompactPose& Pose = Output.Pose;
 	const FBoneContainer& Bones = Pose.GetBoneContainer();
+    float YawToApply=AimYaw,PitchToApply=AimPitch;
+    if(FilmedAim.bEnabled)
+    {
+        const int32 MeshRoot=Bones.GetPoseBoneIndexForBoneName(TEXT("root"));
+        if(MeshRoot!=INDEX_NONE)
+        {
+            const auto RootIndex=Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshRoot));
+            if(RootIndex.IsValid())
+            {
+                // GASP's post-slot root yaw changes while a montage blends in. Compensate in this evaluated pose,
+                // outside the aim's low-pass filter; filtering that moving frame makes the fist chase its own offset.
+                const FTransform RootCS=BoneComponentTransform(Pose,RootIndex);
+                const FVector From=bPitchAboutPivot?PitchPivot:FilmedAim.Pivot;
+                const FVector ActualFrom=bPitchAboutPivot?PitchPivot:RootCS.TransformPosition(FilmedAim.Pivot);
+                const FRotator Base=(FilmedAim.Point-From).Rotation();
+                const FRotator Actual=(RootCS.TransformPosition(FilmedAim.Point)-ActualFrom).Rotation();
+                YawToApply-=FRotator::NormalizeAxis(Actual.Yaw-Base.Yaw)*FilmedAim.YawAlpha;
+                const float PitchDelta=bPitchAboutPivot?FRotator::NormalizeAxis(Actual.Pitch-Base.Pitch)
+                    :FMath::RadiansToDegrees(FMath::Atan2(RootCS.TransformPosition(FilmedAim.Point).Z-FilmedAim.Point.Z,
+                        FMath::Max(10.f,float((FilmedAim.Point-From).Size2D()))));
+                PitchToApply-=PitchDelta*FilmedAim.PitchAlpha;
+                YawToApply=FMath::Clamp(YawToApply,-FilmedAim.MaxYaw,FilmedAim.MaxYaw);
+                PitchToApply=FMath::Clamp(PitchToApply,-FilmedAim.MaxDown,FilmedAim.MaxUp);
+            }
+        }
+    }
+    if(FMath::IsNearlyZero(YawToApply,.01f) && FMath::IsNearlyZero(PitchToApply,.01f))return;
 
 	// Mesh space (Manny): +Y forward, +X character-left, +Z up. A bone's component rotation is its parents' rotations
 	// times its local one. Turning a bone by D in component space, about its own pivot, means its local rotation
@@ -501,13 +564,13 @@ void FRPGAnimInstanceProxy::ApplySpineAim(FPoseContext& Output) const
 		for (FCompactPoseBoneIndex Up = Bones.GetParentBoneIndex(Index); Up.IsValid(); Up = Bones.GetParentBoneIndex(Up))
 			Parent = Pose[Up].GetRotation() * Parent;
 
-		const float Yaw = bPitchAboutPivot ? 0.f : AimYaw * Share.Yaw;
+		const float Yaw = bPitchAboutPivot ? 0.f : YawToApply * Share.Yaw;
 		YawSoFar += Yaw;
 		// Yaw + to the right turns +Y toward -X: a positive turn about +Z. Pitch + (up) turns +Y toward +Z: a positive
 		// turn about the side axis, taken after this much of the yaw so the chest tips along the aimed direction.
 		const FQuat YawTurn(FVector::UpVector, FMath::DegreesToRadians(Yaw));
 		const FVector Side = FQuat(FVector::UpVector, FMath::DegreesToRadians(YawSoFar)).RotateVector(FVector::XAxisVector);
-		const float Pitch = bPitchAboutPivot ? 0.f : AimPitch * Share.Pitch;
+		const float Pitch = bPitchAboutPivot ? 0.f : PitchToApply * Share.Pitch;
 		const FQuat Delta = FQuat(Side, FMath::DegreesToRadians(Pitch)) * YawTurn;
 		FTransform& Local = Pose[Index];
 		Local.SetRotation((Parent.Inverse() * Delta * Parent * Local.GetRotation()).GetNormalized());
@@ -516,15 +579,63 @@ void FRPGAnimInstanceProxy::ApplySpineAim(FPoseContext& Output) const
 	// First person: the whole turn and tilt swing the upper chest about the eyes, so the arms keep their place in view.
 	if (bPitchAboutPivot && Chest.IsValid())
 	{
-		const FQuat Turn(FVector::UpVector, FMath::DegreesToRadians(AimYaw));
+		const FQuat Turn(FVector::UpVector, FMath::DegreesToRadians(YawToApply));
 		const FVector Side = Turn.RotateVector(FVector::XAxisVector);
-		const FQuat Tilt = FQuat(Side, FMath::DegreesToRadians(AimPitch)) * Turn;
+		const FQuat Tilt = FQuat(Side, FMath::DegreesToRadians(PitchToApply)) * Turn;
 		const FTransform ParentCS = BoneComponentTransform(Pose, Bones.GetParentBoneIndex(Chest));
 		FTransform ChestCS = Pose[Chest] * ParentCS;
 		ChestCS.SetRotation((Tilt * ChestCS.GetRotation()).GetNormalized());
 		ChestCS.SetTranslation(PitchPivot + Tilt.RotateVector(ChestCS.GetTranslation() - PitchPivot));
 		Pose[Chest] = ChestCS.GetRelativeTransform(ParentCS);
 	}
+}
+
+void FRPGAnimInstanceProxy::ApplyFilmedFistAim(FPoseContext& Output) const
+{
+    if(!FilmedAim.bEnabled || FilmedAim.DeliveryWeight<=0.f)return;
+    FCompactPose& Pose=Output.Pose;const FBoneContainer& Bones=Pose.GetBoneContainer();
+    auto Find=[&](const TCHAR* Name)
+    {
+        const int32 I=Bones.GetPoseBoneIndexForBoneName(Name);
+        return I==INDEX_NONE?FCompactPoseBoneIndex(INDEX_NONE):Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(I));
+    };
+    const auto Upper=Find(FilmedAim.bLeft?TEXT("upperarm_l"):TEXT("upperarm_r"));
+    const auto Lower=Find(FilmedAim.bLeft?TEXT("lowerarm_l"):TEXT("lowerarm_r"));
+    const auto Hand=Find(FilmedAim.bLeft?TEXT("hand_l"):TEXT("hand_r"));
+    const auto Knuckle=Find(FilmedAim.bLeft?TEXT("middle_01_l"):TEXT("middle_01_r"));
+    if(!Upper.IsValid() || !Lower.IsValid() || !Hand.IsValid() || !Knuckle.IsValid())return;
+    const FVector OriginalFist=BoneComponentTransform(Pose,Knuckle).GetLocation();
+    const FVector DesiredFist=OriginalFist+(FilmedAim.DeliveryPoint-OriginalFist).GetClampedToMaxSize(24.f)*FilmedAim.DeliveryWeight;
+    for(int32 Iteration=0;Iteration<2;++Iteration)
+    {
+    const FTransform ParentCS=BoneComponentTransform(Pose,Bones.GetParentBoneIndex(Upper));
+    FTransform A=BoneComponentTransform(Pose,Upper),B=BoneComponentTransform(Pose,Lower),C=BoneComponentTransform(Pose,Hand);
+    const FVector Start=A.GetLocation(),Mid=B.GetLocation(),End=C.GetLocation();
+    const FVector Fist=BoneComponentTransform(Pose,Knuckle).GetLocation();
+    // Deliver the visible knuckles to the aimed patch. The source performance supplies the overhand and body drive;
+    // up to 24 cm of arm articulation also lets close chest shots fold in. Arm lengths and elbow plane stay fixed.
+    const FVector Shift=DesiredFist-Fist;
+    const float U=FVector::Dist(Start,Mid),L=FVector::Dist(Mid,End);
+    const float MinReach=FMath::Sqrt(U*U+L*L+2.f*U*L*FMath::Cos(FMath::DegreesToRadians(142.f)));
+    const FVector Delta=End+Shift-Start;
+    const FVector Target=Start+Delta.GetSafeNormal()*FMath::Clamp(float(Delta.Size()),MinReach,(U+L)*.97f);
+    FVector NewMid,NewEnd;
+    AnimationCore::SolveTwoBoneIK(Start,Mid,End,Mid,Target,NewMid,NewEnd,false,1.0,1.0);
+    FQuat TurnUpper=FQuat::FindBetweenNormals((Mid-Start).GetSafeNormal(),(NewMid-Start).GetSafeNormal());
+    const FVector OldPlane=FVector::CrossProduct(Mid-Start,End-Mid).GetSafeNormal();
+    const FVector NewPlane=FVector::CrossProduct(NewMid-Start,NewEnd-NewMid).GetSafeNormal();
+    if(!OldPlane.IsNearlyZero() && !NewPlane.IsNearlyZero())
+    {
+        const FVector Axis=(NewMid-Start).GetSafeNormal(),Swung=TurnUpper.RotateVector(OldPlane);
+        const float Twist=FMath::Atan2(float(FVector::DotProduct(Axis,FVector::CrossProduct(Swung,NewPlane))),float(FVector::DotProduct(Swung,NewPlane)));
+        TurnUpper=(FQuat(Axis,Twist)*TurnUpper).GetNormalized();
+    }
+    const FQuat TurnLower=FQuat::FindBetweenNormals(TurnUpper.RotateVector(End-Mid).GetSafeNormal(),(NewEnd-NewMid).GetSafeNormal());
+    A.SetRotation((TurnUpper*A.GetRotation()).GetNormalized());
+    B.SetRotation((TurnLower*TurnUpper*B.GetRotation()).GetNormalized());B.SetLocation(NewMid);
+    C.SetRotation((TurnLower*TurnUpper*C.GetRotation()).GetNormalized());C.SetLocation(NewEnd);
+    Pose[Upper]=A.GetRelativeTransform(ParentCS);Pose[Lower]=B.GetRelativeTransform(A);Pose[Hand]=C.GetRelativeTransform(B);
+    }
 }
 
 void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
@@ -550,6 +661,7 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 		FRPGLimbContactResult& Result = ContactResults[L];
 		Result.Residual = FVector::ZeroVector;
 		Result.Moved = FVector::ZeroVector;
+        Result.bHaveAnimatedFist=false;
 		Result.BendPlaneError = 0.f;
 		const FCompactPoseBoneIndex Root = Find(Def.Root), Mid = Find(Def.Mid), End = Find(Def.End);
 		if (!Root.IsValid() || !Mid.IsValid() || !End.IsValid() || Bones.GetParentBoneIndex(End) != Mid || Bones.GetParentBoneIndex(Mid) != Root)
@@ -593,16 +705,53 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 			PlaneN[P] = ToWorld.InverseTransformVectorNoScale(Set.Planes[P].Normal).GetSafeNormal();
 		}
 
+        // A predictive tangent on a round head is not an infinite wall. Re-evaluate the real capsule geometry at
+        // this pose, so a fist can follow its curve to the face instead of being lifted/held by a stale scalp plane.
+        auto CapsulePush=[&](FVector Point,FVector Start,const FRPGContactCapsule& World,float SphereRadius,bool bSweep,FVector Fallback)
+        {
+            const FVector A=ToWorld.InverseTransformPosition(World.A),B=ToWorld.InverseTransformPosition(World.B);
+            const float Radius=World.Radius/FMath::Max(.001f,float(ToWorld.GetScale3D().GetAbsMax()));
+            const FVector AxisPoint=FMath::ClosestPointOnSegment(Point,A,B),D=Point-AxisPoint;
+            const float Distance=float(D.Size()),Expanded=Radius+SphereRadius;
+            FVector N=D.GetSafeNormal();if(N.IsNearlyZero())N=Fallback;
+            const FVector OldAxis=FMath::ClosestPointOnSegment(Start,A,B),OldD=Start-OldAxis;
+            // Preserve the entry side if a fast frame crossed the capsule. Unlike a tangent-plane latch, this
+            // backstop is enabled only when the actual finite swept segment intersects the physical body.
+            if(bSweep && OldD.Size()>=Expanded-Def.Compression && FVector::DotProduct(OldD,D)<0.f)
+            {
+                FVector PathPoint,BodyPoint;
+                FMath::SegmentDistToSegmentSafe(Start,Point,A,B,PathPoint,BodyPoint);
+                if(FVector::DistSquared(PathPoint,BodyPoint)<FMath::Square(Expanded))
+                {
+                    const FVector EntryN=OldD.GetSafeNormal();
+                    const float Depth=float(FVector::DotProduct(OldAxis+EntryN*Radius-Point,EntryN))+SphereRadius;
+                    return EntryN*SoftPush(Depth,Def.Compression);
+                }
+            }
+            return N*SoftPush(Expanded-Distance,Def.Compression);
+        };
+
 		// How far the hand / foot has to move so no sphere of the fist / foot is past any surface by more than the give
 		// (softened, so contact starts without a kink). A few rounds, for corners where two surfaces meet.
 		FVector Desired = FVector::ZeroVector;
 		FVector EndSamples[3];
 		for (int32 K = 0; K < 3; ++K) EndSamples[K] = Sample(Def.Samples[K], MidCS, EndCS);
+        Result.AnimatedFist=EndSamples[0];Result.AnimatedKnuckle=EndSamples[1];Result.bHaveAnimatedFist=true;
 		for (int32 Round = 0; Round < 3 && Set.Num > 0; ++Round)
 			for (int32 P = 0; P < Set.Num; ++P)
 			{
-				float Need = 0.f;
-				for (int32 K = 0; K < 3; ++K)
+                // An elbow/forearm tangent is not an infinite wall for the fist above it. Its own inner sample
+                // supplies body back-off below; only end-segment contacts stop the fist.
+                if(L<=LeftHand && Set.Planes[P].Sample>=3)continue;
+                if(L<=LeftHand && Set.Planes[P].NumCapsules>0)
+                {
+                    for(int32 C=0;C<Set.Planes[P].NumCapsules;++C)
+                        for(int32 K=0;K<3;++K)
+                            Desired+=CapsulePush(EndSamples[K]+Desired,ToWorld.InverseTransformPosition(Set.StartSamples[K]),Set.Planes[P].Capsules[C],Def.Samples[K].Radius,true,PlaneN[P]);
+                    continue;
+                }
+                float Need = 0.f;
+                for (int32 K = 0; K < 3; ++K)
 					Need = FMath::Max(Need, SoftPush(float(FVector::DotProduct(PlaneP[P] - EndSamples[K], PlaneN[P])) + Def.Samples[K].Radius, Def.Compression));
 				const float Have = float(FVector::DotProduct(Desired, PlaneN[P]));
 				if (Need > Have) Desired += PlaneN[P] * (Need - Have);
@@ -612,7 +761,7 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 		Result.PressureAge += DeltaTime;
 		if (Desired.SizeSquared() >= Applied.SizeSquared()) { Applied = Desired; Result.PressureAge = 0.f; }
 		else if (Result.PressureAge>=ContactPressureHold)
-			Applied = Desired + (Applied - Desired) * FMath::Exp(-DeltaTime / FMath::Max(ContactReleaseTime, 0.005f));
+            Applied = Desired + (Applied - Desired) * FMath::Exp(-DeltaTime / FMath::Max(ContactReleaseTime, 0.005f));
 		Applied = Applied.GetClampedToMaxSize(MaxContactCorrection);
 		if (Applied.SizeSquared() < 1e-4f) Applied = FVector::ZeroVector;
 		FTransform NewMidCS = MidCS, NewEndCS = EndCS;
@@ -713,8 +862,17 @@ void FRPGAnimInstanceProxy::ApplyStrikeContact(FPoseContext& Output)
 		for (int32 P = 0; P < Set.Num; ++P)
 		{
 			float Depth = 0.f;
-			for (const FSurfaceSample& Inner : Def.Inner)
-				Depth = FMath::Max(Depth, float(FVector::DotProduct(PlaneP[P] - Sample(Inner, NewMidCS, NewEndCS), PlaneN[P])) + Inner.Radius - Def.Compression);
+            for(int32 K=0;K<2;++K)
+            {
+                if(L<=LeftHand && Set.Planes[P].Sample!=K+3)continue;
+                const FSurfaceSample& Inner=Def.Inner[K];
+                if(L<=LeftHand && Set.Planes[P].NumCapsules>0)
+                {
+                    const FVector InnerPoint=Sample(Inner,NewMidCS,NewEndCS);
+                    for(int32 C=0;C<Set.Planes[P].NumCapsules;++C)Result.Residual+=CapsulePush(InnerPoint,InnerPoint,Set.Planes[P].Capsules[C],Inner.Radius,false,PlaneN[P]);
+                }
+                else Depth=FMath::Max(Depth,float(FVector::DotProduct(PlaneP[P]-Sample(Inner,NewMidCS,NewEndCS),PlaneN[P]))+Inner.Radius-Def.Compression);
+            }
 			const float Have = float(FVector::DotProduct(Result.Residual, PlaneN[P]));
 			if (Depth > Have) Result.Residual += PlaneN[P] * (Depth - Have);
 		}

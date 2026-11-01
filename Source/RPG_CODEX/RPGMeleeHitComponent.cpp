@@ -131,23 +131,29 @@ void URPGMeleeHitComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 			*UEnum::GetDisplayValueAsText(State->StrikeLimb).ToString(), Points[0].X, Points[0].Y, Points[0].Z, Points.Last().X, Points.Last().Y, Points.Last().Z,
 			From[0].X, From[0].Y, From[0].Z, GetOwner()->GetActorLocation().X, GetOwner()->GetActorLocation().Y, GetOwner()->GetActorLocation().Z);
 
+    struct FHandLanding { FHitResult Hit;FVector End,Travel;float Time; };
+    TArray<FHandLanding,TInlineAllocator<8>> HandLandings;
+
 	// The strike contact holds the limb at a surface (it can be the knee / shin of a close kick, before the foot gets
 	// there): that is the strike landing, on that body.
 	{
 		UPrimitiveComponent* Touched = nullptr;
 		FName Bone;
-		FVector Point, Normal;
-		if (Contact && Contact->HasStrikingContact(State->StrikeLimb) && Contact->GetContact(State->StrikeLimb, Touched, Bone, Point, Normal)
+		FVector Point, Normal, Travel;
+		if (Contact && Contact->GetStrikeContact(State->StrikeLimb, Touched, Bone, Point, Normal, Travel)
 			&& Touched->GetOwner() && !HitThisStrike.Contains(Touched->GetOwner()))
 		{
-			HitThisStrike.Add(Touched->GetOwner());
 			FHitResult Hit(Touched->GetOwner(), Touched, Point, Normal);
 			Hit.BoneName = Bone;
 			Hit.ImpactNormal = Normal;
 			// The contact producer has sampled this pose and its correction together. Use that same snapshot;
 			// mixing a newly evaluated fist with last frame's correction can report withdrawal or near-zero speed.
-			const FVector Travel = Contact->GetAnimatedTravel(State->StrikeLimb);
-			ReportHit(Hit, Points[0], Travel, State);
+            if(IsFoot(State->StrikeLimb))
+            {
+                HitThisStrike.Add(Touched->GetOwner());
+                ReportHit(Hit,Points[0],Travel,State);
+            }
+            else HandLandings.Add({Hit,Points[0],Travel,1.f});
 		}
 	}
 
@@ -172,14 +178,42 @@ void URPGMeleeHitComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 			if (!Target || Target == GetOwner() || HitThisStrike.Contains(Target)) continue;
 			// A character's movement capsule is not its body: take the hit on its skeletal mesh (the struck bone).
 			if (Cast<UCapsuleComponent>(Hit.GetComponent()) && Target->FindComponentByClass<USkeletalMeshComponent>()) continue;
-			HitThisStrike.Add(Target);
-			// Kicks: the strike direction is the leg's travel (the ankle, point 0), not whichever sphere touched first -
+            // Kicks: the strike direction is the leg's travel (the ankle, point 0), not whichever sphere touched first -
 			// the ball of the foot is often first, while it is still turning up to put the sole on the target.
 			FVector Travel = Points[I] - From[I] - CorrectionChange;
 			if (IsFoot(State->StrikeLimb) && (Points[0] - From[0] - CorrectionChange).SizeSquared() > 0.25f) Travel = Points[0] - From[0] - CorrectionChange;
-			ReportHit(Hit, Points[I], Travel, State);
+            if(!IsFoot(State->StrikeLimb) && Contact)
+            {
+                Travel=Contact->GetAnimatedTravel(State->StrikeLimb,I);
+                // A held/withdrawing fist overlapping another body is not a new forward strike. Use the same
+                // pre-contact fist snapshot and incoming-speed requirement as the latched-contact path.
+                const float IntoSpeed=DeltaTime>0.f?float(FVector::DotProduct(Travel/DeltaTime,-Hit.ImpactNormal)):0.f;
+                if(IntoSpeed<Contact->MinStrikeSpeed)continue;
+            }
+            if(IsFoot(State->StrikeLimb))
+            {
+                HitThisStrike.Add(Target);
+                ReportHit(Hit,Points[I],Travel,State);
+            }
+            else
+            {
+                HandLandings.Add({Hit,Points[I],Travel,Hit.Time});
+                if(bDraw)
+                    UE_LOG(LogRPGInput,Log,TEXT("PUNCHSWEEP sample=%d bone=%s time=%.4f incoming=%.1f"),I,*Hit.BoneName.ToString(),Hit.Time,FVector::DotProduct(Travel/DeltaTime,-Hit.ImpactNormal));
+            }
 		}
 	}
+    // A knuckle can reach the face before the palm reaches a neighboring collarbone in the same low-FPS frame.
+    // Consume the strike on the earliest physical sweep across BOTH samples, not whichever sample was queried first.
+    // A held-surface touch is the end-of-frame fallback when contact IK has stopped the sweep at the surface.
+    HandLandings.StableSort([](const FHandLanding& A,const FHandLanding& B){return A.Time<B.Time;});
+    for(const FHandLanding& Landing:HandLandings)
+    {
+        AActor* Target=Landing.Hit.GetActor();
+        if(!IsValid(Target) || HitThisStrike.Contains(Target))continue;
+        HitThisStrike.Add(Target);
+        ReportHit(Landing.Hit,Landing.End,Landing.Travel,State);
+    }
 }
 
 void URPGMeleeHitComponent::ReportHit(const FHitResult& Hit, const FVector& End, const FVector& Travel, URPGCombatStateComponent* State)
@@ -229,6 +263,7 @@ void URPGMeleeHitComponent::ReportHit(const FHitResult& Hit, const FVector& End,
 	}
 
 	LastHit = Info;
+    LastHitTime=GetWorld()->GetTimeSeconds();
 	++ConfirmedHitCount;
 	if (Target->Implements<URPGMeleeTarget>()) IRPGMeleeTarget::Execute_ReceiveMeleeHit(Target, Info);
 	else if (URPGHitOutcomeComponent* Outcome = Target->FindComponentByClass<URPGHitOutcomeComponent>()) Outcome->ReceiveMeleeHit(Info);   // the player

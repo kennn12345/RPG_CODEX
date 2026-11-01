@@ -4,6 +4,7 @@
 #include "RPGCombatStateComponent.h"
 #include "RPGPrototypeAnimationComponent.h"
 #include "RPGMeleeTarget.h"
+#include "RPGMeleeHitComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
@@ -89,27 +90,75 @@ bool URPGStrikeContactComponent::IsInContact(ERPGStrikeLimb Limb) const
 
 bool URPGStrikeContactComponent::HasStrikingContact(ERPGStrikeLimb Limb) const
 {
-	const int32 Index = IndexOf(Limb);
-	return Index != INDEX_NONE && Limbs[Index].Latches.Num() > 0 && Limbs[Index].ApproachSpeed >= MinStrikeSpeed;
+    UPrimitiveComponent* Target=nullptr;FName Bone;FVector Point,Normal,Travel;
+    return GetStrikeContact(Limb,Target,Bone,Point,Normal,Travel);
 }
 
-FVector URPGStrikeContactComponent::GetAnimatedTravel(ERPGStrikeLimb Limb) const
+FVector URPGStrikeContactComponent::GetAnimatedTravel(ERPGStrikeLimb Limb, int32 SurfaceSample) const
 {
 	const int32 Index = IndexOf(Limb);
 	if (Index == INDEX_NONE || !Limbs[Index].bHaveLast) return FVector::ZeroVector;
-	return Limbs[Index].AnimatedBone - Limbs[Index].LastAnimatedBone;
+	if(Index<=LeftHand)return SurfaceSample==1?Limbs[Index].AnimatedKnuckle-Limbs[Index].LastAnimatedKnuckle
+        :Limbs[Index].Animated-Limbs[Index].LastAnimated;
+    return Limbs[Index].AnimatedBone-Limbs[Index].LastAnimatedBone;
 }
 
 bool URPGStrikeContactComponent::GetContact(ERPGStrikeLimb Limb, UPrimitiveComponent*& OutTarget, FName& OutBone, FVector& OutPoint, FVector& OutNormal) const
 {
+    FVector Travel;
+    return FindContact(Limb,OutTarget,OutBone,OutPoint,OutNormal,Travel,false);
+}
+
+bool URPGStrikeContactComponent::GetStrikeContact(ERPGStrikeLimb Limb,UPrimitiveComponent*& OutTarget,FName& OutBone,FVector& OutPoint,FVector& OutNormal,FVector& OutTravel) const
+{
+    return FindContact(Limb,OutTarget,OutBone,OutPoint,OutNormal,OutTravel,true);
+}
+
+bool URPGStrikeContactComponent::FindContact(ERPGStrikeLimb Limb,UPrimitiveComponent*& OutTarget,FName& OutBone,FVector& OutPoint,FVector& OutNormal,FVector& OutTravel,bool bRequireStrike) const
+{
 	const int32 Index = IndexOf(Limb);
 	if (Index == INDEX_NONE || Limbs[Index].Latches.Num() == 0 || Limbs[Index].Set.Num == 0) return false;
-	const FLatch& Latch = Limbs[Index].Latches[0];
-	OutTarget = Latch.Target.Get();
-	OutBone = Latch.Bone;
-	OutPoint = Latch.LastPoint;
-	OutNormal = Limbs[Index].Set.Planes[0].Normal;
-	return OutTarget != nullptr;
+    if(bRequireStrike && Index>LeftHand && Limbs[Index].ApproachSpeed<MinStrikeSpeed)return false;
+    // Latches are predictive constraints for the next pose, not proof that this pose has landed. In particular,
+    // a forearm plane on the chest can precede the fist's head contact. Only a physical end-segment contact counts
+    // as a punch; close kicks may still land with the knee/shin. Body-array order must not choose the damage zone.
+    const USkeletalMeshComponent* Mesh=GetMesh();
+    if(!Mesh)return false;
+    const FLimbDef& Def=RPGStrikeContact::Limb(Index);
+    float BestGap=TNumericLimits<float>::Max();
+    bool bFound=false;
+    for(const FLatch& Latch:Limbs[Index].Latches)
+    {
+        auto* Target=Cast<USkeletalMeshComponent>(Latch.Target.Get());
+        const FBodyInstance* Body=Target?Target->GetBodyInstance(Latch.Bone):nullptr;
+        if(!Body)continue;
+        const int32 First=Index<=LeftHand?0:Latch.Sample;
+        const int32 End=Index<=LeftHand?2:Latch.Sample+1;
+        // The predicted sample is only a constraint hint. Any real knuckle/fist-centre touch may land on this body.
+        for(int32 K=First;K<End;++K)
+        {
+            const FSurfaceSample& Sample=K<3?Def.Samples[K]:Def.Inner[K-3];
+            const FVector Now=SamplePoint(Mesh,Sample);
+            FVector Closest;float DistSq=0.f;
+            if(!Body->GetSquaredDistanceToBody(Now,DistSq,Closest))continue;
+            const float Gap=FMath::Sqrt(DistSq)-Sample.Radius;
+            if(Gap>.5f || Gap>=BestGap)continue;
+            FVector Normal=(Now-Closest).GetSafeNormal();
+            if(DistSq<=.01f)
+            {
+                FMTDResult MTD;
+                if(!Body->OverlapTest(Now,FQuat::Identity,FCollisionShape::MakeSphere(Sample.Radius),&MTD))continue;
+                Normal=MTD.Direction.GetSafeNormal();Closest=Now+Normal*(MTD.Distance-Sample.Radius);
+            }
+            const FVector Travel=GetAnimatedTravel(Limb,K);
+            const float Dt=GetWorld()?GetWorld()->GetDeltaSeconds():0.f;
+            // A rotating fist's knuckles and palm have different velocities. A palm's tangent motion must not
+            // reject a real incoming knuckle touch, or let a different body consume that strike first.
+            if(bRequireStrike && Index<=LeftHand && (Dt<=0.f || FVector::DotProduct(Travel/Dt,-Normal)<MinStrikeSpeed))continue;
+            BestGap=Gap;bFound=true;OutTarget=Target;OutBone=Latch.Bone;OutPoint=Closest;OutNormal=Normal;OutTravel=Travel;
+        }
+    }
+    return bFound;
 }
 
 void URPGStrikeContactComponent::GetJointAngles(ERPGStrikeLimb Limb, float& OutAnimated, float& OutCorrected) const
@@ -179,8 +228,18 @@ void URPGStrikeContactComponent::UpdateLimb(int32 Index, const TArray<UPrimitive
 	const FVector Acceleration=(Velocity-S.PreviousStep).GetClampedToMaxSize(15.f);
 	// The reference release accelerates over four filmed frames. Constant-speed
 	// lookahead can miss its first surface; predict the increasing step as well.
-	const FVector LookAhead=Velocity*2.f+(bReferenceFist && FVector::DotProduct(Acceleration,Velocity)>0.f?Acceleration*2.f:FVector::ZeroVector);
-	const auto* CombatState=GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
+	// Keep the filmed fist's prediction horizon at 33 ms. Two frames is 67 ms at 30 Hz: projecting a curved
+    // overhand that far as a straight line latches unrelated torso/arm planes and can stop a genuine head shot.
+    const auto* CombatState=GetOwner()->FindComponentByClass<URPGCombatStateComponent>();
+    const bool bFilmedFist=Index<=LeftHand && Animation && Animation->IsCapturedStandardPunchPlaying();
+    const auto* Melee=bFilmedFist?GetOwner()->FindComponentByClass<URPGMeleeHitComponent>():nullptr;
+    // Predictive arm constraints must not start an attack-strength slide before the fist actually lands.
+    // The landing applies its normal Power impulse; sustained surface pressure may follow that confirmed strike.
+    const bool bCanPush=!bFilmedFist || (Melee && Melee->ConfirmedHitCount>0 && CombatState
+        && Melee->LastHit.StrikeId==CombatState->StrikeId && Melee->LastHitTime>=CombatState->LastReleaseTime);
+    const float Steps=bFilmedFist?(1.f/30.f)/DeltaTime:2.f;
+    const FVector LookAhead=Velocity*Steps+(bReferenceFist && FVector::DotProduct(Acceleration,Velocity)>0.f?Acceleration*(.5f*Steps*Steps):FVector::ZeroVector);
+
 	const bool bFastRelease=bReferenceFist && !Animation->IsReferenceChargedPunchPlaying() && CombatState && CombatState->AttackPhase==ERPGAttackPhase::Strike;
 	const float CurveMargin=bFastRelease && Velocity.SizeSquared()>1.f?FMath::Clamp(float(Velocity.Size()*.25f+Acceleration.Size()*.5f),2.f,8.f):0.f;
 	for (int32 K = 0; K < NumSamples; ++K)
@@ -295,6 +354,30 @@ void URPGStrikeContactComponent::UpdateLimb(int32 Index, const TArray<UPrimitive
 		Latch.LastPoint = P;
 		Latch.bHaveLast = true;
 		FRPGLimbContactPlane& Plane = S.Set.Planes[S.Set.Num++];
+        Plane.Sample=Latch.Sample;
+        Plane.NumCapsules=0;
+        if(const auto* TargetMesh=Cast<USkeletalMeshComponent>(Latch.Target.Get()))
+            if(const auto* Body=TargetMesh->GetBodyInstance(Latch.Bone);Body && Body->BodySetup.IsValid() && Body->BodySetup->IsA<UBodySetup>())
+            {
+                const auto& G=CastChecked<UBodySetup>(Body->BodySetup.Get())->AggGeom;
+                // Copy only complete sphere/capsule bodies. Complex/box bodies keep their existing contact planes.
+                if(G.BoxElems.IsEmpty() && G.ConvexElems.IsEmpty() && G.SphereElems.Num()+G.SphylElems.Num()<=4)
+                {
+                    const FTransform BodyWorld=Body->GetUnrealWorldTransform();
+                    for(const auto& Elem:G.SphereElems)
+                    {
+                        const auto ScaledShape=Elem.GetFinalScaled(Body->Scale3D,FTransform::Identity);
+                        auto& C=Plane.Capsules[Plane.NumCapsules++];C.A=C.B=BodyWorld.TransformPosition(ScaledShape.Center);C.Radius=ScaledShape.Radius;
+                    }
+                    for(const auto& Elem:G.SphylElems)
+                    {
+                        const auto ScaledShape=Elem.GetFinalScaled(Body->Scale3D,FTransform::Identity);
+                        const FTransform T=ScaledShape.GetTransform()*BodyWorld;
+                        const FVector Axis=T.TransformVectorNoScale(FVector(0,0,ScaledShape.Length*.5f));
+                        auto& C=Plane.Capsules[Plane.NumCapsules++];C.A=T.GetLocation()-Axis;C.B=T.GetLocation()+Axis;C.Radius=ScaledShape.Radius;
+                    }
+                }
+            }
 		// A struck target's small hand/forearm bodies can rebound farther than
 		// its torso. Reference fists anticipate that motion with the same
 		// measured velocity rather than waiting until the next pose is inside.
@@ -307,8 +390,14 @@ void URPGStrikeContactComponent::UpdateLimb(int32 Index, const TArray<UPrimitive
 		S.ApproachSpeed = FMath::Max(S.ApproachSpeed, Into);
 		// Still driving in: the target is pushed (it can give way so the strike follows through).
 		AActor* TargetActor = Latch.Target.IsValid() ? Latch.Target->GetOwner() : nullptr;
-		if (Into > 0.f && TargetActor && TargetActor->Implements<URPGMeleeTarget>())
-			IRPGMeleeTarget::Execute_ReceiveContactPush(TargetActor, -N * Into, Latch.Bone);
+        const FSurfaceSample& TouchSample=Samples[Latch.Sample];
+        const auto* TargetMesh=Cast<USkeletalMeshComponent>(Latch.Target.Get());
+        const FBodyInstance* TouchBody=TargetMesh?TargetMesh->GetBodyInstance(Latch.Bone):nullptr;
+        FVector Closest;float DistSq=0.f;
+        const bool bTouching=TouchBody && TouchBody->GetSquaredDistanceToBody(Now[Latch.Sample],DistSq,Closest)
+            && DistSq<=FMath::Square(TouchSample.Radius+.5f);
+        if(bCanPush && bTouching && Into>0.f && TargetActor && TargetActor->Implements<URPGMeleeTarget>())
+            IRPGMeleeTarget::Execute_ReceiveContactPush(TargetActor,-N*Into,Latch.Bone);
 	}
 }
 
@@ -331,7 +420,11 @@ void URPGStrikeContactComponent::PushPlanes()
 	for (USkeletalMeshComponent* Mesh : Meshes)
 		if (URPGAnimInstance* Anim = Cast<URPGAnimInstance>(Mesh->GetAnimInstance()))
 		{
-			for (int32 I = 0; I < NumLimbs; ++I) Anim->ContactSets[I] = Limbs[I].Set;
+            for(int32 I=0;I<NumLimbs;++I)
+            {
+                Anim->ContactSets[I]=Limbs[I].Set;
+                if(const auto* MainMesh=GetMesh())for(int32 K=0;K<3;++K)Anim->ContactSets[I].StartSamples[K]=SamplePoint(MainMesh,Limb(I).Samples[K]);
+            }
 			// Keep immediate push-out; unload reference full-body punches gradually as their body drive withdraws.
 			// This avoids small pressure reversals while preserving the same surface and compression limits.
 			Anim->ContactReleaseTime = UnloadTime;
@@ -408,8 +501,12 @@ void URPGStrikeContactComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		S.PreviousStep = S.Animated-S.LastAnimated;
 		S.LastAnimated = S.Animated;
 		S.LastAnimatedBone = S.AnimatedBone;
-		S.Animated = SamplePoint(Mesh, Def.Samples[0]) - S.Correction;
+        S.LastAnimatedKnuckle=S.AnimatedKnuckle;
+		S.Animated = I<=LeftHand && Result.bHaveAnimatedFist?ToWorld.TransformPosition(Result.AnimatedFist)
+            :SamplePoint(Mesh,Def.Samples[0])-S.Correction;
 		S.AnimatedBone = Mesh->GetBoneLocation(Def.End) - S.Correction;
+        S.AnimatedKnuckle=I<=LeftHand && Result.bHaveAnimatedFist?ToWorld.TransformPosition(Result.AnimatedKnuckle)
+            :SamplePoint(Mesh,Def.Samples[1])-S.Correction;
 	}
 
 	const bool bActive = IsActive() && IsAttacking(DeltaTime) && DeltaTime > 0.f;
@@ -422,8 +519,10 @@ void URPGStrikeContactComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		else { S.Latches.Reset(); S.Set.Num = 0; S.ApproachSpeed = 0.f; }
 		S.bHaveLast = DeltaTime > 0.f;
 	}
-	PushPlanes();
-	if (bActive) PushBack(DeltaTime);
+    if (bActive) PushBack(DeltaTime);
+    PushPlanes();
+    if(bActive)
+        if(auto* PlayingAnimation=GetOwner()->FindComponentByClass<URPGPrototypeAnimationComponent>())PlayingAnimation->RefreshFilmedContactWindow();
 
 	// rpg.StrikeContactDebug 2: log every held contact (bone, which sphere made it, how far the fist / foot centre is in
 	// front of it) each frame.

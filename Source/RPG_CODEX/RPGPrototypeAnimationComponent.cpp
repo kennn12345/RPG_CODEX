@@ -328,6 +328,7 @@ void URPGPrototypeAnimationComponent::MirrorMontagesTo(UAnimInstance* Shadow)
             To->AimYaw = From->AimYaw;
             To->AimPitch = From->AimPitch;
             To->bPitchAboutPivot = false;
+            To->FilmedAim=From->FilmedAim;
         }
 
     TSet<UAnimMontage*> Live;
@@ -458,7 +459,8 @@ void URPGPrototypeAnimationComponent::UpdateStrikeWindow(float Position)
     const float After = bChargeIsKick ? KickHitWindowAfterImpact : PunchHitWindowAfterImpact;
     // A close target meets the limb before its animated impact: the contact itself opens the window, and it then stays
     // open to the usual end (so one strike is one window, one StrikeId).
-    if (!bWindowOpenedByContact && Position >= ChargeImpactTime - EarlyContactLead && Position < ChargeImpactTime - Before)
+    const bool bPastLoad=!IsCapturedStandardPunchPlaying() || Position>=FilmedPunchLoadTime;
+    if (bPastLoad && !bWindowOpenedByContact && Position >= ChargeImpactTime - EarlyContactLead && Position < ChargeImpactTime - Before)
         if (const URPGStrikeContactComponent* Contact = GetOwner()->FindComponentByClass<URPGStrikeContactComponent>())
             bWindowOpenedByContact = Contact->HasStrikingContact(ChargeLimb);
     const bool bOpen = (Position >= ChargeImpactTime - Before || bWindowOpenedByContact) && Position <= ChargeImpactTime + After;
@@ -467,6 +469,20 @@ void URPGPrototypeAnimationComponent::UpdateStrikeWindow(float Position)
     State->StrikeLimb = ChargeLimb;
     State->bStrikeCharged = bChargeLoops;
     State->StrikeTimeFromImpact = Position - ChargeImpactTime;
+}
+
+void URPGPrototypeAnimationComponent::RefreshFilmedContactWindow()
+{
+    if(!IsCapturedStandardPunchPlaying() || bChargeButtonHeld || !ChargeMontage)return;
+    const auto* Character=Cast<ACharacter>(GetOwner());
+    const auto* Instance=Character && Character->GetMesh()?Character->GetMesh()->GetAnimInstance():nullptr;
+    const auto* Playing=Instance?Instance->GetActiveInstanceForMontage(ChargeMontage):nullptr;
+    if(!Playing || Playing->IsStopped() || Playing->GetPosition()<FilmedPunchLoadTime)return;
+    // Pre-physics animation update saw last frame's contact. At low FPS the fist can already be held at the surface
+    // by the next update. Open on the actual incoming contact now, preserving the normal end and one StrikeId.
+    const float Position=Playing->GetPosition();
+    SetAttackPhase(Position<ChargeImpactTime?ERPGAttackPhase::Strike:ERPGAttackPhase::Recovery);
+    UpdateStrikeWindow(Position);
 }
 
 void URPGPrototypeAnimationComponent::CloseStrikeWindow()
@@ -589,6 +605,18 @@ bool URPGPrototypeAnimationComponent::GetReferenceStrikePoint(FVector& OutPoint)
     const int32 Hand=bCapturedPunch && ChargeHand==ERPGHand::Left?0:1;
     const int32 Tier=bCapturedPunch && bChargeLoops?(ChargedPlaying && ChargedPlaying->GetName().Contains(TEXT("_Power_"))?2:1):0;
     OutPoint=ReferenceImpactPoints[Hand][Tier];return true;
+}
+
+bool URPGPrototypeAnimationComponent::GetFilmedStrikeTiming(float& OutFromLoad,float& OutFromImpact) const
+{
+    if(!IsCapturedStandardPunchPlaying() || !ChargeMontage)return false;
+    const auto* Character=Cast<ACharacter>(GetOwner());
+    const auto* Instance=Character && Character->GetMesh()?Character->GetMesh()->GetAnimInstance():nullptr;
+    const auto* Playing=Instance?Instance->GetActiveInstanceForMontage(ChargeMontage):nullptr;
+    if(!Playing || Playing->IsStopped())return false;
+    OutFromLoad=Playing->GetPosition()-FilmedPunchLoadTime;
+    OutFromImpact=Playing->GetPosition()-ChargeImpactTime;
+    return true;
 }
 
 bool URPGPrototypeAnimationComponent::GetFilmedStrikePoint(FVector& OutPoint,FVector& OutPivot) const

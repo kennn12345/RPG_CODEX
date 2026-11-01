@@ -62,6 +62,9 @@ public:
 
 	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category = "RPG|Melee|Debug")
 	int32 ConfirmedHitCount = 0;
+    /** World time of LastHit, so a new release cannot inherit the preceding punch's delivery target. */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="RPG|Melee|Debug")
+    float LastHitTime = -1.f;
 
 private:
 	/** World positions of the striking limb's sweep spheres this frame (2 per limb). */

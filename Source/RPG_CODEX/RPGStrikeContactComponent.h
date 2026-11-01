@@ -75,6 +75,13 @@ namespace RPGStrikeContact
 	}
 }
 
+/** Immutable world-space capsule copied from the target's actual physics asset; a sphere has A == B. */
+struct FRPGContactCapsule
+{
+    FVector A=FVector::ZeroVector,B=FVector::ZeroVector;
+    float Radius=0.f;
+};
+
 /** One surface a limb is held behind, world space. */
 USTRUCT()
 struct FRPGLimbContactPlane
@@ -85,6 +92,10 @@ struct FRPGLimbContactPlane
 	FVector Point = FVector::ZeroVector;
 	/** Out of the target, toward the attacker. */
 	FVector Normal = FVector::UpVector;
+    /** The surface sample that touched: 0..2 end segment, 3..4 elbow/forearm (or knee/shin). */
+    int32 Sample = 0;
+    FRPGContactCapsule Capsules[4];
+    int32 NumCapsules=0;
 };
 
 /** The surfaces one limb is held behind this frame. */
@@ -92,11 +103,16 @@ struct FRPGLimbContactSet
 {
 	FRPGLimbContactPlane Planes[RPGStrikeContact::MaxPlanes];
 	int32 Num = 0;
+    FVector StartSamples[3];
 };
 
 /** What the contact did to one limb in a pose (component space; filled by the anim instance proxy). */
 struct FRPGLimbContactResult
 {
+    /** Fist centre before contact IK, so rotation of a held wrist cannot contaminate strike velocity. */
+    FVector AnimatedFist=FVector::ZeroVector;
+    FVector AnimatedKnuckle=FVector::ZeroVector;
+    bool bHaveAnimatedFist=false;
 	/** How far the hand / foot was moved off its animation in this pose. */
 	FVector Moved = FVector::ZeroVector;
 	/** The offset the surfaces ask for (kept between poses: grows at once, eases off); Moved can be less (fold limit). */
@@ -158,12 +174,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RPG|Strike Contact")
 	bool HasStrikingContact(ERPGStrikeLimb Limb) const;
 
-	/** This frame's motion of the limb's hand / foot bone as the animation alone has it (the correction taken out). */
+	/** This frame's uncorrected hand sample motion (0 palm, 1 knuckles), or foot-bone motion for kicks. */
 	UFUNCTION(BlueprintPure, Category = "RPG|Strike Contact")
-	FVector GetAnimatedTravel(ERPGStrikeLimb Limb) const;
+	FVector GetAnimatedTravel(ERPGStrikeLimb Limb, int32 SurfaceSample=0) const;
 
-	/** The surface the limb is held at (the first held contact): what it touched, which body, where. False if none. */
+	/** A currently touching surface, chosen by physical overlap rather than predictive latch order. False if none. */
 	bool GetContact(ERPGStrikeLimb Limb, UPrimitiveComponent*& OutTarget, FName& OutBone, FVector& OutPoint, FVector& OutNormal) const;
+    /** A real incoming end-segment touch, with the uncorrected travel of the actual touching sample. */
+    bool GetStrikeContact(ERPGStrikeLimb Limb, UPrimitiveComponent*& OutTarget, FName& OutBone, FVector& OutPoint, FVector& OutNormal, FVector& OutTravel) const;
 
 	/** Elbow / knee angle (degrees, 180 = straight) in the current pose: as animated, and as the contact left it. */
 	void GetJointAngles(ERPGStrikeLimb Limb, float& OutAnimated, float& OutCorrected) const;
@@ -219,6 +237,7 @@ public:
 	bool bDrawDebug = false;
 
 private:
+    bool FindContact(ERPGStrikeLimb Limb, UPrimitiveComponent*& OutTarget, FName& OutBone, FVector& OutPoint, FVector& OutNormal, FVector& OutTravel, bool bRequireStrike) const;
 	struct FLatch
 	{
 		TWeakObjectPtr<UPrimitiveComponent> Target;
@@ -245,6 +264,8 @@ private:
 		FVector PreviousStep = FVector::ZeroVector;
 		FVector AnimatedBone = FVector::ZeroVector;
 		FVector LastAnimatedBone = FVector::ZeroVector;
+        FVector AnimatedKnuckle=FVector::ZeroVector;
+        FVector LastAnimatedKnuckle=FVector::ZeroVector;
 		bool bHaveLast = false;
 		float ApproachSpeed = 0.f;
 		FVector Correction = FVector::ZeroVector;
