@@ -60,6 +60,7 @@ public:
 	 *  fall (URPGHitOutcomeComponent::BeginFall) unless bFallPrepared says the caller already set that up. */
 	void KnockDown(const FVector& Velocity, const FVector& Point, bool bFallPrepared = false);
 	bool IsDown() const { return bDown; }
+	bool IsRecovering() const;
 	/** Fired when this character is knocked down by an impact (NPCs stop their AI / step reactions). */
 	FRPGOnKnockedDown OnKnockedDown;
 	/** Run into without going down: its share of the momentum (world, cm/s), where it was touched, and how hard it
@@ -106,6 +107,8 @@ private:
 	int32 BumpCount = 0;
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> HeldGetUp;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> RecoveryMontage;
 	float GetUpTargetRate = 1.f;
 	float GetUpResumeTime = 0.f;
 	bool bGetUpAwaitingPhysics = false;

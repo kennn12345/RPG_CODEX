@@ -282,6 +282,14 @@ void URPGBodyImpactComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	}
 }
 
+bool URPGBodyImpactComponent::IsRecovering() const
+{
+	if (bDown || bGetUpAwaitingPhysics) return true;
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	const UAnimInstance* Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	return Anim && RecoveryMontage && Anim->Montage_IsActive(RecoveryMontage);
+}
+
 void URPGBodyImpactComponent::OnCapsuleHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
 	ACharacter* Other = Cast<ACharacter>(OtherActor);
@@ -456,6 +464,7 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	if (!Anim) return nullptr;
 	UAnimMontage* Montage = Anim->PlaySlotAnimationAsDynamicMontage(Pick.Clip, TEXT("DefaultSlot"), 0.f, 0.35f, Rate, 1, -1.f, Pick.Time);
 	if (!Montage) return nullptr;
+	if (History) History->RecoveryMontage = Montage;
 	if (History) { History->LastGetUpClip=Pick.Clip->GetFName(); History->LastGetUpStyle=FName(Pick.GetUp->Style); }
 	OutDuration = (Pick.Clip->GetPlayLength() - Pick.Time) / FMath::Max(Rate, 0.1f);
 	if (History)

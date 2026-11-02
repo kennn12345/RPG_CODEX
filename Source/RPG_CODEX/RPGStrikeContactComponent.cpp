@@ -2,6 +2,7 @@
 
 #include "RPGAnimInstance.h"
 #include "RPGCombatStateComponent.h"
+#include "RPGCharacterContactComponent.h"
 #include "RPGPrototypeAnimationComponent.h"
 #include "RPGMeleeTarget.h"
 #include "RPGMeleeHitComponent.h"
@@ -18,6 +19,14 @@ using namespace RPGStrikeContact;
 
 namespace
 {
+	bool AllowRecoveryContact(const AActor* Owner, const AActor* Target, int32 LimbIndex)
+	{
+		if (!URPGCharacterContactComponent::IsRecovering(Target)) return true;
+		const auto* State = Owner->FindComponentByClass<URPGCombatStateComponent>();
+		// A rising body may still be struck. Planted feet and the other resting limbs must not follow its bones.
+		return State && IndexOf(State->StrikeLimb) == LimbIndex;
+	}
+
 	TAutoConsoleVariable<int32> CVarStrikeContact(
 		TEXT("rpg.StrikeContact"), 1,
 		TEXT("Strike contact: fists and feet stop at the surface of what they hit (1, default) or pass through as animated (0)."));
@@ -253,7 +262,7 @@ void URPGStrikeContactComponent::UpdateLimb(int32 Index, const TArray<UPrimitive
 	{
 		const FLatch& Latch = S.Latches[L];
 		FTransform BT;
-		bool bKeep = Latch.Target.IsValid() && BodyTransform(Latch.Target.Get(), Latch.Bone, BT);
+		bool bKeep = Latch.Target.IsValid() && AllowRecoveryContact(GetOwner(), Latch.Target->GetOwner(), Index) && BodyTransform(Latch.Target.Get(), Latch.Bone, BT);
 		if (bKeep)
 		{
 			const FVector P = BT.TransformPosition(Latch.LocalPoint);
@@ -289,6 +298,7 @@ void URPGStrikeContactComponent::UpdateLimb(int32 Index, const TArray<UPrimitive
 	TArray<TPair<FBodyInstance*, FName>> Bodies;
 	for (UPrimitiveComponent* Target : Targets)
 	{
+		if (!Target || !AllowRecoveryContact(GetOwner(), Target->GetOwner(), Index)) continue;
 		TargetBodies(Target, Bodies);
 		for (const TPair<FBodyInstance*, FName>& Body : Bodies)
 		{

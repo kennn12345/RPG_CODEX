@@ -5,6 +5,7 @@
 #include "RPGHitReactionComponent.h"
 #include "RPGReactivePhysicsComponent.h"
 #include "RPGBodyImpactComponent.h"
+#include "RPGCharacterContactComponent.h"
 #include "RPGHitOutcomeComponent.h"
 #include "RPGCharacterStatsComponent.h"
 #include "RPGCombatStateComponent.h"
@@ -63,6 +64,7 @@ ARPGNpcCharacter::ARPGNpcCharacter()
 
 	BodyImpact = CreateDefaultSubobject<URPGBodyImpactComponent>(TEXT("BodyImpact"));
 	HitOutcome = CreateDefaultSubobject<URPGHitOutcomeComponent>(TEXT("HitOutcome"));
+	CreateDefaultSubobject<URPGCharacterContactComponent>(TEXT("CharacterContact"));
 }
 
 void ARPGNpcCharacter::BeginPlay()
