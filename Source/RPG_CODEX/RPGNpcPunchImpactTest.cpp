@@ -225,7 +225,7 @@ private:
         const FVector Aim = State->AttackAimPoint;
         const auto& H = Melee->LastHit;
         const auto* Anim=Cast<URPGAnimInstance>(Player->GetMesh()->GetAnimInstance());
-        FVector Natural,Unused;
+        FVector Natural = FVector::ZeroVector, Unused = FVector::ZeroVector;
         if(auto* Animation=Player->FindComponentByClass<URPGPrototypeAnimationComponent>())Animation->GetFilmedStrikePoint(Natural,Unused);
         float MontageTime=-1;
         if(Anim)for(const auto* M:Anim->MontageInstances)if(M && M->IsActive() && !M->IsStopped())MontageTime=M->GetPosition();
