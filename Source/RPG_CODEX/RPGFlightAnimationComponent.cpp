@@ -2,6 +2,7 @@
 
 #include "RPGCombatStateComponent.h"
 #include "RPGPhysicsReactionComponent.h"
+#include "RPGBodyImpactComponent.h"
 #include "RPGAnimInstance.h"
 #include "RPGDirectionalHoverComponent.h"
 #include "Animation/AnimInstance.h"
@@ -85,6 +86,19 @@ void URPGFlightAnimationComponent::TickComponent(float DeltaTime, ELevelTick Tic
     USkeletalMeshComponent* Mesh = Character ? Character->GetMesh() : nullptr;
     URPGAnimInstance* Anim = Mesh ? Cast<URPGAnimInstance>(Mesh->GetAnimInstance()) : nullptr;
     if (!Movement || !Anim || DeltaTime <= 0.f) return;
+	const URPGPhysicsReactionComponent* Reaction = GetOwner()->FindComponentByClass<URPGPhysicsReactionComponent>();
+	const URPGBodyImpactComponent* Impact = GetOwner()->FindComponentByClass<URPGBodyImpactComponent>();
+	if ((Reaction && Reaction->GetReactionState() == ERPGPhysicsReactionState::Limp) || (Impact && Impact->IsDown()))
+	{
+		// Neither flight lean nor its exit restoration may move a body now owned by physics. The crash handoff
+		// already saved the unleaned attachment frame; do not reinterpret a detached/world transform as local lean.
+		ReleaseBodyToPhysics(Mesh->GetRelativeTransform());
+		Anim->FlightWeight = Anim->FlightActionWeight = Anim->FlightTurn = 0.f;
+		Anim->FlightActionIndex = INDEX_NONE;
+		Anim->FlowBones.Reset(); Anim->FlowRotations.Reset();
+		Anim->RearSway = FRPGFlightRearSway();
+		return;
+	}
     const bool bFlying = Movement->IsFlying();
     const bool bGrounded = Movement->IsMovingOnGround();
     if (bFlying || FlightWeight > 0.f) ResolveFlightClips(Anim);
@@ -255,6 +269,22 @@ void URPGFlightAnimationComponent::TickComponent(float DeltaTime, ELevelTick Tic
     if (URPGPhysicsReactionComponent* Physics = GetOwner()->FindComponentByClass<URPGPhysicsReactionComponent>())
         Physics->SetFlightFollow(false); // intentionally never enable the rejected physics implementation
     bWasFlying = bFlying;
+}
+
+FTransform URPGFlightAnimationComponent::ReleaseBodyToPhysics(const FTransform& CurrentRelative)
+{
+	const FTransform Rest = bReacting ? FTransform(RestRotation, RestLocation, CurrentRelative.GetScale3D()) : CurrentRelative;
+	bReacting = bWasFlying = bVelocityInitialized = bTravelHeadingValid = bVerticalFacingActive = false;
+	bReleaseReentry = false;
+	bAccelerationArmed = bBoostArmed = true;
+	ActionIndex = INDEX_NONE;
+	ActionTime = FlightWeight = TurnPose = Pitch = Roll = TurnRateRad = FilteredTurnRate = BrakePoseWeight = StopBraceHold = FlowWeight = 0.f;
+	FilteredAcceleration = FlowLastVelocity = FVector::ZeroVector;
+	FlowAngle.Reset(); FlowSpeed.Reset(); FlowDir.Reset();
+	RearAngle = RearVelocity = FVector2D::ZeroVector;
+	RearKneeAngle = RearKneeVelocity = 0.f;
+	PoseBlend = FVector::ZeroVector;
+	return Rest;
 }
 
 void URPGFlightAnimationComponent::StartFlightAction(int32 ClipIndex)

@@ -9,6 +9,7 @@ class ACharacter;
 class UAnimMontage;
 class UAnimSequence;
 class UPrimitiveComponent;
+class USceneComponent;
 class URPGPhysicsReactionComponent;
 
 DECLARE_MULTICAST_DELEGATE(FRPGOnKnockedDown);
@@ -87,14 +88,14 @@ private:
 	void OnCapsuleHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 	void HandleLimpEnding();
 	URPGPhysicsReactionComponent* GetReaction(bool bCreate);
-	/** While the player is down the capsule follows the body (for the camera). The ragdoll's mesh is placed absolutely
-	 *  meanwhile, so those moves don't reach it (each one was an engine warning: "moving a fully simulated mesh"), and
-	 *  goes back under the capsule at its usual offset when it gets up. */
+	/** Detach the physical body while the player's camera capsule follows it. Restore the animation frame at get-up
+	 *  without translating the simulated bodies, which still supply the world-space pose for the return blend. */
 	void FreeMeshFromCapsule(ACharacter* Character);
 	void ReturnMeshToCapsule(ACharacter* Character);
 	bool bMeshFreed = false;
-	FVector MeshOffset = FVector::ZeroVector;
-	FRotator MeshTurn = FRotator::ZeroRotator;
+	TWeakObjectPtr<USceneComponent> MeshParent;
+	FName MeshSocket;
+	FTransform MeshRelative = FTransform::Identity;
 
 	FVector LastVelocity = FVector::ZeroVector;
 	bool bDown = false;

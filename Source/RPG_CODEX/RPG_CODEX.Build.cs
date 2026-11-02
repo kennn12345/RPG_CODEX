@@ -26,7 +26,7 @@ public class RPG_CODEX : ModuleRules
 		});
 		if (Target.bBuildEditor)
 		{
-			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "AnimGraph", "AnimGraphRuntime", "AssetTools" });
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "AnimGraph", "AnimGraphRuntime", "AssetTools", "MessageLog", "PoseSearch" });
 		}
 	}
 }

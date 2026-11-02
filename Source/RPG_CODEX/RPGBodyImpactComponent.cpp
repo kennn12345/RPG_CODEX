@@ -2,6 +2,7 @@
 
 #include "RPGBodyMass.h"
 #include "RPGMovementAbilityComponent.h"
+#include "RPGFlightAnimationComponent.h"
 #include "RPGNpcCharacter.h"
 #include "RPGPhysicsReactionComponent.h"
 #include "RPGHitOutcomeComponent.h"
@@ -270,9 +271,14 @@ void URPGBodyImpactComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	if (bDown && bOwnLimpHandler)
 	{
 		const FVector Pelvis = Character->GetMesh()->GetBoneLocation(TEXT("pelvis"));
-		// No teleport flag: a physics teleport would carry the simulated body along with the capsule, which then moved the
-		// hips, which moved the capsule... and threw the body off without end.
-		Character->GetCapsuleComponent()->SetWorldLocation(Pelvis + FVector(0.f, 0.f, 20.f), false, nullptr, ETeleportType::None);
+		// The body is detached: teleport only the camera/capsule, leaving physical positions and velocities alone.
+		Character->GetCapsuleComponent()->SetWorldLocation(Pelvis + FVector(0.f, 0.f, 20.f), false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	else if (bMeshFreed)
+	{
+		// A simulated root cannot be attached yet. Keep the animation frame beneath the capsule during the pinned
+		// return blend, then restore the hierarchy once PhysicsControl has made the bodies kinematic.
+		ReturnMeshToCapsule(Character);
 	}
 }
 
@@ -363,13 +369,12 @@ void URPGBodyImpactComponent::FreeMeshFromCapsule(ACharacter* Character)
 {
 	USkeletalMeshComponent* Mesh = Character ? Character->GetMesh() : nullptr;
 	if (!Mesh || bMeshFreed) return;
-	MeshOffset = Mesh->GetRelativeLocation();
-	MeshTurn = Mesh->GetRelativeRotation();
-	const FTransform World = Mesh->GetComponentTransform();
-	Mesh->SetUsingAbsoluteLocation(true);
-	Mesh->SetUsingAbsoluteRotation(true);
-	Mesh->SetUsingAbsoluteScale(true);   // (all three: a parent only skips a fully absolute child)
-	Mesh->SetRelativeLocationAndRotation(World.GetLocation(), World.Rotator());   // (absolute: the same place, nothing moves)
+	MeshParent = Mesh->GetAttachParent();
+	MeshSocket = Mesh->GetAttachSocketName();
+	MeshRelative = Mesh->GetRelativeTransform();
+	if (URPGFlightAnimationComponent* Flight = Character->FindComponentByClass<URPGFlightAnimationComponent>())
+		MeshRelative = Flight->ReleaseBodyToPhysics(MeshRelative);
+	Mesh->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 	bMeshFreed = true;
 }
 
@@ -377,11 +382,18 @@ void URPGBodyImpactComponent::ReturnMeshToCapsule(ACharacter* Character)
 {
 	USkeletalMeshComponent* Mesh = Character ? Character->GetMesh() : nullptr;
 	if (!Mesh || !bMeshFreed) return;
+	USceneComponent* Parent = MeshParent.Get();
+	if (!Parent) return;
+	const FTransform Target = MeshRelative * Parent->GetSocketTransform(MeshSocket);
+	// Only restore the animation component's frame. A physics teleport here would also translate the ragdoll,
+	// destroying the pose that ReturnToAnimated is about to pin for the get-up blend.
+	Mesh->MoveComponent(Target.GetLocation() - Mesh->GetComponentLocation(), Target.GetRotation(), false, nullptr, MOVECOMP_SkipPhysicsMove);
+	const URPGPhysicsReactionComponent* Reaction = Character->FindComponentByClass<URPGPhysicsReactionComponent>();
+	if (Reaction && Reaction->GetReactionState() == ERPGPhysicsReactionState::Limp) return;
+	if (!Mesh->AttachToComponent(Parent, FAttachmentTransformRules::KeepWorldTransform, MeshSocket)) return;
+	Mesh->SetRelativeScale3D(MeshRelative.GetScale3D());
 	bMeshFreed = false;
-	Mesh->SetUsingAbsoluteLocation(false);
-	Mesh->SetUsingAbsoluteRotation(false);
-	Mesh->SetUsingAbsoluteScale(false);
-	Mesh->SetRelativeLocationAndRotation(MeshOffset, MeshTurn);
+	MeshParent.Reset();
 }
 
 UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate, float& OutDuration, bool bWantsToMove)
@@ -429,10 +441,13 @@ UAnimMontage* URPGBodyImpactComponent::StandUp(ACharacter* Character, float Rate
 	const float MeshYaw = FMath::RadiansToDegrees(FMath::Atan2(Head.Y, Head.X)) - Pick.HeadYaw;
 	const FVector Offset = FRotator(0.f, MeshYaw, 0.f).RotateVector(FVector(Pick.PelvisFromRoot.X, Pick.PelvisFromRoot.Y, 0.f));
 	const float HalfHeight = Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	// (the body's pose has been read: the player's mesh goes back under the capsule before it is placed)
-	if (URPGBodyImpactComponent* Impact = Character->FindComponentByClass<URPGBodyImpactComponent>()) Impact->ReturnMeshToCapsule(Character);
+	const float RelativeYaw = History && History->bMeshFreed ? History->MeshRelative.Rotator().Yaw : Body->GetRelativeRotation().Yaw;
+	// Align the capsule independently of the physical pose, for NPCs as well as the player. Reattach only after
+	// placing it, then restore the animation frame without moving the bodies used by the return blend.
+	if (History) History->FreeMeshFromCapsule(Character);
 	Character->SetActorLocationAndRotation(FVector(Pelvis.X - Offset.X, Pelvis.Y - Offset.Y, FloorZ + HalfHeight + 1.f),
-		FRotator(0.f, MeshYaw - Body->GetRelativeRotation().Yaw, 0.f), false, nullptr, ETeleportType::None);
+		FRotator(0.f, MeshYaw - RelativeYaw, 0.f), false, nullptr, ETeleportType::TeleportPhysics);
+	if (History) History->ReturnMeshToCapsule(Character);
 	if (AController* Controller = Character->GetController())
 		if (Controller->IsPlayerController()) Controller->SetControlRotation(FRotator(Controller->GetControlRotation().Pitch, Character->GetActorRotation().Yaw, 0.f));
 	if (UCharacterMovementComponent* Move = Character->GetCharacterMovement()) Move->SetMovementMode(MOVE_Walking);

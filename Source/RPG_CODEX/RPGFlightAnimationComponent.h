@@ -20,6 +20,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	/** Relinquish component lean to ragdoll physics, retaining its world pose. Return the normal attachment frame
+	 *  for get-up, so a crash cannot permanently save the current flight lean as the standing mesh offset. */
+	FTransform ReleaseBodyToPhysics(const FTransform& CurrentRelative);
 
 	UPROPERTY(EditAnywhere, Category = "RPG|Flight Animation")
 	TSoftObjectPtr<UAnimSequence> Hover;
