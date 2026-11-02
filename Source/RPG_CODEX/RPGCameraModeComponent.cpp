@@ -238,8 +238,13 @@ void URPGCameraModeComponent::HoldReticleSpot(bool bActive)
 	// Where the camera actually is this frame (the arm may lag behind its offset), looking along the view.
 	const FRotator View = Player->GetControlRotation();
 	const FVector Eye = Camera->GetComponentLocation();
+	constexpr float ReticleYawPolePitch = 80.f;
 	if (!bHoldingReticleSpot || !View.Equals(HeldViewRotation, 0.01f))
 	{
+		// Near vertical, tiny shoulder-camera translations can reverse the point's horizontal bearing. Correcting
+		// that bearing rotates the offset camera again and feeds the next correction. Keep the player's look;
+		// latch this for the held point so pitch compensation cannot leave the pole and restart the feedback.
+		bHoldingReticleRotation = FMath::Abs(FRotator::NormalizeAxis(View.Pitch)) < ReticleYawPolePitch;
 		// Starting, or the player turned the view: hold what is under the reticle now (the first thing along the view,
 		// else far down it).
         // The new look input was made from the last rendered camera. The component may already have moved
@@ -256,8 +261,17 @@ void URPGCameraModeComponent::HoldReticleSpot(bool bActive)
         }
 		bHoldingReticleSpot = true;
 	}
-	const FRotator Kept = (HeldReticleSpot - Eye).Rotation();
-	HeldViewRotation = FRotator(Kept.Pitch, Kept.Yaw, View.Roll);
+	const FVector ToSpot = HeldReticleSpot - Eye;
+	if (ToSpot.IsNearlyZero(1.f)) { bHoldingReticleSpot = false; return; }
+	FRotator Kept = ToSpot.Rotation();
+	if (FMath::Abs(Kept.Pitch) >= ReticleYawPolePitch) bHoldingReticleRotation = false;
+	Kept.Yaw = bHoldingReticleRotation ? Kept.Yaw : View.Yaw;
+	Kept.Pitch = bHoldingReticleRotation ? Kept.Pitch : View.Pitch;
+	Kept.Roll = View.Roll;
+	// Match the normal camera pitch limits now, rather than have next frame's clamp look like fresh look input.
+	if (APlayerCameraManager* Manager = Player->PlayerCameraManager)
+		Manager->LimitViewPitch(Kept, Manager->ViewPitchMin, Manager->ViewPitchMax);
+	HeldViewRotation = Kept;
 	Player->SetControlRotation(HeldViewRotation);
 }
 

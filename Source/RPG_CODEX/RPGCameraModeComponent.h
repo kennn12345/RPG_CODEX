@@ -126,6 +126,7 @@ private:
     void HoldReticleSpot(bool bActive);
     float ReticleHoldTime = 0.f;
     bool bHoldingReticleSpot = false;
+    bool bHoldingReticleRotation = true;
     FVector HeldReticleSpot = FVector::ZeroVector;
     FRotator HeldViewRotation = FRotator::ZeroRotator;
     float ReferenceEyeWeight = 0.f;
