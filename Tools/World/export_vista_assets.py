@@ -366,6 +366,59 @@ def ground_swatch(name):
             for l in f.loops: l[uv].uv = (l.vert.co.x / 4, l.vert.co.y / 4)
     return obj(name, bm, ('Terrain',)), [], []
 
+# ---------------------------------------------------------------- cliffs + ivy (R01 slabs replayed)
+def edge_light(me):
+    """vertex colour for the stone materials: R = edge light (convex brighter, creases darker), G = height, B = random."""
+    zs = [v.co.z for v in me.vertices]; z0, z1 = min(zs), max(zs)
+    conv = [0.0] * len(me.vertices); cnt = [0] * len(me.vertices)
+    for e in me.edges:
+        a, b = e.vertices; d = me.vertices[b].co - me.vertices[a].co
+        if d.length < 1e-6: continue
+        c = (me.vertices[b].normal - me.vertices[a].normal).dot(d.normalized())
+        conv[a] += c; conv[b] += c; cnt[a] += 1; cnt[b] += 1
+    col = me.color_attributes.get('Col') or me.color_attributes.new('Col', 'FLOAT_COLOR', 'POINT')
+    for i, v in enumerate(me.vertices):
+        col.data[i].color = (max(0, min(1, .5 + conv[i] / max(1, cnt[i]) * 1.2)), (v.co.z - z0) / max(1e-3, z1 - z0), (i * 0.6180339) % 1.0, 1)
+
+def cliff_r02(name, seed, layers=4):
+    """R01 stacked-ledge cliff (same slabs: R01 code run with its ivy leaves only recorded), restyled: soft shading split
+    at 40 deg, edge-light vertex colour, ivy = thick leaf-bunch mats spilling over each ledge top + denser curtains."""
+    rec = []
+    def record(bm, col, p, n, size, light, tint, normal):
+        rnd_ = R1['rnd']; rnd_.gauss(0, 1); rnd_.gauss(0, 1); rnd_.gauss(0, 1); rnd_.uniform(14, 30); rnd_.randrange(4)
+        rec.append((p.copy(), n.copy(), size, light, normal.copy())); return []
+    R1['leaf'] = record
+    rock = R1['cliff'](name + '_rock', seed, layers)
+    me = rock.data                                                       # R01 flat slab normals kept (big planes, like the reference)
+    edge_light(me)
+    rnd = random.Random(seed * 13); M = Mesh()
+    # curtains: the R01 strand positions, as leaf bunches (fewer, bigger, overlapping)
+    for (p, n, size, light, normal) in rec:
+        bunch_card(M, rnd, p, n, size * 2.1, ramp(.25 + light * .75 + rnd.gauss(0, .06)), (normal * .6 + UP * .3).normalized(), mat=0)
+    # mats on ledge tops: cards lying on up-facing rock faces near their outer edge, spilling over it
+    tops = [p for p in me.polygons if p.normal.z > .9 and p.area > 1.0]
+    for f in tops:
+        cen = f.center; verts = [me.vertices[i].co for i in f.vertices]
+        for k in range(int(f.area * 6.0)):
+            a, b = rnd.sample(range(len(verts)), 2); t = rnd.random()
+            e = verts[a].lerp(verts[b], t)                                      # a point on the rim polygon
+            q = e.lerp(cen, rnd.uniform(0, .5) ** 1.5) + UP * .04
+            out = (e - cen); out.z = 0
+            if out.length < 1e-3 or rnd.random() < .25: continue
+            out.normalize()
+            fc = (UP * .8 + out * .45 + Vector((rnd.uniform(-.2, .2), rnd.uniform(-.2, .2), 0))).normalized()
+            bunch_card(M, rnd, q + out * .15, fc, rnd.uniform(.9, 1.35), ramp(.62 + rnd.gauss(0, .08)), (UP * .7 + out * .3).normalized(), mat=0)
+            if rnd.random() < .55:                                              # a short spill over the edge
+                bunch_card(M, rnd, e + out * .25 - UP * .25, (out + UP * .2).normalized(), rnd.uniform(.5, .75), ramp(.45 + rnd.gauss(0, .08)), out, mat=0)
+    ivy = M.build(name + '_ivy', ('Leaves',), (True,))
+    # join: slot 0 Rock (cliff), slot 1 Leaves
+    rock.data.materials.clear(); rock.data.materials.append(bpy.data.materials.get('Rock')); rock.data.materials.append(bpy.data.materials.get('Leaves'))
+    ivy.data.materials.clear(); ivy.data.materials.append(bpy.data.materials.get('Rock')); ivy.data.materials.append(bpy.data.materials.get('Leaves'))
+    for p in ivy.data.polygons: p.material_index = 1
+    bpy.ops.object.select_all(action='DESELECT'); rock.select_set(True); ivy.select_set(True)
+    bpy.context.view_layer.objects.active = rock; bpy.ops.object.join(); rock.name = name; rock.data.name = name
+    return rock, [], []
+
 # ---------------------------------------------------------------- preview renders (golden hour)
 def preview_scene():
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.samples = 32; sc.cycles.use_denoising = True
@@ -441,6 +494,8 @@ JOBS = [
     ('details', 'SM_Vista_PathStones', lambda: path_stones('SM_Vista_PathStones', 44), (2.0, .05)),
     ('details', 'SM_Vista_FallenLeaves', lambda: fallen_leaves('SM_Vista_FallenLeaves', 45), (2.2, 0.0)),
     ('ground', 'SM_Review_GroundSwatch', lambda: ground_swatch('SM_Review_GroundSwatch'), None),
+    ('cliffs', 'SM_Vista_Cliff_A', lambda: cliff_r02('SM_Vista_Cliff_A', 31), (30, 5)),
+    ('cliffs', 'SM_Vista_Cliff_B', lambda: cliff_r02('SM_Vista_Cliff_B', 47, layers=3), (26, 4)),
 ]
 preview_materials()
 for group, name, fn, view in JOBS:
