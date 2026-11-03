@@ -35,7 +35,7 @@ Raw shots: Saved/Screenshots/Assets (AS_*_16.00 / _17.30), Saved/Screenshots/Wor
 - 33d54cb Restyle rocks, ground, cliffs and small effects toward the reference palette
 - d9c2320 Update asset restyle progress
 - 67291b3 Painted textures + relief, new forest-floor details, first Unreal import + review
-- (this commit) Place the detail pieces in L_WorldVista; ARPGScatter NearPathMax / IncludeCircles / bIgnoreOtherScatters; wheat 0.7-1 m
+- 139b0f1 Place the detail pieces in L_WorldVista; ARPGScatter NearPathMax / IncludeCircles / bIgnoreOtherScatters; wheat 0.7-1 m
 
 ## Next iteration (if the user asks / scheduled run)
 - Cliffs: ivy still lighter than the video's thick mats; slabs could use more stepped breaks.

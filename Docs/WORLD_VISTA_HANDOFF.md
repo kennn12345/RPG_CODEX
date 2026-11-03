@@ -122,7 +122,7 @@ LogCrowdFollowing "Unable to find RecastNavMesh" warning fires during world clea
   bellflowers, blue flowers, clover, mushrooms, log + stump with UCX, branches, ivy curtain) in builder "details".
   Review gallery cameras AS_Item_NN_<asset> in L_AssetReview give one framed preview per asset.
   In-place re-import gotcha: the new geometry lands on a NEW material slot - always use set_all()/assign().
-- Detail placement (user OK):  -> Detail_* ARPGScatter actors in L_WorldVista (folder
+- Detail placement (user OK): Tools/World/place_vista_details.py -> Detail_* ARPGScatter actors in L_WorldVista (folder
   Details), re-runnable. ARPGScatter gained NearPathMax (band along the path), IncludeCircles (keep-in circles: tree feet,
   rock rings, shores) and bIgnoreOtherScatters (trace the ground only); narrow keep-in areas get 60 tries per instance.
   Photo cameras keep a 3.5 m clear circle. Traces need a temporary terrain copy right after load_level (no physics yet).
