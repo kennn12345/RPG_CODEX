@@ -4,7 +4,9 @@
 #include "Components/DecalComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "GameFramework/Character.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 namespace
@@ -45,6 +47,8 @@ void URPGWaterZoneComponent::OnRegister()
 		Underwater = NewObject<UPostProcessComponent>(Owner, NAME_None, RF_Transient);
 		Underwater->SetupAttachment(this);
 		Underwater->bUnbound = false;
+		Underwater->BlendRadius = 0.f;    // the default 1 m blend tinted the view while the camera was still above the water
+		Underwater->BlendWeight = 0.f;    // switched on per frame only while the camera is below the (wavy) surface - see Tick
 		Underwater->Priority = 10.f;
 		Underwater->Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f, UnderwaterMaterial));
 		Underwater->RegisterComponent();
@@ -142,6 +146,12 @@ void URPGWaterZoneComponent::Release(ACharacter* Character)
 void URPGWaterZoneComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	if (Underwater)
+	{
+		// Underwater look only while the camera itself is under the moving surface (not merely inside the box).
+		const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
+		Underwater->BlendWeight = Camera && GetImmersion(Camera->GetCameraLocation()) > 0.f ? 1.f : 0.f;
+	}
 	for (int32 i = Characters.Num() - 1; i >= 0; --i)
 	{
 		ACharacter* Character = Characters[i];

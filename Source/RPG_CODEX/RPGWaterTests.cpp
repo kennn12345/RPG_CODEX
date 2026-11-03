@@ -2,6 +2,7 @@
 //   RPG.Water.Buoyancy - floating props settle at the surface (not sunk, not launched); the river log drifts downstream.
 //   RPG.Water.Wading   - a CharacterMovement walker goes from dry ground into wading depth and over its head: wading is
 //                        slower, deep water is "walk along the bottom" (slower, lower gravity), and leaving restores it.
+//   RPG.Water.VistaPools - L_WorldVista: a walker and the player dropped into every lake / pond reach the bed.
 //   UnrealEditor-Cmd.exe RPG_CODEX.uproject -ExecCmds="Automation RunTests RPG.Water" -TestExit="Automation Test Queue Empty" -unattended -nullrhi
 
 #include "CoreMinimal.h"
@@ -19,6 +20,7 @@
 #include "Misc/AutomationTest.h"
 #include "RPGBuoyancyComponent.h"
 #include "RPGFloatingProp.h"
+#include "RPGWaterBody.h"
 #include "RPGWaterZoneComponent.h"
 #include "Settings/LevelEditorPlaySettings.h"
 #include "Tests/AutomationCommon.h"
@@ -155,6 +157,94 @@ namespace
 		FVector Last = FVector::ZeroVector, RunStart = FVector::ZeroVector;
 		TObjectPtr<ACharacter> Walker = nullptr;
 	};
+}
+
+namespace
+{
+	// Drops a plain walker and the real player pawn into the middle of every lake / pond in L_WorldVista and checks they
+	// sink to the bed (head under where it is deep) instead of standing on something at the surface; logs what they stand on.
+	class FVistaPoolsCheck : public IAutomationLatentCommand
+	{
+	public:
+		explicit FVistaPoolsCheck(FAutomationTestBase* InTest) : Test(InTest) {}
+		virtual bool Update() override
+		{
+			UWorld* World = GEditor ? GEditor->PlayWorld : nullptr;
+			APlayerController* PC = World ? UGameplayStatics::GetPlayerController(World, 0) : nullptr;
+			if (!PC || !PC->GetPawn()) return ++Frames > 900 ? (Test->AddError(TEXT("no play world / player")), true) : false;
+			if (Bodies.IsEmpty())
+			{
+				for (TActorIterator<ARPGWaterBody> It(World); It; ++It) Bodies.Add(*It);
+				if (Bodies.IsEmpty()) { Test->AddError(TEXT("no ARPGWaterBody in the map")); return true; }
+				FActorSpawnParameters P; P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				Walker = World->SpawnActor<ACharacter>(ACharacter::StaticClass(), FVector(0.f, 0.f, 50000.f), FRotator::ZeroRotator, P);
+				Walker->SpawnDefaultController();
+			}
+			if (Index >= Bodies.Num() * 2) return true;
+			ARPGWaterBody* Body = Bodies[Index / 2].Get();
+			ACharacter* Who = (Index % 2) ? Cast<ACharacter>(PC->GetPawn()) : Walker.Get();
+			if (!Body || !Who) { ++Index; return false; }
+			const URPGWaterZoneComponent* Zone = Body->Zone;
+			const FVector Centre = Zone->GetComponentLocation();
+			const float Surface = Zone->GetComponentLocation().Z + Zone->GetScaledBoxExtent().Z;
+			const float Now = World->GetTimeSeconds();
+			if (!bDropped)
+			{
+				Who->SetActorLocation(FVector(Centre.X, Centre.Y, Surface + 300.f), false, nullptr, ETeleportType::ResetPhysics);
+				Who->GetCharacterMovement()->StopMovementImmediately();
+				Who->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+				DropAt = Now; bDropped = true;
+				return false;
+			}
+			if (Now - DropAt < 5.f) return false;
+			UCharacterMovementComponent* Move = Who->GetCharacterMovement();
+			const float Half = Who->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+			const float Feet = Who->GetActorLocation().Z - Half;
+			FHitResult Bed;
+			FCollisionQueryParams Q(TEXT("PoolBed"), true); Q.AddIgnoredActor(Who); Q.AddIgnoredActor(Walker.Get()); Q.AddIgnoredActor(PC->GetPawn());
+			World->LineTraceSingleByChannel(Bed, FVector(Centre.X, Centre.Y, Surface + 100.f), FVector(Centre.X, Centre.Y, Surface - 5000.f), ECC_Visibility, Q);
+			const FString Floor = Move->CurrentFloor.HitResult.GetComponent()
+				? FString::Printf(TEXT("%s.%s"), *GetNameSafe(Move->CurrentFloor.HitResult.GetActor()), *Move->CurrentFloor.HitResult.GetComponent()->GetName()) : FString(TEXT("none"));
+			const float Depth = Surface - Bed.ImpactPoint.Z;
+			FHitResult Under;                                       // water depth where the character actually ended up
+			const FVector At = Who->GetActorLocation();
+			World->LineTraceSingleByChannel(Under, FVector(At.X, At.Y, Surface + 100.f), FVector(At.X, At.Y, Surface - 5000.f), ECC_Visibility, Q);
+			const float DepthHere = Surface - Under.ImpactPoint.Z;
+			Test->AddInfo(FString::Printf(TEXT("%s / %s: surface %.0f, bed %.0f (depth %.0f, hit %s), feet %.0f, mode %d, floor %s, water state %d"),
+				*Body->GetActorNameOrLabel(), (Index % 2) ? TEXT("player") : TEXT("walker"), Surface, Bed.ImpactPoint.Z, Depth,
+				*GetNameSafe(Bed.GetActor()), Feet, (int32)Move->MovementMode.GetValue(), *Floor, URPGWaterZoneComponent::GetCharacterWaterState(Who)));
+			const AActor* FloorActor = Move->CurrentFloor.HitResult.GetActor();
+			const TCHAR* Kind = (Index % 2) ? TEXT("player") : TEXT("walker");
+			Test->TestTrue(FString::Printf(TEXT("%s %s sinks below the surface onto the bed, not onto anything at the surface (feet %.0f, surface %.0f, floor %s)"),
+				*Body->GetActorNameOrLabel(), Kind, Feet, Surface, *Floor), Feet < Surface - 40.f && FloorActor == Under.GetActor());
+			if (DepthHere > 2.f * Half + 40.f)
+				Test->TestEqual(FString::Printf(TEXT("%s %s is head-under in deep water (depth %.0f where it stands)"), *Body->GetActorNameOrLabel(), Kind, DepthHere),
+					URPGWaterZoneComponent::GetCharacterWaterState(Who), 2);
+			++Index; bDropped = false;
+			return false;
+		}
+	private:
+		FAutomationTestBase* Test;
+		TArray<TWeakObjectPtr<ARPGWaterBody>> Bodies;
+		TObjectPtr<ACharacter> Walker = nullptr;
+		int32 Index = 0, Frames = 0;
+		bool bDropped = false;
+		float DropAt = 0.f;
+	};
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGWaterVistaPoolsTest, "RPG.Water.VistaPools", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+bool FRPGWaterVistaPoolsTest::RunTest(const FString&)
+{
+	FAutomationEditorCommonUtils::LoadMap(TEXT("/Game/RPG/Maps/L_WorldVista"));
+	FRequestPlaySessionParams Session;
+	Session.WorldType = EPlaySessionWorldType::PlayInEditor;
+	Session.EditorPlaySettings = NewObject<ULevelEditorPlaySettings>();
+	GEditor->RequestPlaySession(Session);
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVistaPoolsCheck(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGWaterBuoyancyTest, "RPG.Water.Buoyancy", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

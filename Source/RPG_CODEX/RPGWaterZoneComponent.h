@@ -15,7 +15,7 @@ class UPostProcessComponent;
 // - Characters inside: wading slows them as the water gets deeper; once the head is under, they walk along the bottom
 //   (slower, lower gravity - floatier jumps) with their normal walk animations. There is no swimming (no swim clips).
 //   Originals are restored when they leave. Only Walking/Falling characters are affected (flight etc. untouched).
-// - Underwater look: a post-process (tint, fog, light rays) applied while the camera is inside the box.
+// - Underwater look: a post-process (tint, fog, light rays) applied while the camera is below the wavy surface.
 // - Optional caustics: a decal projected down onto the bed inside the box.
 UCLASS(ClassGroup = (RPG), meta = (BlueprintSpawnableComponent))
 class RPG_CODEX_API URPGWaterZoneComponent : public UBoxComponent
