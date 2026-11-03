@@ -1,0 +1,191 @@
+"""Builds /Game/RPG/Maps/L_AssetReview: a review stage for the world assets (restyle toward the Dreamscape: Tower video).
+Neutral grassy ground, the vista's golden-hour light (same ARPGSkyCycle settings, frozen at 17.3 h, same sky dome and
+grade), and one "station" per asset group with fixed cameras tagged "AssetShot":
+  <station>_Lit  = sun behind-left of the camera (3/4 lit, like most reference frames)
+  <station>_Back = looking toward the low sun (backlit canopies / grass glow)
+  <station>_Close = close-up where small details matter (bark, blades, petals)
+Stations are laid out relative to the sun, so every re-render has the same light angle. Missing assets are skipped.
+Assets come from Tools/World/build_vista_assets.py (run it first). Re-running this script rebuilds the map.
+  UnrealEditor.exe RPG_CODEX.uproject -ExecutePythonScript="C:/UNREAL PROJECTS/RPG_CODEX/Tools/World/build_asset_review.py" -unattended -RenderOffscreen
+Photograph: -ExecCmds="Automation RunTests Visual.AssetShots" -TestExit="Automation Test Queue Empty"
+  (env RPG_ASSET_SHOTS=<camera prefix> shoots only those, e.g. AS_Trees) -> Saved/Screenshots/Assets/<camera>.png"""
+import unreal, math
+
+MAP = '/Game/RPG/Maps/L_AssetReview'
+ROOT = '/Game/RPG/Environment/World'
+MESHES, MATS = ROOT + '/Meshes', ROOT + '/Materials'
+ROCKS = '/Game/RPG/Environment/Rocks/Meshes'
+EAL = unreal.EditorAssetLibrary
+les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem); eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+
+def load(path): return unreal.load_asset(path) if EAL.does_asset_exist(path) else None
+def need(path):
+    a = load(path)
+    if not a: raise RuntimeError(f'missing asset {path} - run Tools/World/build_vista_assets.py first')
+    return a
+
+if EAL.does_asset_exist(MAP):
+    les.load_level(MAP)
+    for a in eas.get_all_level_actors():
+        if not isinstance(a, (unreal.WorldSettings, unreal.Brush)): eas.destroy_actor(a)
+else:
+    les.new_level(MAP)
+
+def spawn(what, loc, rot=(0, 0, 0), label=None, scale=None):
+    r = unreal.Rotator(roll=rot[2], pitch=rot[1], yaw=rot[0])
+    a = eas.spawn_actor_from_class(what, unreal.Vector(*loc), r) if isinstance(what, type) else eas.spawn_actor_from_object(what, unreal.Vector(*loc), r)
+    if label: a.set_actor_label(label)
+    if scale: a.set_actor_scale3d(unreal.Vector(*scale))
+    return a
+def setp(obj, props, what):
+    for prop, val in props:
+        try: obj.set_editor_property(prop, val)
+        except Exception as ex: unreal.log_warning(f'{what} {prop}: {ex}')
+
+# ---- light: same as L_WorldVista (build_vista.py), frozen at golden hour
+def dir_light(label, index):
+    a = spawn(unreal.DirectionalLight, (0, 0, 3000), (0, -45, 0), label)
+    a.root_component.set_mobility(unreal.ComponentMobility.MOVABLE)
+    setp(a.get_component_by_class(unreal.DirectionalLightComponent), (('atmosphere_sun_light', True), ('atmosphere_sun_light_index', index),
+         ('cast_shadows', True), ('light_source_angle', 1.5), ('cast_cloud_shadows', True)), label)
+    return a
+sun = dir_light('Sun', 0); moon = dir_light('Moon', 1)
+setp(sun.get_component_by_class(unreal.DirectionalLightComponent), (('enable_light_shaft_bloom', True), ('bloom_scale', 0.35)), 'sun')
+atm = spawn(unreal.SkyAtmosphere, (0, 0, 0), label='SkyAtmosphere')
+setp(atm.get_component_by_class(unreal.SkyAtmosphereComponent), (('aerial_perspective_start_depth', 100.0), ('mie_scattering_scale', 0.006)), 'atmosphere')
+clouds = spawn(unreal.VolumetricCloud, (0, 0, 0), label='Clouds')
+cc_ = clouds.get_component_by_class(unreal.VolumetricCloudComponent)
+setp(cc_, (('layer_bottom_altitude', 2.2), ('layer_height', 4.5), ('material', need(f'{MATS}/MI_Vista_Clouds'))), 'clouds')
+sky = spawn(unreal.SkyLight, (0, 0, 800), label='SkyLight')
+sky.root_component.set_mobility(unreal.ComponentMobility.MOVABLE)
+setp(sky.get_component_by_class(unreal.SkyLightComponent), (('real_time_capture', True), ('intensity', 1.35)), 'skylight')
+fog = spawn(unreal.ExponentialHeightFog, (0, 0, -300), label='HazeFog')
+setp(fog.get_component_by_class(unreal.ExponentialHeightFogComponent),
+     (('fog_density', 0.007), ('fog_height_falloff', 0.1), ('start_distance', 2500.0), ('fog_max_opacity', 0.8), ('fog_cutoff_distance', 2.0e6),
+      ('directional_inscattering_exponent', 6.0), ('enable_volumetric_fog', True), ('volumetric_fog_scattering_distribution', 0.6)), 'fog')
+pp = spawn(unreal.PostProcessVolume, (0, 0, 0), label='Grade'); pp.set_editor_property('unbound', True)
+s = pp.get_editor_property('settings')
+for prop, val in (('auto_exposure_bias', 0.15), ('auto_exposure_min_brightness', -1.5), ('auto_exposure_max_brightness', 14.0),
+                  ('bloom_intensity', 1.1), ('color_saturation', unreal.Vector4(1.15, 1.15, 1.15, 1.0)),
+                  ('color_contrast', unreal.Vector4(1.05, 1.05, 1.05, 1.0)), ('vignette_intensity', 0.3)):
+    try: s.set_editor_property('override_' + prop, True); s.set_editor_property(prop, val)
+    except Exception as ex: unreal.log_warning(f'grade {prop}: {ex}')
+pp.set_editor_property('settings', s)
+dome_mesh = unreal.load_asset('/Engine/EngineSky/SM_SkySphere')
+dome = spawn(dome_mesh, (0, 0, 0), label='SkyDome')
+dsm = dome.static_mesh_component
+dsm.set_material(0, need(f'{MATS}/M_Vista_Sky')); setp(dsm, (('cast_shadow', False), ('bounds_scale', 10.0)), 'dome')
+dsm.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+dome.set_actor_scale3d(unreal.Vector(*(3.0e6 / max(dome_mesh.get_bounds().box_extent.x, 1.0),) * 3))
+cyc = spawn(unreal.RPGSkyCycle, (0, 0, 0), label='SkyCycle')
+for k, v in (('sun', sun), ('moon', moon), ('sky_light', sky), ('fog', fog), ('grade', pp), ('time_of_day', 17.3), ('animate', False),
+             ('sunrise_yaw', 140.0), ('day_length_minutes', 24.0), ('moon_intensity', 0.25), ('exposure_bias_night', -2.5), ('sky_light_day', 0.9), ('sun_intensity', 9.0),
+             ('sun_color_low', unreal.LinearColor(1.0, 0.55, 0.28, 1)), ('haze_low', unreal.LinearColor(0.48, 0.32, 0.24, 1)), ('sky_light_night', 1.0)):
+    try: cyc.set_editor_property(k, v)
+    except Exception as ex: unreal.log_warning(f'sky cycle {k}: {ex}')
+cyc.set_time_of_day(17.3)
+cyc.set_editor_property('sky_receivers', [dome])
+
+# ---- frame relative to the sun: F = where the light travels (horizontal); cameras look along D (sun behind-left)
+sf = sun.get_actor_forward_vector()
+FX, FY = sf.x / math.hypot(sf.x, sf.y), sf.y / math.hypot(sf.x, sf.y)
+def rot2(x, y, deg):
+    a = math.radians(deg); return (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a))
+DX, DY = rot2(FX, FY, 35.0)                  # look direction for _Lit cameras
+PX, PY = -DY, DX                             # across the view (stations line up along P, items spread along P)
+unreal.log(f'REVIEW sun forward {sf} look {DX:.2f},{DY:.2f}')
+
+def W(cx, cy, a, b):
+    """station-local (a = across, b = forward along D) -> world XY around station centre (cx, cy)."""
+    return (cx + PX * a + DX * b, cy + PY * a + DY * b)
+
+# ---- neutral ground (big flat grassy plane; the review ground material is made by build_vista_assets.py "review")
+plane = need('/Engine/BasicShapes/Plane')
+ground = spawn(plane, (0, 0, 0), label='Ground', scale=(1200, 1200, 1))
+gm = load(f'{MATS}/M_Review_Ground')
+if gm: ground.static_mesh_component.set_material(0, gm)
+
+def cam(label, eye, tgt, fov=62.0):
+    d = (tgt[0] - eye[0], tgt[1] - eye[1], tgt[2] - eye[2])
+    c = spawn(unreal.CameraActor, eye, (math.degrees(math.atan2(d[1], d[0])), math.degrees(math.atan2(d[2], math.hypot(d[0], d[1]))), 0), label)
+    c.tags = [unreal.Name('AssetShot')]
+    cc = c.get_component_by_class(unreal.CameraComponent); cc.set_editor_property('field_of_view', fov); cc.set_editor_property('constrain_aspect_ratio', False)
+
+def cams(name, cx, cy, dist, eye_h, tgt_h, fov=62.0, close=None):
+    """_Lit from in front (sun behind-left), _Back from the far side looking toward the sun."""
+    e = W(cx, cy, 0, -dist); cam(f'{name}_Lit', (e[0], e[1], eye_h), (cx, cy, tgt_h), fov)
+    bx, by = rot2(DX, DY, 150.0); cam(f'{name}_Back', (cx - bx * dist, cy - by * dist, eye_h), (cx, cy, tgt_h), fov)
+    if close:                                     # (across, forward, eye h, target across, target forward, target h, fov)
+        a, b, h, ta, tb, th, f = close
+        e = W(cx, cy, a, b); t = W(cx, cy, ta, tb); cam(f'{name}_Close', (e[0], e[1], h), (t[0], t[1], th), f)
+
+def place(mesh, cx, cy, a, b, yaw=0.0, scale=1.0, label=None):
+    if not mesh: return None
+    x, y = W(cx, cy, a, b)
+    return spawn(mesh, (x, y, 0), (yaw, 0, 0), label, (scale, scale, scale))
+
+def scatter(label, mesh, count, cx, cy, half, seed, scale=(0.8, 1.2), patch=0.0, cover=0.5, material=None):
+    if not mesh: return
+    a = spawn(unreal.RPGScatter, (cx, cy, 0), label=label)
+    for k, v in (('mesh', mesh), ('count', count), ('half_extent', unreal.Vector2D(*half)), ('seed', seed), ('scale_range', unreal.Vector2D(*scale)),
+                 ('min_up_normal', 0.7), ('patch_size', patch), ('patch_coverage', cover), ('skip_water', False), ('cull_distance', 9000.0)):
+        a.set_editor_property(k, v)
+    if material: a.set_editor_property('material', material)
+    a.get_editor_property('instances').set_editor_property('cast_shadow', False)
+    a.rebuild()
+
+STEP = 7000.0                                  # stations every 70 m along P
+def station(i): return (PX * STEP * (i - 3), PY * STEP * (i - 3))
+
+# 0 round world trees (vista scale range 0.85-1.3 -> shown at 1.0)
+cx, cy = station(0)
+for k, n in enumerate(('SM_Vista_Tree_Round', 'SM_Vista_Tree_Tall', 'SM_Vista_Tree_Wide')):
+    place(load(f'{MESHES}/{n}'), cx, cy, (k - 1) * 1300, 0, k * 70, 1.0, f'Tree_{n[13:]}')
+scatter('Grass_Trees', load(f'{MESHES}/SM_Vista_Grass'), 2500, cx, cy, (2600, 2600), 3)
+cams('AS_Trees_Round', cx, cy, 2700, 170, 520, 72, (300, -700, 170, 0, 0, 260, 60))
+# 1 ancient hero tree (vista scale 0.75)
+cx, cy = station(1)
+place(load(f'{MESHES}/SM_Tree_Ancient'), cx, cy, 0, 0, 40, 0.75, 'Tree_Ancient')
+scatter('Grass_Ancient', load(f'{MESHES}/SM_Vista_Grass'), 3000, cx, cy, (2800, 2800), 4)
+cams('AS_Tree_Ancient', cx, cy, 3400, 170, 900, 75, (-200, -1300, 170, 0, 0, 120, 62))
+# 2 Blender forest trees (Trees_R02, reusable)
+cx, cy = station(2)
+for k in range(4):
+    place(load(f'{MESHES}/SM_Tree_Forest_0{k + 1}'), cx, cy, (k - 1.5) * 1100, 0, k * 50, 1.0, f'Tree_Forest_0{k + 1}')
+scatter('Grass_Forest', load(f'{MESHES}/SM_Vista_Grass'), 2500, cx, cy, (2600, 2600), 5)
+cams('AS_Trees_Forest', cx, cy, 2600, 170, 500, 75)
+# 3 ground cover: grass, tall grass, poppies, daisies, wheat
+cx, cy = station(3)
+scatter('Cover_Grass', load(f'{MESHES}/SM_Vista_Grass'), 9000, cx, cy, (1800, 1800), 11)
+scatter('Cover_GrassTall', load(f'{MESHES}/SM_Vista_GrassTall'), 1200, cx, cy, (1800, 1800), 12, patch=900, cover=0.45)
+scatter('Cover_Poppies', load(f'{MESHES}/SM_Vista_Poppies'), 900, cx, cy, (1800, 1800), 13, (1.1, 1.5), patch=700, cover=0.35)
+scatter('Cover_Daisies', load(f'{MESHES}/SM_Vista_Daisies'), 400, cx, cy, (1800, 1800), 14, (0.9, 1.2), patch=600, cover=0.3)
+wx, wy = W(cx, cy, 0, 1300)
+scatter('Cover_Wheat', load(f'{MESHES}/SM_Vista_Wheat'), 2500, wx, wy, (700, 500), 15, (0.9, 1.3))
+cams('AS_Cover', cx, cy, 1500, 150, 60, 66, (0, -350, 110, 0, 0, 20, 55))
+# 4 ground swatch: terrain material with path / shore / rock-slope vertex colours (SM_Review_GroundSwatch)
+cx, cy = station(4)
+sw = place(load(f'{MESHES}/SM_Review_GroundSwatch'), cx, cy, 0, 0, math.degrees(math.atan2(DY, DX)) - 90.0, 1.0, 'GroundSwatch')
+if sw: sw.set_actor_location(unreal.Vector(cx, cy, 2), False, False)
+cams('AS_Ground', cx, cy, 1300, 260, 0, 66, (250, -500, 150, 0, 0, 0, 60))
+# 5 rocks: the Blender rock library, one of each size
+cx, cy = station(5)
+for k, n in enumerate(('Rock_Large_A', 'Rock_MediumLarge_B', 'Rock_Medium_A', 'Rock_MediumSmall_C', 'Rock_SmallMedium_A', 'Pebbles_A')):
+    place(load(f'{ROCKS}/SM_{n}'), cx, cy, (k - 2.5) * 420 + (k > 0) * 200, (k % 2) * 150, k * 33, 1.0, n)
+scatter('Grass_Rocks', load(f'{MESHES}/SM_Vista_Grass'), 2500, cx, cy, (1800, 1800), 6)
+cams('AS_Rocks', cx, cy, 1300, 170, 120, 70, (-650, -500, 150, -800, 0, 120, 55))
+# 6 cliffs with ivy
+cx, cy = station(6)
+place(load(f'{MESHES}/SM_Vista_Cliff_A'), cx, cy, -800, 400, 0, 1.0, 'Cliff_A')
+place(load(f'{MESHES}/SM_Vista_Cliff_B'), cx, cy, 900, 600, 60, 1.0, 'Cliff_B')
+cams('AS_Cliffs', cx, cy, 2600, 200, 500, 72, (-500, -900, 170, -800, 400, 400, 62))
+# 7 detail pieces (bushes, tufts, fallen leaves, path stones, reeds - whichever exist)
+cx, cy = station(7)
+details = ['SM_Vista_Bush_A', 'SM_Vista_Bush_B', 'SM_Vista_Tuft', 'SM_Vista_Reeds', 'SM_Vista_PathStones', 'SM_Vista_FallenLeaves']
+for k, n in enumerate(details):
+    place(load(f'{MESHES}/{n}'), cx, cy, (k - 2.5) * 350, 0, k * 40, 1.0, n[9:])
+cams('AS_Details', cx, cy, 1100, 150, 60, 66)
+
+les.save_current_level()
+unreal.log('ASSET_REVIEW_BUILT')
+unreal.SystemLibrary.quit_editor()

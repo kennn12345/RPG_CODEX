@@ -3,6 +3,8 @@
 // Visual.WorldShots does the same for L_WorldVista (tag "WorldShot", Saved/Screenshots/World/), and Visual.SkyShots
 // photographs the "SkyShot" cameras there at morning / noon / sunset / night (ARPGSkyCycle) -> Saved/Screenshots/Sky/.
 //   UnrealEditor.exe RPG_CODEX.uproject -ExecCmds="Automation RunTests Visual.WaterShots" -TestExit="Automation Test Queue Empty" -unattended
+// Visual.AssetShots photographs L_AssetReview (asset restyle review stage, tag "AssetShot") -> Saved/Screenshots/Assets/;
+// set the environment variable RPG_ASSET_SHOTS to a camera-label prefix (e.g. AS_Trees) to shoot only those cameras.
 // PNGs go to Saved/Screenshots/Water/<camera label>.png (sky shots: <camera label>_<hour>.png).
 
 #include "CoreMinimal.h"
@@ -18,6 +20,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "RPGSkyCycle.h"
+#include "HAL/PlatformMisc.h"
 #include "Settings/LevelEditorPlaySettings.h"
 #include "ShaderCompiler.h"
 #include "Tests/AutomationCommon.h"
@@ -29,8 +32,8 @@ namespace
 	class FRPGWaterShotsCommand : public IAutomationLatentCommand
 	{
 	public:
-		FRPGWaterShotsCommand(FAutomationTestBase* InTest, const TCHAR* InTag, const TCHAR* InFolder, TArray<float> InHours)
-			: Test(InTest), Tag(InTag), Folder(InFolder), Hours(MoveTemp(InHours)) {}
+		FRPGWaterShotsCommand(FAutomationTestBase* InTest, const TCHAR* InTag, const TCHAR* InFolder, TArray<float> InHours, FString InPrefix)
+			: Test(InTest), Tag(InTag), Folder(InFolder), Hours(MoveTemp(InHours)), Prefix(MoveTemp(InPrefix)) {}
 
 		virtual bool Update() override
 		{
@@ -42,7 +45,7 @@ namespace
 			if (Cameras.IsEmpty())
 			{
 				for (TActorIterator<ACameraActor> It(World); It; ++It)
-					if (It->ActorHasTag(Tag)) Cameras.Add(*It);
+					if (It->ActorHasTag(Tag) && (Prefix.IsEmpty() || It->GetActorNameOrLabel().StartsWith(Prefix))) Cameras.Add(*It);
 				if (Cameras.IsEmpty()) return Fail(*FString::Printf(TEXT("no CameraActor tagged %s"), *Tag.ToString()));
 				Cameras.Sort([](const TWeakObjectPtr<ACameraActor>& A, const TWeakObjectPtr<ACameraActor>& B) { return A->GetActorNameOrLabel() < B->GetActorNameOrLabel(); });
 				if (APawn* Player = Controller->GetPawn())
@@ -96,6 +99,7 @@ namespace
 		FName Tag;
 		FString Folder;
 		TArray<float> Hours;
+		FString Prefix;
 		TArray<TWeakObjectPtr<ACameraActor>> Cameras;
 		TWeakObjectPtr<ARPGSkyCycle> Sky;
 		int32 Index = 0, WaitFrames = 0;
@@ -104,7 +108,7 @@ namespace
 	};
 }
 
-static void RunShots(FAutomationTestBase* Test, const TCHAR* Map, const TCHAR* Tag, const TCHAR* Folder, TArray<float> Hours = {})
+static void RunShots(FAutomationTestBase* Test, const TCHAR* Map, const TCHAR* Tag, const TCHAR* Folder, TArray<float> Hours = {}, FString Prefix = FString())
 {
 	FAutomationEditorCommonUtils::LoadMap(Map);
 	ULevelEditorPlaySettings* Play = NewObject<ULevelEditorPlaySettings>();
@@ -115,7 +119,7 @@ static void RunShots(FAutomationTestBase* Test, const TCHAR* Map, const TCHAR* T
 	Session.EditorPlaySettings = Play;
 	GEditor->RequestPlaySession(Session);
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.f));
-	ADD_LATENT_AUTOMATION_COMMAND(FRPGWaterShotsCommand(Test, Tag, Folder, MoveTemp(Hours)));
+	ADD_LATENT_AUTOMATION_COMMAND(FRPGWaterShotsCommand(Test, Tag, Folder, MoveTemp(Hours), MoveTemp(Prefix)));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
 }
@@ -130,5 +134,13 @@ bool FRPGWorldShots::RunTest(const FString&) { RunShots(this, TEXT("/Game/RPG/Ma
 // The day/night cycle: "SkyShot" cameras at morning, noon, sunset, dusk and midnight -> Saved/Screenshots/Sky/.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGSkyShots, "Visual.SkyShots", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FRPGSkyShots::RunTest(const FString&) { RunShots(this, TEXT("/Game/RPG/Maps/L_WorldVista"), TEXT("SkyShot"), TEXT("Sky"), {6.3f, 12.f, 17.6f, 19.f, 0.f}); return true; }
+
+// Asset restyle review stage: "AssetShot" cameras in L_AssetReview (golden hour, neutral ground) -> Saved/Screenshots/Assets/.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGAssetShots, "Visual.AssetShots", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+bool FRPGAssetShots::RunTest(const FString&)
+{
+	RunShots(this, TEXT("/Game/RPG/Maps/L_AssetReview"), TEXT("AssetShot"), TEXT("Assets"), {}, FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_ASSET_SHOTS")));
+	return true;
+}
 
 #endif

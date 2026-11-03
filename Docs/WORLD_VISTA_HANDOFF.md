@@ -95,3 +95,25 @@ LogCrowdFollowing "Unable to find RecastNavMesh" warning fires during world clea
 - Round trees read a bit "topiary" up close; fluffy canopies still short of the reference. No hanging ivy on trees.
 - Lake mist barely visible. Rivers look foamy-white (shallow). Not tested by hand with the GASP player in this map.
 - Birds intentionally absent (user decision pending).
+
+## Asset pipeline (asset-restyle branch, 2026-11-03) - assets and layout are SEPARATE now
+- `Tools/World/build_vista_assets.py [builders]` creates/updates ASSETS ONLY, IN PLACE (materials cleared + rebuilt in
+  the same asset, meshes re-imported into the same asset, foliage types updated) -> L_WorldVista picks changes up without
+  a rebuild. Builders: textures, materials, review, ground, grass, flowers, trees_round, tree_ancient, trees_forest,
+  details, cliffs, effects, frozen ("all" = every one). Every import is checked: size vs the Blender manifest (new
+  assets) or vs the previous asset (restyles keep their size; re-imports at a corrected scale if > 5% off) and convex
+  hull count. Problems print as `ASSETS_PROBLEM ...`, the run ends with `ASSETS_DONE problems=N`.
+  Never rebuilt: M_Vista_Sky, MI_Vista_Clouds, the water (frozen by the user).
+- `Tools/World/build_vista.py` = LAYOUT ONLY (loads assets by path, never creates/deletes). Do not run it for restyles.
+- Blender sources: `Tools/World/export_vista_assets.py` -> outputs/World_R02/exports (+manifest.json, previews/):
+  round trees R02 (R01 trunk/branches/domes replayed with the same seeds; leaf-bunch canopy + LOD1/LOD2), grass, tall
+  grass, tuft, wheat (own mesh with ears), poppies, daisies (own mesh), bushes A/B, reeds, path stones, fallen leaves,
+  SM_Review_GroundSwatch. `export_vista_meshes.py` stays the R01 layout source (terrain, far land, vista_layout.json).
+  Blender trees: outputs/Trees_R02 (see its HANDOFF.md; R01 untouched).
+- Review stage: `Tools/World/build_asset_review.py` -> /Game/RPG/Maps/L_AssetReview (golden hour 17.3 frozen, same sky
+  and grade as the vista, stations laid out relative to the sun, cameras `AS_<station>_Lit/_Back/_Close`).
+  Photos: `-ExecCmds="Automation RunTests Visual.AssetShots"` (env RPG_ASSET_SHOTS=<prefix> = only those cameras)
+  -> Saved/Screenshots/Assets. Side-by-side sheets: `Tools/World/make_sheet.ps1` -> outputs/World_R01/review.
+- Reference frames + sampled palette: outputs/World_R01/reference (Ref_t0NN_*.png, PALETTE.md).
+- Foliage materials use world-space soft normals (`soft_normal`): tangent-space normals flip on the back face of
+  two-sided cards -> dark patches; the world-space vertex normal (bent / pulled up) is the same on both faces.
