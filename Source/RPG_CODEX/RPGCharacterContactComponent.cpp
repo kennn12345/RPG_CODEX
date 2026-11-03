@@ -28,8 +28,8 @@ namespace
 		const UCapsuleComponent* CB = B->GetCapsuleComponent();
 		const FVector D = CA->GetComponentLocation() - CB->GetComponentLocation();
 		const float RA = CA->GetScaledCapsuleRadius(), RB = CB->GetScaledCapsuleRadius();
-		const float Segments = CA->GetScaledCapsuleHalfHeight() - RA + CB->GetScaledCapsuleHalfHeight() - RB;
-		const double Z = FMath::Max(0., FMath::Abs(D.Z) - Segments);
+		const float SegmentSum = CA->GetScaledCapsuleHalfHeight() - RA + CB->GetScaledCapsuleHalfHeight() - RB;
+		const double Z = FMath::Max(0., FMath::Abs(D.Z) - SegmentSum);
 		return D.SizeSquared2D() + Z * Z > FMath::Square(RA + RB + 3.f);
 	}
 }
