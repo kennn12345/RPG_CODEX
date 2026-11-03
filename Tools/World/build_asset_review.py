@@ -24,6 +24,14 @@ def need(path):
     if not a: raise RuntimeError(f'missing asset {path} - run Tools/World/build_vista_assets.py first')
     return a
 
+# asset report (LOD counts / screen sizes) - a quick check that the hand-made LODs made it in
+for n in ('SM_Vista_Tree_Round', 'SM_Tree_Ancient', 'SM_Tree_Forest_01', 'SM_Vista_Grass', 'SM_Vista_Poppies', 'SM_Vista_Bush_A', 'SM_Vista_Fern'):
+    a = load(f'{MESHES}/{n}')
+    if a:
+        sm_ = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+        sizes = [round(float(v), 3) for v in sm_.get_lod_screen_sizes(a)] if hasattr(sm_, 'get_lod_screen_sizes') else None
+        unreal.log(f'REVIEW_LODS {n} lods={a.get_num_lods()} screens={sizes} tris0={a.get_num_triangles(0)}')
+
 if EAL.does_asset_exist(MAP):
     les.load_level(MAP)
     for a in eas.get_all_level_actors():
@@ -135,7 +143,7 @@ def scatter(label, mesh, count, cx, cy, half, seed, scale=(0.8, 1.2), patch=0.0,
     a.rebuild()
 
 STEP = 7000.0                                  # stations every 70 m along P
-def station(i): return (PX * STEP * (i - 3), PY * STEP * (i - 3))
+def station(i): return (PX * STEP * (i - 4), PY * STEP * (i - 4))
 
 # 0 round world trees (vista scale range 0.85-1.3 -> shown at 1.0)
 cx, cy = station(0)
@@ -166,7 +174,7 @@ cams('AS_Cover', cx, cy, 1500, 150, 60, 66, (0, -350, 110, 0, 0, 20, 55))
 # 4 ground swatch: terrain material with path / shore / rock-slope vertex colours (SM_Review_GroundSwatch)
 cx, cy = station(4)
 sw = place(load(f'{MESHES}/SM_Review_GroundSwatch'), cx, cy, 0, 0, math.degrees(math.atan2(DY, DX)) - 90.0, 1.0, 'GroundSwatch')
-if sw: sw.set_actor_location(unreal.Vector(cx, cy, 2), False, False)
+if sw: sw.set_actor_location(unreal.Vector(cx, cy, 75), False, False)   # above the review plane (swatch bumps are +-8 cm, wet hollow -60)
 cams('AS_Ground', cx, cy, 1300, 260, 0, 66, (250, -500, 150, 0, 0, 0, 60))
 # 5 rocks: the Blender rock library, one of each size
 cx, cy = station(5)
@@ -184,7 +192,42 @@ cx, cy = station(7)
 details = ['SM_Vista_Bush_A', 'SM_Vista_Bush_B', 'SM_Vista_Tuft', 'SM_Vista_Reeds', 'SM_Vista_PathStones', 'SM_Vista_FallenLeaves']
 for k, n in enumerate(details):
     place(load(f'{MESHES}/{n}'), cx, cy, (k - 2.5) * 350, 0, k * 40, 1.0, n[9:])
-cams('AS_Details', cx, cy, 1100, 150, 60, 66)
+scatter('Grass_Details', load(f'{MESHES}/SM_Vista_Grass'), 120, cx, cy, (1600, 1200), 7)        # sparse: the pieces must stay visible
+cams('AS_Details', cx, cy, 750, 130, 50, 70, (-500, -330, 90, -700, 0, 20, 55))
+# 8 forest-floor life: moss, ferns, wildflowers, clover, mushrooms, log, stump, branches, ivy curtain on a rock
+cx, cy = station(8)
+life = [('SM_Vista_Log', -700, 150), ('SM_Vista_Stump', 450, 250), ('SM_Vista_MossPatch', -150, -100), ('SM_Vista_Fern', 250, -150),
+        ('SM_Vista_Bellflowers', -450, -250), ('SM_Vista_BlueFlowers', 50, -330), ('SM_Vista_Clover', -250, -350), ('SM_Vista_Mushrooms', 380, -20),
+        ('SM_Vista_Branches', -50, 120)]
+for k, (n, a_, b_) in enumerate(life):
+    place(load(f'{MESHES}/{n}'), cx, cy, a_, b_, k * 37, 1.0, n[9:])
+rk = place(load(f'{ROCKS}/SM_Rock_MediumLarge_B'), cx, cy, 900, 500, 0, 1.0, 'IvyRock')
+iv = place(load(f'{MESHES}/SM_Vista_IvyCurtain'), cx, cy, 900, 380, 0, 1.0, 'IvyCurtain')
+if iv: iv.set_actor_location(iv.get_actor_location() + unreal.Vector(0, 0, 200), False, False)
+scatter('Grass_Life', load(f'{MESHES}/SM_Vista_Grass'), 150, cx, cy, (1600, 1200), 8)
+cams('AS_Life', cx, cy, 950, 150, 40, 70, (-180, -620, 80, -180, -220, 5, 55))
+
+# 9 gallery: every world asset alone on bare ground, one framed camera each (AS_Item_NN_<name>) - per-asset previews
+GALLERY = ['SM_Tree_Ancient', 'SM_Tree_Forest_01', 'SM_Tree_Forest_02', 'SM_Tree_Forest_03', 'SM_Tree_Forest_04', 'SM_Vista_Tree_Round',
+           'SM_Vista_Tree_Tall', 'SM_Vista_Tree_Wide', 'SM_Vista_Bush_A', 'SM_Vista_Bush_B', 'SM_Vista_Grass', 'SM_Vista_GrassTall', 'SM_Vista_Tuft',
+           'SM_Vista_Wheat', 'SM_Vista_Poppies', 'SM_Vista_Daisies', 'SM_Vista_Bellflowers', 'SM_Vista_BlueFlowers', 'SM_Vista_Fern',
+           'SM_Vista_Clover', 'SM_Vista_MossPatch', 'SM_Vista_Mushrooms', 'SM_Vista_Reeds', 'SM_Vista_Log', 'SM_Vista_Stump', 'SM_Vista_Branches',
+           'SM_Vista_FallenLeaves', 'SM_Vista_PathStones', 'SM_Vista_IvyCurtain', 'SM_Vista_Cliff_A', 'SM_Vista_Cliff_B',
+           'ROCK:Rock_Large_A', 'ROCK:Rock_MediumLarge_C', 'ROCK:Rock_Medium_B', 'ROCK:Pebbles_A']
+gx, gy = DX * 30000.0 - PX * 14000.0, DY * 30000.0 - PY * 14000.0; off = 0.0      # 300 m in front of the stations: bare ground behind every item
+for k, n in enumerate(GALLERY):
+    mesh = load(f'{ROCKS}/SM_{n[5:]}') if n.startswith('ROCK:') else load(f'{MESHES}/{n}')
+    if not mesh: continue
+    b = mesh.get_bounds(); e = b.box_extent; size = max(e.x, e.y, e.z)
+    off += size + 400.0
+    x, y = gx + PX * off, gy + PY * off                          # along the row, across the look direction
+    a = spawn(mesh, (x - b.origin.x, y - b.origin.y, 0.0 if not n.endswith('IvyCurtain') else e.z * 2 + 20), (0, 0, 0), 'G_' + n.split(':')[-1])
+    off += size + 400.0
+    tz = b.origin.z * (0 if n.endswith('IvyCurtain') else 1) + (e.z * 2 + 20 if n.endswith('IvyCurtain') else 0) * .5
+    tz = max(15.0, min(tz, e.z * 1.1)) if not n.endswith('IvyCurtain') else e.z + 20
+    d = max(size * 3.8, 170.0)
+    ex, ey = x - DX * d * .92 + PX * d * .38, y - DY * d * .92 + PY * d * .38
+    cam(f'AS_Item_{k:02d}_{n.split(":")[-1].replace("SM_Vista_", "").replace("SM_", "")}', (ex, ey, tz + d * .28), (x, y, tz), 50.0)
 
 les.save_current_level()
 unreal.log('ASSET_REVIEW_BUILT')

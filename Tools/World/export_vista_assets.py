@@ -196,7 +196,7 @@ def grass_clump(name, seed, blades, hmin, hmax, wid, spread, segs=4, lean=(6, 30
         a = rnd.uniform(0, 2 * math.pi); rr = spread * math.sqrt(rnd.random())
         out = a + rnd.uniform(-.5, .5)
         blade(M, rnd, Vector((math.cos(a) * rr, math.sin(a) * rr, -0.03)), out, rnd.uniform(*lean) * (.5 + rr / spread),
-              rnd.uniform(hmin, hmax) * (1.1 - .3 * rr / spread), wid * rnd.uniform(.8, 1.2), rnd.uniform(*bend), segs)
+              rnd.uniform(hmin, hmax) * (1.1 - .3 * rr / spread), wid * rnd.uniform(.8, 1.2), rnd.uniform(*bend), segs, (0, rnd.random() ** 2))   # B = per-blade hue
     return M.build(name, ('Grass',))
 
 def grass_lods(name, seed, blades, hmin, hmax, wid, spread, segs=4, **kw):
@@ -236,7 +236,7 @@ def flower_clump(name, seed, kind, heads=5, lod=0):
     rnd = random.Random(seed); M = Mesh()
     for k in range(heads):
         base = Vector((rnd.uniform(-.18, .18), rnd.uniform(-.18, .18), -.02))
-        h = rnd.uniform(.32, .55) if kind == 'poppy' else rnd.uniform(.18, .32)
+        h = rnd.uniform(.32, .55) if kind == 'poppy' else rnd.uniform(.24, .4)
         top = base + Vector((rnd.uniform(-.07, .07), rnd.uniform(-.07, .07), h))
         st = .006 if kind == 'poppy' else .004
         sd = Vector((st, 0, 0)); sd2 = Vector((0, st, 0))
@@ -255,19 +255,19 @@ def flower_clump(name, seed, kind, heads=5, lod=0):
                 M.face((e[0], e[1], tipv), [(0, 0), (1, 0), (.5, 1)])
             continue
         n_pet = 4 if kind == 'poppy' else (rnd.randint(12, 14) if lod == 0 else 7)
-        R = rnd.uniform(.05, .07) if kind == 'poppy' else rnd.uniform(.03, .038)
+        R = rnd.uniform(.05, .07) if kind == 'poppy' else rnd.uniform(.042, .055)
         wid = (2 * math.pi / n_pet) * (.62 if kind == 'poppy' else .3)
         for p_ in range(n_pet):
             a0 = 2 * math.pi * p_ / n_pet + k
             dirp = tx * math.cos(a0) + ty * math.sin(a0); sidep = tx * math.cos(a0 + math.pi / 2) + ty * math.sin(a0 + math.pi / 2)
-            cup = .55 if kind == 'poppy' else .12                   # poppy petals cup upward
+            cup = 1.0 if kind == 'poppy' else .12                   # poppy petals cup upward (open bowl)
             mid = top + dirp * R * .55 + face_up * R * cup * .4
             tip = top + dirp * R + face_up * R * cup
             pw = R * wid * (1.4 if kind == 'poppy' else 1.0)
             vs = [M.vert(top + sidep * pw * .25, (1, 1, 0, 1), face_up), M.vert(mid + sidep * pw, (1, 1, .6, 1), face_up),
                   M.vert(tip + sidep * pw * .6, (1, 1, 1, 1), face_up), M.vert(tip - sidep * pw * .6, (1, 1, 1, 1), face_up),
                   M.vert(mid - sidep * pw, (1, 1, .6, 1), face_up), M.vert(top - sidep * pw * .25, (1, 1, 0, 1), face_up)]
-            M.face((vs[0], vs[1], vs[4], vs[5]), [(0, 0)] * 4); M.face((vs[1], vs[2], vs[3], vs[4]), [(0, 0)] * 4)
+            M.face((vs[0], vs[1], vs[4], vs[5]), [(.35, 0), (0, .5), (1, .5), (.65, 0)]); M.face((vs[1], vs[2], vs[3], vs[4]), [(0, .5), (.2, 1), (.8, 1), (1, .5)])
         if lod == 0:                                              # centre disc
             ring = [M.vert(top + (tx * math.cos(2 * math.pi * q / 6) + ty * math.sin(2 * math.pi * q / 6)) * R * (.28 if kind == 'poppy' else .35) + face_up * .01,
                            (1, .5, .5, 1), face_up) for q in range(6)]
@@ -275,7 +275,7 @@ def flower_clump(name, seed, kind, heads=5, lod=0):
     for k in range(4 if lod == 0 else 2):                          # basal leaves (green, G = 0)
         a = rnd.uniform(0, 2 * math.pi)
         blade(M, rnd, Vector((math.cos(a) * .05, math.sin(a) * .05, -.02)), a, rnd.uniform(35, 55), rnd.uniform(.12, .2), .035, 40, 2, (0, 0))
-    return M.build(name, ('Flowers',))
+    return M.build(name, ('Daisy',) if kind == 'daisy' else ('Flowers',))
 
 def flower_lods(name, seed, kind):
     return flower_clump(name, seed, kind), [], [flower_clump(name + '_LOD1', seed, kind, lod=1)]
@@ -419,14 +419,216 @@ def cliff_r02(name, seed, layers=4):
     bpy.context.view_layer.objects.active = rock; bpy.ops.object.join(); rock.name = name; rock.data.name = name
     return rock, [], []
 
+# ---------------------------------------------------------------- R02b detail pieces (moss, ferns, wildflowers, mushrooms, wood)
+def moss_patch(name, seed, r=0.7, lod=0):
+    """soft moss cushion: low lumpy mound (slot 'Moss', vertex G = light: top lit, edges darker) + a fringe of tiny
+    leaf bunches at the rim so it does not end in a hard edge."""
+    rnd = random.Random(seed); M = Mesh()
+    vs, fs = icosphere(3 if lod == 0 else 2); base = len(M.v)
+    for u in vs:
+        u = u.normalized(); k = 1 + .2 * noise.noise(u * 2.5 + Vector((seed, 0, 0))) + .07 * noise.noise(u * 7 + Vector((0, seed, 0)))
+        p = Vector((u.x * r * k * 1.15, u.y * r * k, max(-.04, u.z) * r * .5 * k))
+        M.vert(p, (0, max(0, min(1, .35 + .65 * u.z)), rnd.random(), 1), (UP * .7 + u * .3).normalized())
+    for f in fs: M.face([base + i for i in f], [(M.v[base + i][0] / .6, M.v[base + i][1] / .6) for i in f], 0)
+    if lod == 0:
+        for k in range(34):
+            a = rnd.uniform(0, 2 * math.pi); p = Vector((math.cos(a) * r * 1.05, math.sin(a) * r * .92, .03))
+            fc = (UP * .7 + Vector((math.cos(a), math.sin(a), 0)) * .5).normalized()
+            bunch_card(M, rnd, p, fc, rnd.uniform(.18, .28), ramp(.45 + rnd.gauss(0, .08)), fc, mat=1)
+    return M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Moss', 'Leaves'), (True, True))
+
+def fern(name, seed, fronds=14, lod=0):
+    """fern: arching fronds (curved spine) with paired leaflets tapering to the tip (slot 'Grass': vertex R = height
+    for wind/colour, B = per-frond hue)."""
+    rnd = random.Random(seed); M = Mesh()
+    for k in range(fronds):
+        a = 2 * math.pi * k / fronds + rnd.uniform(-.25, .25); L = rnd.uniform(.6, .9); arch = rnd.uniform(28, 45)
+        d = Vector((math.cos(a), math.sin(a), 0)); side = Vector((-d.y, d.x, 0)); hue = rnd.random()
+        n_seg = 16 if lod == 0 else 7; prev = None
+        for s in range(n_seg + 1):
+            t = s / n_seg; ang = math.radians(8 + arch * t * t * 2.0)
+            p = d * (math.sin(ang) * L * t) + UP * (math.cos(ang) * L * t * .9)
+            if s == 0: prev = p; continue
+            wl = .28 * L * math.sin(min(1, t * 1.05) * math.pi) * (1.1 - t * .45)        # leaflet length
+            if wl > .01:
+                tng = (p - prev).normalized(); nrm = tng.cross(side).normalized()
+                if nrm.z < 0: nrm = -nrm
+                for sg in (-1, 1):
+                    tip = p + side * sg * wl + tng * wl * .45 - UP * wl * .12
+                    mid = prev.lerp(tip, .55) + tng * wl * .15
+                    i = [M.vert(prev, (t, 0, hue, 1), nrm), M.vert(mid, (t, 0, hue, 1), nrm), M.vert(tip, (t, 0, hue, 1), nrm), M.vert(p, (t, 0, hue, 1), nrm)]
+                    M.face(i, [(.5, 0), (sg * .3 + .5, .4), (sg * .5 + .5, 1), (.5, 1)], 0)   # wider leaflet (quad)
+            # spine
+            i = [M.vert(prev - side * .006, (t, 0, hue, 1), UP), M.vert(prev + side * .006, (t, 0, hue, 1), UP), M.vert(p + side * .004, (t, 0, hue, 1), UP), M.vert(p - side * .004, (t, 0, hue, 1), UP)]
+            M.face(i, [(.48, 0), (.52, 0), (.52, 1), (.48, 1)], 0)
+            prev = p
+    return M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Grass',))
+
+def wildflowers(name, seed, kind, heads=12, lod=0):
+    """small wildflower clump: 'bell' = nodding purple bellflowers (video t075 purple clumps), 'blue' = tiny 5-petal blue
+    stars (t021). Same vertex convention as the poppies (G kind, B petal shade, UV radial on petals)."""
+    rnd = random.Random(seed); M = Mesh()
+    for k in range(heads if lod == 0 else heads // 2):
+        base = Vector((rnd.gauss(0, .1), rnd.gauss(0, .1), -.02)); h = rnd.uniform(.14, .3)
+        top = base + Vector((rnd.uniform(-.05, .05), rnd.uniform(-.05, .05), h))
+        s_ = Vector((.003, 0, 0))
+        i = [M.vert(base - s_, (0, 0, 0, 1), UP), M.vert(base + s_, (0, 0, 0, 1), UP), M.vert(top + s_, (1, 0, 0, 1), UP), M.vert(top - s_, (1, 0, 0, 1), UP)]
+        M.face(i, [(0, 0)] * 4)
+        if kind == 'bell':
+            ax = (Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), -1.2))).normalized()      # nodding
+            tx = ax.orthogonal().normalized(); ty = ax.cross(tx); R = rnd.uniform(.032, .044)
+            # rounded bell: 6-sided cup (narrow waist ring, flared rim) - reads as a soft blossom, not a spike
+            waist = [M.vert(top + ax * R * .7 + (tx * math.cos(math.pi * q / 3) + ty * math.sin(math.pi * q / 3)) * R * .75, (1, 1, .5, 1), -ax) for q in range(6)]
+            ring = [M.vert(top + ax * R * 1.25 + (tx * math.cos(math.pi * q / 3 + .5) + ty * math.sin(math.pi * q / 3 + .5)) * R * 1.05, (1, 1, 1, 1), -ax) for q in range(6)]
+            c = M.vert(top, (1, 1, 0, 1), -ax)
+            for q in range(6):
+                q2 = (q + 1) % 6
+                M.face((c, waist[q], waist[q2]), [(.5, 0), (q / 6, .5), ((q + 1) / 6, .5)])
+                M.face((waist[q], ring[q], ring[q2], waist[q2]), [(q / 6, .5), (q / 6, 1), ((q + 1) / 6, 1), ((q + 1) / 6, .5)])
+        else:
+            fu = (UP + Vector((rnd.uniform(-.3, .3), rnd.uniform(-.3, .3), 0))).normalized(); tx = fu.orthogonal().normalized(); ty = fu.cross(tx)
+            R = rnd.uniform(.032, .042); c = M.vert(top + fu * .004, (1, .5, .5, 1), fu)
+            for q in range(5):
+                a0 = 2 * math.pi * q / 5
+                e0 = M.vert(top + (tx * math.cos(a0 - .3) + ty * math.sin(a0 - .3)) * R * .4, (1, 1, .2, 1), fu)
+                tp = M.vert(top + (tx * math.cos(a0) + ty * math.sin(a0)) * R, (1, 1, 1, 1), fu)
+                e1 = M.vert(top + (tx * math.cos(a0 + .3) + ty * math.sin(a0 + .3)) * R * .4, (1, 1, .2, 1), fu)
+                M.face((c, e0, tp, e1), [(.5, 0), (.3, .5), (.5, 1), (.7, .5)])
+    for k in range(5 if lod == 0 else 2):
+        a = rnd.uniform(0, 2 * math.pi)
+        blade(M, rnd, Vector((math.cos(a) * .05, math.sin(a) * .05, -.02)), a, rnd.uniform(30, 55), rnd.uniform(.1, .18), .03, 40, 2, (0, 0))
+    return M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bellflower',) if kind == 'bell' else ('BlueFlower',))
+
+def clover(name, seed, lod=0):
+    """low leafy ground cover (clover-like round leaflets) - fills the ground between grass clumps and at path edges."""
+    rnd = random.Random(seed); M = Mesh()
+    for k in range(44 if lod == 0 else 18):
+        a = rnd.uniform(0, 2 * math.pi); rr = .35 * math.sqrt(rnd.random())
+        p = Vector((math.cos(a) * rr, math.sin(a) * rr, rnd.uniform(.04, .12)))
+        fc = (UP + Vector((rnd.uniform(-.4, .4), rnd.uniform(-.4, .4), 0))).normalized()
+        bunch_card(M, rnd, p, fc, rnd.uniform(.14, .22), ramp(.42 + .25 * p.z / .12 + rnd.gauss(0, .06)), (UP * .8 + fc * .2).normalized(), mat=0)
+    return M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Leaves',), (True,))
+
+def mushrooms(name, seed):
+    """a small cluster of stylized mushrooms (slot 'Mushroom': vertex G = 0 stem .. 1 cap, B = cap underside)."""
+    rnd = random.Random(seed); M = Mesh()
+    for k in range(rnd.randint(3, 5)):
+        base = Vector((rnd.gauss(0, .07), rnd.gauss(0, .07), -.01)); h = rnd.uniform(.05, .14); r = h * rnd.uniform(.55, .85)
+        tilt = Vector((rnd.uniform(-.15, .15), rnd.uniform(-.15, .15), 1)).normalized()
+        top = base + tilt * h; sides = 10
+        tx = tilt.orthogonal().normalized(); ty = tilt.cross(tx)
+        ring = lambda c, rad, z, col: [M.vert(c + (tx * math.cos(2 * math.pi * i / sides) + ty * math.sin(2 * math.pi * i / sides)) * rad + tilt * z, col,
+                                              ((tx * math.cos(2 * math.pi * i / sides) + ty * math.sin(2 * math.pi * i / sides)) * .7 + tilt * .3).normalized()) for i in range(sides)]
+        s0 = ring(base, r * .22, 0, (0, 0, 0, 1)); s1 = ring(top, r * .17, 0, (0, 0, 0, 1))
+        for i in range(sides): M.face((s0[i], s0[(i + 1) % sides], s1[(i + 1) % sides], s1[i]), [(0, 0)] * 4)
+        under = ring(top, r, -r * .05, (0, 1, 1, 1)); mid = ring(top, r * .8, r * .32, (0, 1, 0, 1))
+        apex = M.vert(top + tilt * r * .5, (0, 1, 0, 1), tilt); hub = M.vert(top - tilt * r * .02, (0, 1, 1, 1), -tilt)
+        for i in range(sides):
+            j = (i + 1) % sides
+            M.face((under[i], under[j], mid[j], mid[i]), [(0, 0)] * 4); M.face((mid[i], mid[j], apex), [(0, 0)] * 3)
+            M.face((hub, under[j], under[i]), [(0, 0)] * 3)
+    return M.build(name, ('Mushroom',))
+
+def wood_tube(M, pts, radii, sides, moss_up=.55, uv_scale=1.0):
+    """bark tube along pts (slot 0 'Bark'); vertex R = moss on up-facing bark (M_Vista_Bark)."""
+    rings = []; acc_len = 0.0
+    for i, (p, r) in enumerate(zip(pts, radii)):
+        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        a = t.orthogonal().normalized(); b = t.cross(a)
+        if i: acc_len += (p - pts[i - 1]).length
+        ring = []
+        for j in range(sides):
+            th = 2 * math.pi * j / sides; d = a * math.cos(th) + b * math.sin(th)
+            rr = r * (1 + .08 * math.sin(th * 3 + i))
+            moss = max(0, min(1, (d.z - (1 - moss_up)) / moss_up)) * (.6 + .4 * noise.noise(p * 2 + d))
+            ring.append((M.vert(p + d * rr, (max(0, moss), 1, .5, 1), d), j / sides, acc_len / uv_scale))
+        rings.append(ring)
+    for i in range(len(rings) - 1):
+        for j in range(sides):
+            j2 = (j + 1) % sides
+            a_, b_, c_, d_ = rings[i][j], rings[i][j2], rings[i + 1][j2], rings[i + 1][j]
+            M.face((a_[0], b_[0], c_[0], d_[0]), [(a_[1], a_[2]), (b_[1] if j2 else 1.0, b_[2]), (c_[1] if j2 else 1.0, c_[2]), (d_[1], d_[2])], 0)
+    return rings
+
+def cap(M, ring, centre, n):
+    c = M.vert(centre, (0, 1, .5, 1), n)
+    for j in range(len(ring)):
+        M.face((c, ring[j][0], ring[(j + 1) % len(ring)][0]), [(.5, .5), (.5 + .4 * math.cos(2 * math.pi * j / len(ring)), .5), (.5, .9)], 1)
+
+def log(name, seed):
+    """fallen mossy log (3.2 m) with a broken stub branch; end caps show the wood rings (slot 'Wood'); UCX hull."""
+    rnd = random.Random(seed); M = Mesh(); L = 3.2; R0 = .32
+    pts = [Vector((-L / 2 + L * t, .06 * math.sin(t * 4 + seed), R0 * .85 + .05 * math.sin(t * 3))) for t in [i / 10 for i in range(11)]]
+    rad = [R0 * (1.08 - .2 * (i / 10)) for i in range(11)]
+    rings = wood_tube(M, pts, rad, 12, .5, .8)
+    cap(M, rings[0], pts[0], (pts[0] - pts[1]).normalized()); cap(M, rings[-1], pts[-1], (pts[-1] - pts[-2]).normalized())
+    s0 = pts[4] + Vector((0, 0, rad[4] * .6)); sp = [s0 + Vector((.12 * t, .25 * t, .35 * t)) for t in (0, .5, 1)]
+    br = wood_tube(M, sp, [.09, .07, .05], 7, .5, .8); cap(M, br[-1], sp[-1], (sp[-1] - sp[-2]).normalized())
+    ob = M.build(name, ('Bark', 'Wood'), (True, False))
+    hull = bmesh.new(); hv = [hull.verts.new(p + Vector((0, math.cos(a), math.sin(a))) * r) for p, r in zip(pts[::2], rad[::2]) for a in [2 * math.pi * i / 8 for i in range(8)]]
+    bmesh.ops.convex_hull(hull, input=hv); h = obj(f'UCX_{name}_00', hull)
+    return ob, [h], []
+
+def stump(name, seed):
+    """mossy tree stump with root flare and a ragged top (rings on the cut, slot 'Wood'); UCX hull."""
+    rnd = random.Random(seed); M = Mesh(); R = .45; H = .7
+    pts = [Vector((0, 0, -.1 + H * t)) for t in (0, .15, .4, .7, 1.0)]
+    rad = [R * 1.5, R * 1.15, R * 1.0, R * .96, R * .94]
+    rings = wood_tube(M, pts, rad, 14, .5, .9)
+    top = [rp for rp in rings[-1]]
+    c = M.vert(pts[-1] + Vector((0, 0, -.04)), (0, 1, .5, 1), UP)
+    for j in range(len(top)):
+        p0 = M.v[top[j][0]]
+        M.v[top[j][0]] = (p0[0], p0[1], p0[2] + rnd.uniform(-.06, .1))            # ragged broken top
+        M.face((c, top[(j + 1) % len(top)][0], top[j][0]), [(.5, .5), (.5 + .45 * math.cos(2 * math.pi * j / 14), .5 + .45 * math.sin(2 * math.pi * j / 14)),
+                                                          (.5 + .45 * math.cos(2 * math.pi * (j + 1) / 14), .5 + .45 * math.sin(2 * math.pi * (j + 1) / 14))], 1)
+    for k in range(5):                                                              # roots
+        a = 2 * math.pi * k / 5 + rnd.uniform(-.3, .3); d = Vector((math.cos(a), math.sin(a), 0))
+        rp = [d * R * .7 + UP * .3, d * (R + .12) + UP * .1, d * (R + .3) - UP * .02, d * (R + .45) - UP * .12]
+        wood_tube(M, rp, [.2, .13, .07, .025], 8, .5, .9)
+    ob = M.build(name, ('Bark', 'Wood'), (True, False))
+    hull = bmesh.new(); hv = [hull.verts.new(Vector((math.cos(a) * r, math.sin(a) * r, z))) for z, r in ((-.1, R * 1.4), (H, R * .95)) for a in [2 * math.pi * i / 8 for i in range(8)]]
+    bmesh.ops.convex_hull(hull, input=hv); h = obj(f'UCX_{name}_00', hull)
+    return ob, [h], []
+
+def branches(name, seed):
+    """a few fallen twigs / small branches lying in the grass (no collision)."""
+    rnd = random.Random(seed); M = Mesh()
+    for k in range(4):
+        a = rnd.uniform(0, math.pi); d = Vector((math.cos(a), math.sin(a), 0)); L = rnd.uniform(.6, 1.2)
+        c = Vector((rnd.gauss(0, .3), rnd.gauss(0, .3), .025))
+        pts = [c - d * L / 2 + d * L * t + Vector((0, 0, .01 * math.sin(t * 5))) for t in (0, .33, .66, 1)]
+        wood_tube(M, pts, [.03, .025, .02, .012], 5, .5, .5)
+        if rnd.random() < .7:
+            q = pts[1]; e = q + (d.cross(UP) * rnd.choice((-1, 1)) + d * .6).normalized() * L * .35
+            wood_tube(M, [q, q.lerp(e, .5), e], [.015, .012, .006], 4, .5, .5)
+    return M.build(name, ('Bark',), (True,)), [], []
+
+def ivy_curtain(name, seed, width=2.0, length=2.4):
+    """hanging ivy curtain for cliff faces / walls: dense leaf-bunch strands from a top line, thinning downward, with a
+    mat lying over the top edge. Pivot at the top edge centre (snap to a ledge)."""
+    rnd = random.Random(seed); M = Mesh()
+    for s in range(int(width * 6)):
+        x = -width / 2 + width * (s + rnd.random()) / int(width * 6); L = length * rnd.uniform(.45, 1.0); z = 0.0
+        while z < L:
+            t = z / L
+            p = Vector((x + .06 * math.sin(z * 3 + s), -.08 - .05 * rnd.random(), -z))
+            fc = Vector((rnd.uniform(-.4, .4), -1, rnd.uniform(-.1, .4))).normalized()
+            bunch_card(M, rnd, p, fc, rnd.uniform(.3, .42) * (1 - .35 * t), ramp(.62 - .35 * t + rnd.gauss(0, .07)), Vector((0, -.85, .5)).normalized(), mat=0)
+            z += rnd.uniform(.1, .18) * (1 + t)
+    for k in range(int(width * 10)):
+        p = Vector((rnd.uniform(-width / 2, width / 2), rnd.uniform(-.1, .5), .04))
+        bunch_card(M, rnd, p, (UP * .8 + Vector((0, -.4, 0))).normalized(), rnd.uniform(.35, .5), ramp(.7 + rnd.gauss(0, .07)), UP, mat=0)
+    return M.build(name, ('Leaves',), (True,)), [], []
+
 # ---------------------------------------------------------------- preview renders (golden hour)
 def preview_scene():
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.samples = 32; sc.cycles.use_denoising = True
-    sc.cycles.transparent_max_bounces = 48; sc.view_settings.view_transform = 'AgX'; sc.view_settings.look = 'AgX - Punchy'
+    sc.cycles.transparent_max_bounces = 48; sc.view_settings.view_transform = 'AgX'; sc.view_settings.look = 'AgX - Punchy'; sc.view_settings.exposure = .6
     w = bpy.data.worlds.new('W'); sc.world = w; w.node_tree.nodes['Background'].inputs[0].default_value = (.42, .58, .85, 1)
     sun = bpy.data.objects.new('Sun', bpy.data.lights.new('Sun', 'SUN')); sc.collection.objects.link(sun)
-    sun.data.energy = 4.5; sun.data.color = (1, .8, .58); sun.data.angle = math.radians(6)
-    sun.rotation_euler = Vector((-.62, .55, -.42)).normalized().to_track_quat('-Z', 'Y').to_euler()
+    sun.data.energy = 5.0; sun.data.color = (1, .82, .6); sun.data.angle = math.radians(6)
+    sun.rotation_euler = Vector((-.45, .7, -.55)).normalized().to_track_quat('-Z', 'Y').to_euler()
     cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam')); sc.collection.objects.link(cam); sc.camera = cam
     gp = bpy.data.meshes.new('PG'); gp.from_pydata([(-200, -200, 0), (200, -200, 0), (200, 200, 0), (-200, 200, 0)], [], [(0, 1, 2, 3)])
     go = bpy.data.objects.new('PreviewGround', gp); sc.collection.objects.link(go)
@@ -434,37 +636,159 @@ def preview_scene():
     go.data.materials.append(gm)
     return sc, cam
 
+TEX2 = OUT + '/textures'
 def preview_materials():
-    """Blender look-alikes of the Unreal materials, keyed by slot name."""
-    def img(p): return bpy.data.images.get(os.path.basename(p)) or bpy.data.images.load(p)
-    for mn, base in (('Grass', (60, 120, 20)), ('Wheat', (220, 165, 50)), ('Flowers', (210, 40, 30)), ('Rock', (150, 130, 100)),
-                     ('Terrain', (112, 140, 32)), ('Bark', (110, 55, 32))):
+    """Blender look-alikes of the Unreal materials, keyed by slot name - with the SAME painted textures + relief
+    (World_R02/textures, Trees_R02/textures) so the previews show the real surface detail. Foliage gets some
+    translucency (Unreal two-sided foliage transmits light; plain Cycles back faces would read black)."""
+    def img(p, data=False):
+        im = bpy.data.images.get(os.path.basename(p)) or bpy.data.images.load(p)
+        if data: im.colorspace_settings.name = 'Non-Color'
+        return im
+    def base(mn):
         m = bpy.data.materials.get(mn) or bpy.data.materials.new(mn)
-        m.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = lin(base) + (1,)
-    for mn in ('Grass', 'Wheat', 'Flowers'):                      # height gradient root -> tip
-        m = bpy.data.materials[mn]; nd = m.node_tree.nodes; ln = m.node_tree.links
-        va = nd.new('ShaderNodeVertexColor'); va.layer_name = 'Col'; sep = nd.new('ShaderNodeSeparateColor'); ln.new(va.outputs[0], sep.inputs[0])
-        cr = nd.new('ShaderNodeValToRGB')
-        lo, hi = {'Grass': ((40, 92, 20), (175, 200, 30)), 'Wheat': ((140, 100, 30), (235, 185, 60)), 'Flowers': ((40, 90, 20), (60, 120, 25))}[mn]
-        cr.color_ramp.elements[0].color = lin(lo) + (1,); cr.color_ramp.elements[1].color = lin(hi) + (1,)
-        ln.new(sep.outputs[0], cr.inputs[0])
-        if mn == 'Flowers':
-            mx = nd.new('ShaderNodeMix'); mx.data_type = 'RGBA'; ln.new(sep.outputs[1], mx.inputs[0]); ln.new(cr.outputs[0], mx.inputs[6])
-            mx.inputs[7].default_value = lin((215, 35, 25)) + (1,); ln.new(mx.outputs[2], nd['Principled BSDF'].inputs['Base Color'])
-        else:
-            ln.new(cr.outputs[0], nd['Principled BSDF'].inputs['Base Color'])
-    lm = bpy.data.materials.get('Leaves') or bpy.data.materials.new('Leaves'); nd = lm.node_tree.nodes; ln = lm.node_tree.links
+        nd = m.node_tree.nodes
+        for n_ in [n_ for n_ in nd if n_.type not in ('BSDF_PRINCIPLED', 'OUTPUT_MATERIAL')]: nd.remove(n_)
+        return m, nd, m.node_tree.links, nd['Principled BSDF']
+    def mult(nd, ln, a, b):
+        x = nd.new('ShaderNodeMix'); x.data_type = 'RGBA'; x.blend_type = 'MULTIPLY'; x.inputs[0].default_value = 1
+        ln.new(a, x.inputs[6])
+        if isinstance(b, tuple): x.inputs[7].default_value = b
+        else: ln.new(b, x.inputs[7])
+        return x.outputs[2]
+    def vcol(nd, ln):
+        va = nd.new('ShaderNodeVertexColor'); va.layer_name = 'Col'; sep = nd.new('ShaderNodeSeparateColor'); ln.new(va.outputs[0], sep.inputs[0]); return va, sep
+    def ramp_node(nd, ln, inp, stops):
+        cr = nd.new('ShaderNodeValToRGB'); el = cr.color_ramp.elements
+        el[0].position, el[0].color = stops[0][0], lin(stops[0][1]) + (1,); el[1].position, el[1].color = stops[-1][0], lin(stops[-1][1]) + (1,)
+        for p_, c_ in stops[1:-1]: e = el.new(p_); e.color = lin(c_) + (1,)
+        ln.new(inp, cr.inputs[0]); return cr.outputs[0]
+    def box(nd, ln, path, scale, data=False):
+        tc = nd.new('ShaderNodeTexCoord'); mp = nd.new('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (1 / scale,) * 3
+        ln.new(tc.outputs['Object'], mp.inputs['Vector'])
+        t = nd.new('ShaderNodeTexImage'); t.image = img(path, data); t.projection = 'BOX'; t.projection_blend = .25
+        ln.new(mp.outputs['Vector'], t.inputs['Vector']); return t
+    def bump(nd, ln, bsdf, h, strength, dist):
+        bp = nd.new('ShaderNodeBump'); bp.inputs['Strength'].default_value = strength; bp.inputs['Distance'].default_value = dist
+        ln.new(h, bp.inputs['Height']); ln.new(bp.outputs['Normal'], bsdf.inputs['Normal'])
+    def translucent(m, nd, ln, bsdf, col, amount, alpha=None):
+        tr = nd.new('ShaderNodeBsdfTranslucent'); ln.new(col, tr.inputs['Color'])
+        mx = nd.new('ShaderNodeMixShader'); mx.inputs[0].default_value = amount; ln.new(bsdf.outputs[0], mx.inputs[1]); ln.new(tr.outputs[0], mx.inputs[2])
+        out = mx.outputs[0]
+        if alpha is not None:
+            tp = nd.new('ShaderNodeBsdfTransparent'); m2 = nd.new('ShaderNodeMixShader'); ln.new(alpha, m2.inputs[0]); ln.new(tp.outputs[0], m2.inputs[1])
+            ln.new(out, m2.inputs[2]); out = m2.outputs[0]
+        ln.new(out, nd['Material Output'].inputs['Surface']); m.use_backface_culling = False
+    def mad(nd, ln, inp, a, b):
+        n_ = nd.new('ShaderNodeMath'); n_.operation = 'MULTIPLY_ADD'; ln.new(inp, n_.inputs[0]); n_.inputs[1].default_value = a; n_.inputs[2].default_value = b; return n_.outputs[0]
+    def mulf(nd, ln, a, b):
+        n_ = nd.new('ShaderNodeMath'); n_.operation = 'MULTIPLY'; ln.new(a, n_.inputs[0]); ln.new(b, n_.inputs[1]); return n_.outputs[0]
+    # stone: rocks, cliffs, path stones (M_Rock_Stone / M_Vista_Rock look-alike)
+    m, nd, ln, bsdf = base('Rock')
+    alb = box(nd, ln, TEX2 + '/Stone_R02_BaseColor.png', 2.2); hg = box(nd, ln, TEX2 + '/Stone_R02_Height.png', 2.2, True)
+    va, sep = vcol(nd, ln)
+    f = mulf(nd, ln, mulf(nd, ln, mad(nd, ln, sep.outputs[0], .5, .72), mad(nd, ln, sep.outputs[1], .28, .78)), mad(nd, ln, sep.outputs[2], .24, .88))
+    ln.new(mult(nd, ln, mult(nd, ln, alb.outputs['Color'], f), (1.0, .95, .88, 1)), bsdf.inputs['Base Color'])
+    bsdf.inputs['Roughness'].default_value = .85; bump(nd, ln, bsdf, hg.outputs['Color'], .6, .03)
+    # bark: Trees_R02 bark + relief (UVs from the trunk tubes)
+    m, nd, ln, bsdf = base('Bark')
+    tb = nd.new('ShaderNodeTexImage'); tb.image = img(TREES2 + '/Bark_Painted_R02_BaseColor.png')
+    th = nd.new('ShaderNodeTexImage'); th.image = img(TEX2 + '/Bark_R02_Height.png', True)
+    ln.new(tb.outputs['Color'], bsdf.inputs['Base Color']); bump(nd, ln, bsdf, th.outputs['Color'], .7, .02)
+    # grass-type: blade texture x root->tip ramp, per-blade hue (vertex B)
+    for mn, stops in (('Grass', [(0, (52, 96, 12)), (.5, (130, 166, 18)), (1, (204, 210, 34))]),
+                      ('Wheat', [(0, (170, 128, 40)), (1, (244, 200, 70))])):
+        m, nd, ln, bsdf = base(mn); va, sep = vcol(nd, ln)
+        uvn = nd.new('ShaderNodeUVMap'); bt = nd.new('ShaderNodeTexImage'); bt.image = img(TEX2 + '/GrassBlade_R02_BaseColor.png'); ln.new(uvn.outputs[0], bt.inputs['Vector'])
+        col = ramp_node(nd, ln, sep.outputs[0], stops)
+        hue = nd.new('ShaderNodeMix'); hue.data_type = 'RGBA'; ln.new(sep.outputs[2], hue.inputs[0])
+        hue.inputs[6].default_value = (1.0, 1.0, 1.0, 1); hue.inputs[7].default_value = (1.18, 1.05, .6, 1)
+        c = mult(nd, ln, mult(nd, ln, col, bt.outputs['Color']), hue.outputs[2])
+        if mn == 'Wheat':
+            ear = nd.new('ShaderNodeMix'); ear.data_type = 'RGBA'; ln.new(sep.outputs[1], ear.inputs[0]); ln.new(c, ear.inputs[6])
+            ear.inputs[7].default_value = lin((246, 196, 58)) + (1,); c = ear.outputs[2]
+        ln.new(c, bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = .8
+        translucent(m, nd, ln, bsdf, c, .3)
+    # flowers: G = kind (0 stem, .5 centre, 1 petal), B = petal shade; petal texture by UV
+    for mn, pc, cc in (('Flowers', (232, 52, 24), (5, 4, 3)), ('Daisy', (250, 246, 232), (240, 176, 24))):
+        m, nd, ln, bsdf = base(mn); va, sep = vcol(nd, ln)
+        uvn = nd.new('ShaderNodeUVMap'); pt = nd.new('ShaderNodeTexImage'); pt.image = img(TEX2 + '/Petal_R02_BaseColor.png'); ln.new(uvn.outputs[0], pt.inputs['Vector'])
+        petal = mult(nd, ln, pt.outputs['Color'], lin(pc) + (1,))
+        stem = ramp_node(nd, ln, sep.outputs[0], [(0, (40, 80, 14)), (1, (80, 130, 22))])
+        k = nd.new('ShaderNodeMath'); k.operation = 'GREATER_THAN'; ln.new(sep.outputs[1], k.inputs[0]); k.inputs[1].default_value = .75
+        kc = nd.new('ShaderNodeMath'); kc.operation = 'GREATER_THAN'; ln.new(sep.outputs[1], kc.inputs[0]); kc.inputs[1].default_value = .25
+        c1 = nd.new('ShaderNodeMix'); c1.data_type = 'RGBA'; ln.new(kc.outputs[0], c1.inputs[0]); ln.new(stem, c1.inputs[6]); c1.inputs[7].default_value = lin(cc) + (1,)
+        c2 = nd.new('ShaderNodeMix'); c2.data_type = 'RGBA'; ln.new(k.outputs[0], c2.inputs[0]); ln.new(c1.outputs[2], c2.inputs[6]); ln.new(petal, c2.inputs[7])
+        ln.new(c2.outputs[2], bsdf.inputs['Base Color']); translucent(m, nd, ln, bsdf, c2.outputs[2], .35)
+    for mn, pc, cc in (('Bellflower', (186, 130, 236), (90, 60, 130)), ('BlueFlower', (110, 150, 245), (245, 220, 90))):
+        m, nd, ln, bsdf = base(mn); va, sep = vcol(nd, ln)
+        petal = ramp_node(nd, ln, sep.outputs[2], [(0, tuple(int(x * .55) for x in pc)), (1, pc)])
+        stem = ramp_node(nd, ln, sep.outputs[0], [(0, (40, 80, 14)), (1, (80, 130, 22))])
+        k = nd.new('ShaderNodeMath'); k.operation = 'GREATER_THAN'; ln.new(sep.outputs[1], k.inputs[0]); k.inputs[1].default_value = .75
+        kc = nd.new('ShaderNodeMath'); kc.operation = 'GREATER_THAN'; ln.new(sep.outputs[1], kc.inputs[0]); kc.inputs[1].default_value = .25
+        c1 = nd.new('ShaderNodeMix'); c1.data_type = 'RGBA'; ln.new(kc.outputs[0], c1.inputs[0]); ln.new(stem, c1.inputs[6]); c1.inputs[7].default_value = lin(cc) + (1,)
+        c2 = nd.new('ShaderNodeMix'); c2.data_type = 'RGBA'; ln.new(k.outputs[0], c2.inputs[0]); ln.new(c1.outputs[2], c2.inputs[6]); ln.new(petal, c2.inputs[7])
+        ln.new(c2.outputs[2], bsdf.inputs['Base Color']); translucent(m, nd, ln, bsdf, c2.outputs[2], .35)
+    # moss cushion: moss texture (object box) x vertex G light
+    m, nd, ln, bsdf = base('Moss'); va, sep = vcol(nd, ln)
+    mt = box(nd, ln, TREES2 + '/Moss_Painted_BaseColor.png', .8)
+    ln.new(mult(nd, ln, mt.outputs['Color'], ramp_node(nd, ln, sep.outputs[1], [(0, (120, 130, 90)), (1, (255, 255, 220))])), bsdf.inputs['Base Color'])
+    bsdf.inputs['Roughness'].default_value = .95
+    # mushroom: warm red-brown cap with a lighter rim, cream stem + gills (G cap, B underside)
+    m, nd, ln, bsdf = base('Mushroom'); va, sep = vcol(nd, ln)
+    cap_c = ramp_node(nd, ln, sep.outputs[2], [(0, (176, 70, 38)), (1, (232, 214, 180))])
+    mx = nd.new('ShaderNodeMix'); mx.data_type = 'RGBA'; ln.new(sep.outputs[1], mx.inputs[0]); mx.inputs[6].default_value = lin((236, 224, 196)) + (1,); ln.new(cap_c, mx.inputs[7])
+    ln.new(mx.outputs[2], bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = .6
+    # cut wood (log / stump ends): rings
+    m, nd, ln, bsdf = base('Wood')
+    tc = nd.new('ShaderNodeTexCoord'); wv = nd.new('ShaderNodeTexWave'); wv.wave_type = 'RINGS'; wv.inputs['Scale'].default_value = 6; wv.inputs['Distortion'].default_value = 3
+    ln.new(tc.outputs['UV'], wv.inputs['Vector'])
+    ln.new(ramp_node(nd, ln, wv.outputs['Fac'], [(0, (150, 96, 50)), (1, (214, 160, 96))]), bsdf.inputs['Base Color'])
+    # bark moss (vertex R) for logs / stumps / branches in the preview
+    m = bpy.data.materials['Bark']; nd = m.node_tree.nodes; ln = m.node_tree.links; bsdf = nd['Principled BSDF']
+    tb = [n_ for n_ in nd if n_.type == 'TEX_IMAGE' and 'Bark_Painted' in n_.image.name][0]
+    va, sep = vcol(nd, ln); mt = nd.new('ShaderNodeTexImage'); mt.image = img(TREES2 + '/Moss_Painted_BaseColor.png')
+    mm = nd.new('ShaderNodeMix'); mm.data_type = 'RGBA'; ln.new(sep.outputs[0], mm.inputs[0]); ln.new(tb.outputs['Color'], mm.inputs[6]); ln.new(mt.outputs['Color'], mm.inputs[7])
+    ln.new(mm.outputs[2], bsdf.inputs['Base Color'])
+    # leaves (leaf-bunch atlas x vertex colour) + fill blobs
+    m, nd, ln, bsdf = base('Leaves'); va, sep = vcol(nd, ln)
     ti = nd.new('ShaderNodeTexImage'); ti.image = img(TREES2 + '/Leaf_Cluster_Atlas_BaseColor.png')
-    va = nd.new('ShaderNodeVertexColor'); va.layer_name = 'Col'
-    mul = nd.new('ShaderNodeMix'); mul.data_type = 'RGBA'; mul.blend_type = 'MULTIPLY'; mul.inputs[0].default_value = 1
-    ln.new(ti.outputs['Color'], mul.inputs[6]); ln.new(va.outputs['Color'], mul.inputs[7]); ln.new(mul.outputs[2], nd['Principled BSDF'].inputs['Base Color'])
-    tp = nd.new('ShaderNodeBsdfTransparent'); m2 = nd.new('ShaderNodeMixShader')
-    ln.new(ti.outputs['Alpha'], m2.inputs[0]); ln.new(tp.outputs[0], m2.inputs[1]); ln.new(nd['Principled BSDF'].outputs[0], m2.inputs[2])
-    ln.new(m2.outputs[0], nd['Material Output'].inputs['Surface'])
-    fm = bpy.data.materials.get('Fill') or bpy.data.materials.new('Fill'); nd = fm.node_tree.nodes; ln = fm.node_tree.links
-    va = nd.new('ShaderNodeVertexColor'); va.layer_name = 'Col'; sep = nd.new('ShaderNodeSeparateColor'); ln.new(va.outputs[0], sep.inputs[0])
-    cr = nd.new('ShaderNodeValToRGB'); cr.color_ramp.elements[0].color = lin((26, 58, 36)) + (1,); cr.color_ramp.elements[1].color = lin((160, 196, 28)) + (1,)
-    ln.new(sep.outputs[1], cr.inputs[0]); ln.new(cr.outputs[0], nd['Principled BSDF'].inputs['Base Color'])
+    c = mult(nd, ln, mult(nd, ln, ti.outputs['Color'], va.outputs['Color']), (1.3, 1.3, 1.3, 1))
+    ln.new(c, bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = .85
+    translucent(m, nd, ln, bsdf, c, .3, ti.outputs['Alpha'])
+    m.surface_render_method = 'DITHERED'
+    m, nd, ln, bsdf = base('Fill'); va, sep = vcol(nd, ln)
+    ln.new(ramp_node(nd, ln, sep.outputs[1], [(0, (26, 58, 36)), (.5, (70, 120, 30)), (1, (160, 196, 28))]), bsdf.inputs['Base Color'])
+    # terrain swatch: painted ground grass / dirt by vertex R (path), sand -> wet by G, stone on slopes
+    m, nd, ln, bsdf = base('Terrain'); va, sep = vcol(nd, ln)
+    gg = box(nd, ln, TEX2 + '/GroundGrass_R02_BaseColor.png', 4.0); gd = box(nd, ln, TEX2 + '/GroundDirt_R02_BaseColor.png', 3.0)
+    st = box(nd, ln, TEX2 + '/Stone_R02_BaseColor.png', 4.0)
+    nz = nd.new('ShaderNodeTexNoise'); nz.inputs['Scale'].default_value = 1.4
+    pe = nd.new('ShaderNodeMath'); pe.operation = 'MULTIPLY_ADD'; ln.new(nz.outputs['Fac'], pe.inputs[0]); pe.inputs[1].default_value = .5; ln.new(sep.outputs[0], pe.inputs[2])
+    def mix_by(fac, lo, hi, a, b):
+        r = nd.new('ShaderNodeMapRange'); ln.new(fac, r.inputs[0]); r.inputs[1].default_value = lo; r.inputs[2].default_value = hi
+        x = nd.new('ShaderNodeMix'); x.data_type = 'RGBA'; ln.new(r.outputs[0], x.inputs[0])
+        for i, v in ((6, a), (7, b)):
+            if isinstance(v, tuple): x.inputs[i].default_value = v
+            else: ln.new(v, x.inputs[i])
+        return x.outputs[2]
+    c = mix_by(pe.outputs[0], .62, .82, gg.outputs['Color'], gd.outputs['Color'])
+    c = mix_by(sep.outputs[1], .12, .4, c, lin((196, 160, 70)) + (1,))
+    c = mix_by(sep.outputs[1], .5, .75, c, lin((118, 92, 52)) + (1,))
+    gn = nd.new('ShaderNodeNewGeometry'); sz = nd.new('ShaderNodeSeparateXYZ'); ln.new(gn.outputs['Normal'], sz.inputs[0])
+    c = mix_by(sz.outputs[2], .82, .62, c, st.outputs['Color'])
+    ln.new(c, bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = .95
+
+def patch(ob, n, radius, seed, extra=()):
+    """linked duplicates spread over a disc (how ground cover is actually seen) + optional companion meshes."""
+    rnd = random.Random(seed); out = []
+    for src, cnt in [(ob, n)] + list(extra):
+        for k in range(cnt):
+            d = src.copy(); bpy.context.scene.collection.objects.link(d)
+            a = rnd.uniform(0, 2 * math.pi); r = radius * math.sqrt(rnd.random())
+            d.location = (math.cos(a) * r, math.sin(a) * r, 0); d.rotation_euler = (0, 0, rnd.uniform(0, 6.3))
+            s = rnd.uniform(.8, 1.25); d.scale = (s, s, s); d.hide_render = False; out.append(d)
+    return out
 
 def preview(sc, cam, obs, name, dist, height, az=30, el=8, lens=40):
     for o in bpy.context.scene.objects:
@@ -482,29 +806,47 @@ JOBS = [
     ('trees', 'SM_Vista_Tree_Round', lambda: round_tree('SM_Vista_Tree_Round', 11, 5.5, 4.4, 6, leaf_size=.72, density=120), (16, 6)),
     ('trees', 'SM_Vista_Tree_Tall', lambda: round_tree('SM_Vista_Tree_Tall', 12, 7.5, 3.6, 5, lean=.3, leaf_size=.72, density=120), (17, 6)),
     ('trees', 'SM_Vista_Tree_Wide', lambda: round_tree('SM_Vista_Tree_Wide', 13, 4.6, 5.4, 7, lean=.6, leaf_size=.78, density=100), (17, 5.5)),
-    ('grass', 'SM_Vista_Grass', lambda: grass_lods('SM_Vista_Grass', 21, 52, .28, .55, .048, .42, segs=3), (2.2, .25)),
-    ('grass', 'SM_Vista_GrassTall', lambda: grass_lods('SM_Vista_GrassTall', 22, 40, .55, .95, .055, .32, segs=3, lean=(4, 22), bend=(20, 70)), (2.6, .45)),
-    ('grass', 'SM_Vista_Tuft', lambda: grass_lods('SM_Vista_Tuft', 27, 40, .35, .7, .06, .18, segs=3, lean=(10, 35), bend=(25, 70)), (2.0, .3)),
-    ('wheat', 'SM_Vista_Wheat', lambda: (wheat('SM_Vista_Wheat', 23), [], [wheat('SM_Vista_Wheat_LOD1', 23, 12, 1)]), (2.6, .6)),
-    ('flowers', 'SM_Vista_Poppies', lambda: flower_lods('SM_Vista_Poppies', 24, 'poppy'), (1.4, .3)),
-    ('flowers', 'SM_Vista_Daisies', lambda: flower_lods('SM_Vista_Daisies', 25, 'daisy'), (1.1, .2)),
+    ('grass', 'SM_Vista_Grass', lambda: grass_lods('SM_Vista_Grass', 21, 76, .2, .44, .032, .45, segs=2, lean=(2, 16), bend=(10, 40)), (5.0, .2, 'patch', 60, 2.4)),
+    ('grass', 'SM_Vista_GrassTall', lambda: grass_lods('SM_Vista_GrassTall', 22, 56, .5, .9, .04, .34, segs=3, lean=(4, 22), bend=(20, 70)), (5.0, .3, 'patch', 30, 2.0)),
+    ('grass', 'SM_Vista_Tuft', lambda: grass_lods('SM_Vista_Tuft', 27, 54, .32, .66, .04, .2, segs=3, lean=(10, 35), bend=(25, 70)), (4.0, .25, 'patch', 14, 1.4)),
+    ('wheat', 'SM_Vista_Wheat', lambda: (wheat('SM_Vista_Wheat', 23), [], [wheat('SM_Vista_Wheat_LOD1', 23, 12, 1)]), (5.0, .7, 'patch', 40, 2.0)),
+    ('flowers', 'SM_Vista_Poppies', lambda: flower_lods('SM_Vista_Poppies', 24, 'poppy'), (3.0, .25, 'patch', 10, 1.2, 'SM_Vista_Grass', 18)),
+    ('flowers', 'SM_Vista_Daisies', lambda: flower_lods('SM_Vista_Daisies', 25, 'daisy'), (2.6, .2, 'patch', 9, 1.0, 'SM_Vista_Grass', 16)),
     ('details', 'SM_Vista_Bush_A', lambda: bush('SM_Vista_Bush_A', 41, .9, 5), (4.5, .7)),
     ('details', 'SM_Vista_Bush_B', lambda: bush('SM_Vista_Bush_B', 42, .6, 4), (3.2, .5)),
     ('details', 'SM_Vista_Reeds', lambda: reeds('SM_Vista_Reeds', 43), (3.2, .8)),
     ('details', 'SM_Vista_PathStones', lambda: path_stones('SM_Vista_PathStones', 44), (2.0, .05)),
     ('details', 'SM_Vista_FallenLeaves', lambda: fallen_leaves('SM_Vista_FallenLeaves', 45), (2.2, 0.0)),
     ('ground', 'SM_Review_GroundSwatch', lambda: ground_swatch('SM_Review_GroundSwatch'), None),
+    ('details', 'SM_Vista_MossPatch', lambda: (moss_patch('SM_Vista_MossPatch', 51), [], [moss_patch('SM_Vista_MossPatch', 51, lod=1)]), (2.6, .1)),
+    ('details', 'SM_Vista_Fern', lambda: (fern('SM_Vista_Fern', 52), [], [fern('SM_Vista_Fern', 52, 5, 1)]), (2.4, .3)),
+    ('details', 'SM_Vista_Bellflowers', lambda: (wildflowers('SM_Vista_Bellflowers', 53, 'bell', 20), [], [wildflowers('SM_Vista_Bellflowers', 53, 'bell', 20, 1)]), (2.2, .15, 'patch', 6, .8, 'SM_Vista_Grass', 12)),
+    ('details', 'SM_Vista_BlueFlowers', lambda: (wildflowers('SM_Vista_BlueFlowers', 54, 'blue', 16), [], [wildflowers('SM_Vista_BlueFlowers', 54, 'blue', 16, 1)]), (2.2, .15, 'patch', 6, .8, 'SM_Vista_Grass', 12)),
+    ('details', 'SM_Vista_Clover', lambda: (clover('SM_Vista_Clover', 55), [], [clover('SM_Vista_Clover', 55, 1)]), (1.8, .05)),
+    ('details', 'SM_Vista_Mushrooms', lambda: (mushrooms('SM_Vista_Mushrooms', 56), [], []), (.8, .05)),
+    ('details', 'SM_Vista_Log', lambda: log('SM_Vista_Log', 57), (5.0, .3)),
+    ('details', 'SM_Vista_Stump', lambda: stump('SM_Vista_Stump', 58), (3.0, .3)),
+    ('details', 'SM_Vista_Branches', lambda: branches('SM_Vista_Branches', 59), (2.6, .05)),
+    ('details', 'SM_Vista_IvyCurtain', lambda: ivy_curtain('SM_Vista_IvyCurtain', 60), (5.0, -1.0)),
     ('cliffs', 'SM_Vista_Cliff_A', lambda: cliff_r02('SM_Vista_Cliff_A', 31), (30, 5)),
     ('cliffs', 'SM_Vista_Cliff_B', lambda: cliff_r02('SM_Vista_Cliff_B', 47, layers=3), (26, 4)),
 ]
 preview_materials()
+BUILT = {}
 for group, name, fn, view in JOBS:
     if not want(group, name): continue
     ob, extra, lods = fn()
     export(ob, name, extra, lods)
     if view:
         for o in [ob] + lods: o.location = (0, 0, 0)
-        preview(sc, cam, [ob], name, *view)
-        if lods: preview(sc, cam, [lods[-1]], name + f'_LOD{len(lods)}', *view)
+        if len(view) > 2 and view[2] == 'patch':
+            comp = [(BUILT[view[5]], view[6])] if len(view) > 5 and view[5] in BUILT else []
+            obs = patch(ob, view[3], view[4], hash(name) & 0xff, comp)
+            preview(sc, cam, obs, name, view[0], view[1], el=14)
+            for o in obs: bpy.data.objects.remove(o)
+        else:
+            preview(sc, cam, [ob], name, *view[:2])
+        if lods: preview(sc, cam, [lods[-1]], name + f'_LOD{len(lods)}', *view[:2])
+    BUILT[name] = ob
     for o in [ob] + list(extra) + list(lods): o.hide_render = True; o.hide_set(True)
 print('VISTA_ASSETS_EXPORTED')

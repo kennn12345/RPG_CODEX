@@ -139,7 +139,7 @@ bool FRPGSkyShots::RunTest(const FString&) { RunShots(this, TEXT("/Game/RPG/Maps
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGAssetShots, "Visual.AssetShots", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FRPGAssetShots::RunTest(const FString&)
 {
-	RunShots(this, TEXT("/Game/RPG/Maps/L_AssetReview"), TEXT("AssetShot"), TEXT("Assets"), {}, FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_ASSET_SHOTS")));
+	RunShots(this, TEXT("/Game/RPG/Maps/L_AssetReview"), TEXT("AssetShot"), TEXT("Assets"), {16.f, 17.3f}, FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_ASSET_SHOTS")));   // afternoon gold (video) + the vista start
 	return true;
 }
 

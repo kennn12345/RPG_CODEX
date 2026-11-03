@@ -117,3 +117,8 @@ LogCrowdFollowing "Unable to find RecastNavMesh" warning fires during world clea
 - Reference frames + sampled palette: outputs/World_R01/reference (Ref_t0NN_*.png, PALETTE.md).
 - Foliage materials use world-space soft normals (`soft_normal`): tangent-space normals flip on the back face of
   two-sided cards -> dark patches; the world-space vertex normal (bent / pulled up) is the same on both faces.
+- R02b (2026-11-03): painted textures from `Tools/World/vista_textures.py` (Stone_R02 albedo + height + normal, bark
+  relief, grass blade, petal, ground grass/dirt) -> builder "textures". New forest-floor assets (moss patch, fern,
+  bellflowers, blue flowers, clover, mushrooms, log + stump with UCX, branches, ivy curtain) in builder "details".
+  Review gallery cameras AS_Item_NN_<asset> in L_AssetReview give one framed preview per asset.
+  In-place re-import gotcha: the new geometry lands on a NEW material slot - always use set_all()/assign().

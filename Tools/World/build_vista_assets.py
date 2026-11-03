@@ -99,6 +99,12 @@ def assign(mesh, by_slot):
         mesh.set_material(i, mat)
     EAL.save_loaded_asset(mesh)
 
+def set_all(mesh, mat):
+    """one material on EVERY slot: an in-place re-import keeps the asset's old slot 0 (e.g. 'WorldGridMaterial') and puts the new
+    geometry on a new slot, so set_material(0) alone would leave the geometry on the engine grid material."""
+    for i in range(len(mesh.static_materials)): mesh.set_material(i, mat)
+    EAL.save_loaded_asset(mesh)
+
 def nanite(mesh, on=True):
     ns = mesh.get_editor_property('nanite_settings'); ns.set_editor_property('enabled', on)
     mesh.set_editor_property('nanite_settings', ns); EAL.save_loaded_asset(mesh)
@@ -112,7 +118,7 @@ def variant(src, name, mat):
         if ok < 0: problem(f'{name}: could not copy geometry from {src.get_name()}')
     else:
         m = EAL.duplicate_asset(src.get_path_name().split('.')[0], path)
-    m.set_material(0, mat); EAL.save_loaded_asset(m); return m
+    set_all(m, mat); return m
 
 # ------------------------------------------------------------------ materials (in place)
 def new_material(name):
@@ -129,7 +135,9 @@ def node(mat, cls, x, y, **p):
     e = MEL.create_material_expression(mat, cls, x, y)
     for k, v in p.items(): e.set_editor_property(k, v)
     return e
-def link(a, ao, b, bi): MEL.connect_material_expressions(a, ao, b, bi)
+def link(a, ao, b, bi):
+    if not MEL.connect_material_expressions(a, ao, b, bi):
+        problem(f'link failed: {a.get_class().get_name()}.{ao!r} -> {b.get_class().get_name()}.{bi!r}')
 def scalar(m, n, v, x, y): return node(m, unreal.MaterialExpressionScalarParameter, x, y, parameter_name=n, default_value=v)
 def vector(m, n, rgb, x, y): return node(m, unreal.MaterialExpressionVectorParameter, x, y, parameter_name=n, default_value=unreal.LinearColor(*rgb, 1.0))
 F1, F3 = unreal.CustomMaterialOutputType.CMOT_FLOAT1, unreal.CustomMaterialOutputType.CMOT_FLOAT3
@@ -156,11 +164,13 @@ def feed(m, c, inputs, x=-900):
         out = ''
         if isinstance(v, tuple) and len(v) > 2: out = v[2]
         link(e, out, c, n_); y += 90
+WORLD_NORMAL = set()                              # materials whose Normal output is world space
 def finish(m, dither=False):
     # scattered meshes are instanced (ARPGScatter / foliage); without this usage flag they render with the default grey material
     m.set_editor_property('used_with_instanced_static_meshes', True)
     m.set_editor_property('used_with_nanite', True)                    # terrain / far hills / rocks are Nanite
     if dither: m.set_editor_property('dithered_lod_transition', True)  # smooth LOD switches on trees / foliage
+    m.set_editor_property('tangent_space_normal', m.get_name() not in WORLD_NORMAL)
     MEL.recompile_material(m); EAL.save_loaded_asset(m); return m
 
 def cpd(m, name, index, x, y, default=0.0):
@@ -305,10 +315,11 @@ float n1 = w.fbm(WP.xy / 1300.0), n2 = w.fbm(WP.xy / 190.0 + 7.0), n3 = w.fbm(WP
 float2 bd = float2(0.8, 0.6);
 float stroke = w.fbm(float2(dot(WP.xy, bd) / 60.0, dot(WP.xy, float2(-bd.y, bd.x)) / 260.0));
 float3 grass = lerp(GrassDark, GrassC, smoothstep(0.25, 0.65, n2 * 0.6 + n1 * 0.4));
-grass = lerp(grass, GrassLight, smoothstep(0.55, 0.8, n1) * 0.8);
+grass = lerp(grass, GrassLight, smoothstep(0.45, 0.9, n1) * 0.55);          // soft drifts, no hard-edged blobs
 grass *= 0.92 + 0.16 * stroke;
+grass = lerp(grass, grass * GTex / 0.42, 0.55);                              // painted turf strokes (GroundGrass_R02)
 // dirt path: ochre, darker in the middle wheel-ruts of noise, pebble flecks
-float3 dirt = DirtC * (0.86 + 0.24 * (n3 - 0.5) + 0.12 * stroke);
+float3 dirt = lerp(DirtC * (0.86 + 0.24 * (n3 - 0.5) + 0.12 * stroke), DTex * (0.9 + 0.2 * (n3 - 0.5)), 0.75);   // GroundDirt_R02: soil + pebbles
 float peb = smoothstep(0.78, 0.82, w.n(WP.xy / 9.0)) * smoothstep(0.4, 0.7, n2);
 dirt = lerp(dirt, PebbleC, peb * 0.8);
 // ragged grass edge: the path mask is broken by blade-scale noise; a thin darker damp rim sits on the grass side
@@ -330,11 +341,19 @@ float rockM = 1.0 - smoothstep(0.2, 0.75, slope + (n3 - 0.5) * 0.3);
 c = lerp(c, lerp(rock, GrassDark, smoothstep(0.35, 0.6, slope) * 0.6), rockM);
 return c;
 '''
-    c = custom(m, code, ['WP', 'N', 'Path', 'Wet', 'Rock', 'GrassC', 'GrassLight', 'GrassDark', 'DirtC', 'PebbleC', 'SandC', 'WetC', 'RockC'], F3, (), -300, 0)
+    c = custom(m, code, ['WP', 'N', 'Path', 'Wet', 'Rock', 'GTex', 'DTex', 'GrassC', 'GrassLight', 'GrassDark', 'DirtC', 'PebbleC', 'SandC', 'WetC', 'RockC'], F3, (), -300, 0)
+    for nm, tx_, sc_ in (('GTex', 'T_GroundGrass_R02_BaseColor', 380.0), ('DTex', 'T_GroundDirt_R02_BaseColor', 300.0)):
+        wq = node(m, unreal.MaterialExpressionWorldPosition, -1500, 500)
+        mq = node(m, unreal.MaterialExpressionComponentMask, -1350, 500, r=True, g=True, b=False, a=False); link(wq, '', mq, '')
+        dq = node(m, unreal.MaterialExpressionDivide, -1200, 500, const_b=sc_); link(mq, '', dq, 'A')
+        t_ = tex(tx_)
+        if t_:
+            sq = node(m, unreal.MaterialExpressionTextureSample, -1050, 500, texture=t_); link(dq, '', sq, 'UVs'); link(sq, 'RGB', c, nm)
+        else: link(node(m, unreal.MaterialExpressionConstant3Vector, -1050, 500, constant=unreal.LinearColor(.42, .42, .42, 1) if nm == 'GTex' else unreal.LinearColor(.4, .28, .12, 1)), '', c, nm)
     wp = node(m, unreal.MaterialExpressionWorldPosition, -1300, 0)
     mk = node(m, unreal.MaterialExpressionComponentMask, -1150, 0, r=True, g=True, b=False, a=False); link(wp, '', mk, '')
     dv = node(m, unreal.MaterialExpressionDivide, -1050, 0, const_b=400.0); link(mk, '', dv, 'A')
-    rt = node(m, unreal.MaterialExpressionTextureSample, -900, 0, texture=tex('T_Stone_Painted_BaseColor')); link(dv, '', rt, 'UVs')
+    rt = node(m, unreal.MaterialExpressionTextureSample, -900, 0, texture=tex('T_Stone_R02_BaseColor') or tex('T_Stone_Painted_BaseColor')); link(dv, '', rt, 'UVs')
     vc = node(m, unreal.MaterialExpressionVertexColor, -900, 200)
     feed(m, c, {'WP': wp, 'N': ('node', unreal.MaterialExpressionVertexNormalWS),
                 'GrassC': ('vector', lin((96, 136, 14))), 'GrassLight': ('vector', lin((156, 168, 18))), 'GrassDark': ('vector', lin((52, 92, 12))),
@@ -348,7 +367,7 @@ return c;
 def soft_normal(m, up):
     """world-space shading normal = the mesh's (bent) vertex normal pulled toward +Z by `up`, the SAME on both faces of the
     two-sided cards (tangent-space normals flip on back faces -> dark patches). Gives soft painterly foliage."""
-    m.set_editor_property('tangent_space_normal', False)
+    WORLD_NORMAL.add(m.get_name())                                     # switched in finish() (a mid-build property change recompiles a half graph)
     c = custom(m, 'return normalize(lerp(N, float3(0, 0, 1), Up));', ['N', 'Up'], F3, (), -300, 420)
     feed(m, c, {'N': ('node', unreal.MaterialExpressionVertexNormalWS), 'Up': ('scalar', up)}, x=-700)
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_NORMAL)
@@ -363,12 +382,18 @@ def m_grass(name, root, tip, strength, sss, ear=None):
 float patch = w.fbm(WP.xy / 1100.0), small = w.fbm(WP.xy / 260.0 + 3.0);
 float3 tipc = lerp(TipC * float3(0.82, 0.92, 0.9), TipC * float3(1.1, 1.0, 0.6) + float3(0.04, 0.02, 0.0), smoothstep(0.35, 0.75, patch));
 float3 c = lerp(RootC, tipc, smoothstep(0.0, 1.0, pow(saturate(H), 0.75))) * lerp(0.86, 1.1, small);
+c *= lerp(float3(1, 1, 1), float3(1.16, 1.04, 0.62), saturate(Hue) * 0.7);   // per-blade hue (R02 vertex B)
+c *= lerp(1.0, Blade / 0.82, 0.8);                                           // painted blade: midrib, darker edges
 c = lerp(c, EarC * lerp(0.85, 1.1, small), saturate(Ear));
 Sss = c * SssGain * (0.3 + 0.7 * H);
 return c;
 '''
-    c = custom(m, code, ['WP', 'H', 'Ear', 'RootC', 'TipC', 'EarC', 'SssGain'], F3, (('Sss', F3),), -300, 0)
+    c = custom(m, code, ['WP', 'H', 'Ear', 'Hue', 'Blade', 'RootC', 'TipC', 'EarC', 'SssGain'], F3, (('Sss', F3),), -300, 0)
     vc = node(m, unreal.MaterialExpressionVertexColor, -900, 300)
+    link(vc, 'B', c, 'Hue')
+    bt = tex('T_GrassBlade_R02_BaseColor')
+    if bt: link(node(m, unreal.MaterialExpressionTextureSample, -900, 450, texture=bt), 'R', c, 'Blade')
+    else: link(node(m, unreal.MaterialExpressionConstant, -900, 450, r=0.82), '', c, 'Blade')
     feed(m, c, {'WP': ('node', unreal.MaterialExpressionWorldPosition), 'RootC': ('vector', lin(root)), 'TipC': ('vector', lin(tip)),
                 'EarC': ('vector', lin(ear or tip)), 'SssGain': ('scalar', sss)})
     link(vc, 'R', c, 'H')
@@ -387,12 +412,15 @@ def m_flowers():
     m.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE); m.set_editor_property('two_sided', True)
     code = r'''
 float3 stem = lerp(StemC * 0.6, StemC, saturate(H));
-float3 petal = lerp(Petal * PetalBase, Petal, smoothstep(0.0, 0.8, Shade));
+float3 petal = lerp(Petal * PetalBase, Petal, smoothstep(0.0, 0.8, Shade)) * lerp(1.0, PetalTex / 0.8, 0.7);   // veins (R02 petal texture)
 float3 c = Kind > 0.75 ? petal : (Kind > 0.25 ? Centre : stem);
 Sss = c * (Kind > 0.75 ? 0.9 : 0.5);
 return c;
 '''
-    c = custom(m, code, ['Kind', 'Shade', 'H', 'Petal', 'PetalBase', 'Centre', 'StemC'], F3, (('Sss', F3),), -300, 0)
+    c = custom(m, code, ['Kind', 'Shade', 'H', 'PetalTex', 'Petal', 'PetalBase', 'Centre', 'StemC'], F3, (('Sss', F3),), -300, 0)
+    pt = tex('T_Petal_R02_BaseColor')
+    if pt: link(node(m, unreal.MaterialExpressionTextureSample, -900, 450, texture=pt), 'R', c, 'PetalTex')
+    else: link(node(m, unreal.MaterialExpressionConstant, -900, 450, r=0.8), '', c, 'PetalTex')
     vc = node(m, unreal.MaterialExpressionVertexColor, -900, 0); link(vc, 'G', c, 'Kind'); link(vc, 'B', c, 'Shade'); link(vc, 'R', c, 'H')
     feed(m, c, {'Petal': ('vector', lin((232, 52, 24))), 'PetalBase': ('vector', (0.55, 0.35, 0.35)), 'Centre': ('vector', (0.02, 0.015, 0.012)),
                 'StemC': ('vector', lin((70, 125, 20)))})
@@ -461,7 +489,7 @@ def m_bark():
 float hb = WP.z - OP.z;                                            // height above the tree's origin (cm)
 float mn = w.fbm(float2(WP.x + WP.y, WP.z) / 90.0);
 float collar = saturate(1.0 - hb / CollarH) * smoothstep(0.3, 0.6, mn + 0.15);
-float moss = saturate(max(VC.r, collar * 0.75));
+float moss = saturate(max(VC.r * 0.55, collar * 0.4));                 // R02: trunks stay red-brown (video), moss only at the foot
 float3 c = lerp(Bark * Tint, Moss * MossTint, moss);
 c *= lerp(0.72, 1.0, saturate((hb + 30.0) / 60.0));             // roots darken into the soil
 return c;
@@ -472,8 +500,10 @@ return c;
     link(ts, 'RGB', c, 'Bark'); link(tm, 'RGB', c, 'Moss')
     link(node(m, unreal.MaterialExpressionVertexColor, -900, 400), '', c, 'VC')
     feed(m, c, {'WP': ('node', unreal.MaterialExpressionWorldPosition), 'OP': ('node', unreal.MaterialExpressionObjectPositionWS),
-                'Tint': ('vector', (1.0, 0.92, 0.86)), 'MossTint': ('vector', (1.0, 1.0, 0.85)), 'CollarH': ('scalar', 90.0)}, x=-1200)
+                'Tint': ('vector', (1.18, 0.92, 0.8)), 'MossTint': ('vector', (1.0, 1.0, 0.85)), 'CollarH': ('scalar', 60.0)}, x=-1200)
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    bn = tex('T_Bark_R02_Normal')
+    if bn: MEL.connect_material_property(node(m, unreal.MaterialExpressionTextureSample, -700, 500, texture=bn, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL), 'RGB', unreal.MaterialProperty.MP_NORMAL)
     MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.85), '', unreal.MaterialProperty.MP_ROUGHNESS)
     sway_wpo(m, 0.0)
     return finish(m, dither=True)
@@ -550,23 +580,76 @@ return lerp(DayC, NightC, Night);
     MEL.connect_material_property(c, 'Op', unreal.MaterialProperty.MP_OPACITY)
     MEL.recompile_material(m); EAL.save_loaded_asset(m); return m
 
+def m_moss():
+    """moss cushions (R02b): painted moss texture projected from above x vertex G light (lit top, darker rim), soft, no wind."""
+    m = new_material('M_Vista_Moss')
+    code = HELP + r'''
+float3 c = MossTex * lerp(0.55, 1.15, saturate(VC.g)) * Tint;
+c *= 0.9 + 0.2 * w.fbm(WP.xy / 60.0);
+return c;
+'''
+    c = custom(m, code, ['MossTex', 'VC', 'WP', 'Tint'], F3, (), -300, 0)
+    wp = node(m, unreal.MaterialExpressionWorldPosition, -1300, 0)
+    mk = node(m, unreal.MaterialExpressionComponentMask, -1150, 0, r=True, g=True, b=False, a=False); link(wp, '', mk, '')
+    dv = node(m, unreal.MaterialExpressionDivide, -1050, 0, const_b=80.0); link(mk, '', dv, 'A')
+    mt = node(m, unreal.MaterialExpressionTextureSample, -900, 0, texture=tex('T_Moss_Painted_BaseColor')); link(dv, '', mt, 'UVs'); link(mt, 'RGB', c, 'MossTex')
+    link(node(m, unreal.MaterialExpressionVertexColor, -900, 200), '', c, 'VC'); link(wp, '', c, 'WP')
+    link(vector(m, 'Tint', (1.05, 1.08, 0.85), -900, 300), '', c, 'Tint')
+    MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.95), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    return finish(m, dither=True)
+
+def m_mushroom():
+    """mushrooms (R02b): vertex G = cap (0 stem), B = cap underside / rim -> warm red-brown cap, cream stem and gills."""
+    m = new_material('M_Vista_Mushroom')
+    code = HELP + r'''
+float3 cap = lerp(CapC * (0.85 + 0.3 * w.n(WP.xy / 3.0)), RimC, saturate(VC.b));
+return lerp(StemC, cap, saturate(VC.g));
+'''
+    c = custom(m, code, ['VC', 'WP', 'CapC', 'RimC', 'StemC'], F3, (), -300, 0)
+    link(node(m, unreal.MaterialExpressionVertexColor, -900, 0), '', c, 'VC')
+    feed(m, c, {'WP': ('node', unreal.MaterialExpressionWorldPosition), 'CapC': ('vector', lin((176, 70, 38))), 'RimC': ('vector', lin((232, 214, 180))),
+                'StemC': ('vector', lin((236, 224, 196)))})
+    MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.6), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    return finish(m, dither=True)
+
+def m_wood_cut():
+    """cut wood (log / stump ends, R02b): warm growth rings around the cap UV centre."""
+    m = new_material('M_Vista_WoodCut')
+    code = HELP + r'''
+float r = length(UV - 0.5) * 2.0 + 0.04 * w.n(UV * 12.0);
+float rings = 0.5 + 0.5 * sin(r * 40.0);
+float3 c = lerp(DarkC, LightC, rings * 0.6 + 0.4 * (1.0 - r));
+return lerp(c, BarkC, smoothstep(0.85, 0.98, r));
+'''
+    c = custom(m, code, ['UV', 'DarkC', 'LightC', 'BarkC'], F3, (), -300, 0)
+    feed(m, c, {'UV': ('node', unreal.MaterialExpressionTextureCoordinate), 'DarkC': ('vector', lin((150, 96, 50))), 'LightC': ('vector', lin((214, 160, 96))),
+                'BarkC': ('vector', lin((96, 50, 30)))})
+    MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.85), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    return finish(m)
+
 # ================================================================== builders (one group of assets each)
 def b_materials():
     """all world materials (in place)."""
     m_terrain()
     # R02 palette (World_R01/reference/PALETTE.md): lit meadow tips ~167,173,3, shade 108,138,4 - albedo slightly above
-    m_grass('M_Vista_Grass', (38, 84, 10), (184, 198, 22), 12.0, 0.8)
-    m_grass('M_Vista_GrassTall', (40, 86, 12), (172, 192, 26), 18.0, 0.8)
+    m_grass('M_Vista_Grass', (40, 88, 10), (152, 178, 18), 12.0, 0.8)
+    m_grass('M_Vista_GrassTall', (40, 86, 12), (146, 172, 22), 18.0, 0.8)
     m_grass('M_Vista_Wheat', (150, 112, 30), (232, 180, 36), 16.0, 0.9, ear=(246, 196, 58))
     instance('MI_Vista_Daisies', m_flowers(), {'Petal': lin((250, 246, 232)), 'PetalBase': (0.8, 0.8, 0.75), 'Centre': lin((240, 176, 24))})
-    m_canopy(); m_leaf(); m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist()
+    m_canopy(); m_leaf(); m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
+    flowers = M('M_Vista_Poppies')
+    instance('MI_Vista_Bellflowers', flowers, {'Petal': lin((186, 130, 236)), 'PetalBase': (0.55, 0.5, 0.65), 'Centre': lin((90, 60, 130))})
+    instance('MI_Vista_BlueFlowers', flowers, {'Petal': lin((120, 165, 255)), 'PetalBase': (0.75, 0.8, 0.9), 'Centre': lin((250, 226, 96))})
 
 def b_ground():
     """terrain + far land meshes: layout pieces, normally NOT re-imported (their shape is the world layout).
     Only material + Nanite + collision settings are refreshed."""
     for n in ('SM_Vista_Terrain', 'SM_Vista_Far'):
         mesh = SM(n) or mesh_asset(n, f'{EXP1}/{n}.fbx', keep_size=False)
-        mesh.set_material(0, M('M_Vista_Terrain'))
+        set_all(mesh, M('M_Vista_Terrain'))
         mesh.get_editor_property('body_setup').set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
         nanite(mesh)
 
@@ -583,7 +666,7 @@ def world_asset(name, slots, screens, normals=False, keep_size=False, min_hulls=
     lods = [f'{EXP2}/{name}_LOD{i}.fbx' for i in range(1, 4) if os.path.exists(f'{EXP2}/{name}_LOD{i}.fbx')]
     if lods and info: set_lods(mesh, lods, list(screens))
     if isinstance(slots, dict): assign(mesh, slots)
-    else: mesh.set_material(0, slots); EAL.save_loaded_asset(mesh)
+    else: set_all(mesh, slots)
     return mesh
 
 # LOD screen sizes: small foliage drops detail early (most of the 60k grass clumps draw LOD1/LOD2)
@@ -630,30 +713,56 @@ def b_details():
     if stones: foliage_type(stones, 10, (0.8, 1.4), shadow=False, cull=4000, align=True, sink=2)
     leaves = world_asset('SM_Vista_FallenLeaves', M('M_Vista_Leaf'), ())
     if leaves: foliage_type(leaves, 8, (0.8, 1.3), shadow=False, cull=3500, align=True)
+    # R02b: moss, ferns, wildflowers, clover, mushrooms, logs, stumps, branches, ivy curtains (things that make it feel alive)
+    for n, slots, screens, dens, sc, cull, kw in (
+            ('SM_Vista_MossPatch', {'Moss': M('M_Vista_Moss'), 'Leaves': M('M_Vista_Leaf')}, (1.0, 0.15), 6, (0.7, 1.4), 5000, dict(align=True, sink=4)),
+            ('SM_Vista_Fern', M('M_Vista_GrassTall'), (1.0, 0.2), 6, (0.8, 1.3), 6000, {}),
+            ('SM_Vista_Bellflowers', M('MI_Vista_Bellflowers'), FLOWER_LODS, 20, (0.9, 1.3), 5000, {}),
+            ('SM_Vista_BlueFlowers', M('MI_Vista_BlueFlowers'), FLOWER_LODS, 20, (0.9, 1.3), 5000, {}),
+            ('SM_Vista_Clover', M('M_Vista_Leaf'), (1.0, 0.15), 30, (0.8, 1.3), 4000, dict(align=True)),
+            ('SM_Vista_Mushrooms', M('M_Vista_Mushroom'), (), 4, (0.7, 1.5), 3000, {}),
+            ('SM_Vista_Branches', M('M_Vista_Bark'), (), 3, (0.8, 1.3), 3500, dict(align=True)),
+            ('SM_Vista_IvyCurtain', M('M_Vista_Leaf'), (), 1, (0.8, 1.3), 9000, {})):
+        mesh = world_asset(n, slots, screens)
+        if mesh: foliage_type(mesh, dens, sc, shadow=False, cull=cull, **kw)
+    for n in ('SM_Vista_Log', 'SM_Vista_Stump'):                       # solid wood: collision (UCX hull) + shadows
+        mesh = world_asset(n, {'Bark': M('M_Vista_Bark'), 'Wood': M('M_Vista_WoodCut')}, (), min_hulls=1)
+        if mesh: foliage_type(mesh, 0.3, (0.8, 1.2), shadow=True, cull=15000, collision=True, align=True, sink=6)
 
 def stone_graph(m, moss=0.0):
-    """warm-neutral painted stone (rock library + cliffs): texture only as soft value, vertex colour R edge light /
-    G height / B chunk value (Rocks_R02, cliffs R02), moss on up-facing tops (Moss param)."""
+    """R02 painted stone (rock library + cliffs): Stone_R02 albedo (big painted patches, a few long cracks, strata, chips)
+    projected on the three world axes, x Tint, x vertex colour R edge light / G height / B chunk value (Rocks_R02, cliffs
+    R02); relief from Stone_R02_Normal on the same three axes (world-space normal, UDN blend); moss on up-facing tops."""
+    WORLD_NORMAL.add(m.get_name())
     code = HELP + r'''
-float3 an = abs(N);
-float3 Tex = (TexXY * an.z + TexXZ * an.y + TexYZ * an.x) / max(an.x + an.y + an.z, 0.001);
-float lum = dot(Tex, float3(0.333, 0.333, 0.334));
-float3 c = BaseC * lerp(1.0, 0.78 + 0.45 * lum, TexAmt);                  // texture = soft painted value only
-c *= lerp(0.88, 1.12, VC.b) * lerp(0.78, 1.06, VC.g) * lerp(0.72, 1.22, VC.r);
-c *= 0.94 + 0.12 * w.fbm(WP.xy / 220.0 + WP.z / 300.0);                     // broad soft variation
+float3 bw = pow(abs(N), 4.0); bw /= (bw.x + bw.y + bw.z);
+float3 Tex = TexXY * bw.z + TexXZ * bw.y + TexYZ * bw.x;
+float3 c = Tex * Tint;
+c *= lerp(0.9, 1.1, VC.b) * lerp(0.8, 1.05, VC.g) * lerp(0.76, 1.2, VC.r);
+c *= 0.94 + 0.12 * w.fbm(WP.xy / 300.0 + WP.z / 400.0);                     // broad soft variation across a rock
 float mossMask = saturate((N.z - 0.45) / 0.3) * smoothstep(0.38, 0.62, w.fbm(WP.xy / 70.0) * 0.7 + 0.3 * VC.g);
+float3 tz = NXY * float3(Relief, Relief, 1.0), ty = NXZ * float3(Relief, Relief, 1.0), tx = NYZ * float3(Relief, Relief, 1.0);   // normal samplers: -1..1
+float3 nz = float3(tz.xy + N.xy, N.z), ny = float3(ty.xy + N.xz, N.y), nx = float3(tx.xy + N.yz, N.x);
+Nrm = normalize(float3(nx.z, nx.x, nx.y) * bw.x + float3(ny.x, ny.z, ny.y) * bw.y + nz * bw.z);
+Nrm = normalize(lerp(Nrm, N, mossMask * Moss * 0.7));                         // moss is soft
 return lerp(c, MossC * lerp(0.8, 1.15, w.n(WP.xy / 25.0)), mossMask * Moss);
 '''
-    c = custom(m, code, ['TexXY', 'TexXZ', 'TexYZ', 'WP', 'N', 'VC', 'BaseC', 'TexAmt', 'MossC', 'Moss'], F3, (), -300, 0)
-    wp = node(m, unreal.MaterialExpressionWorldPosition, -1500, 0)
-    for i, (r_, g_, b_, nm) in enumerate(((True, True, False, 'TexXY'), (True, False, True, 'TexXZ'), (False, True, True, 'TexYZ'))):
-        mk = node(m, unreal.MaterialExpressionComponentMask, -1300, i * 160, r=r_, g=g_, b=b_, a=False); link(wp, '', mk, '')
-        dv = node(m, unreal.MaterialExpressionDivide, -1150, i * 160, const_b=220.0); link(mk, '', dv, 'A')
-        ts = node(m, unreal.MaterialExpressionTextureSample, -1000, i * 160, texture=tex('T_Stone_Painted_BaseColor')); link(dv, '', ts, 'UVs'); link(ts, 'RGB', c, nm)
-    link(wp, '', c, 'WP'); link(node(m, unreal.MaterialExpressionPixelNormalWS, -900, 500), '', c, 'N')
-    link(node(m, unreal.MaterialExpressionVertexColor, -900, 600), '', c, 'VC')
-    feed(m, c, {'BaseC': ('vector', lin((160, 144, 118))), 'TexAmt': ('scalar', 0.55), 'MossC': ('vector', lin((92, 132, 26))), 'Moss': ('scalar', moss)}, x=-700)
+    c = custom(m, code, ['TexXY', 'TexXZ', 'TexYZ', 'NXY', 'NXZ', 'NYZ', 'WP', 'N', 'VC', 'Tint', 'Relief', 'MossC', 'Moss'], F3, (('Nrm', F3),), -300, 0)
+    wp = node(m, unreal.MaterialExpressionWorldPosition, -1700, 0)
+    alb = tex('T_Stone_R02_BaseColor') or tex('T_Stone_Painted_BaseColor'); nrm = tex('T_Stone_R02_Normal')
+    for i, (r_, g_, b_, nm) in enumerate(((True, True, False, 'XY'), (True, False, True, 'XZ'), (False, True, True, 'YZ'))):
+        mk = node(m, unreal.MaterialExpressionComponentMask, -1500, i * 200, r=r_, g=g_, b=b_, a=False); link(wp, '', mk, '')
+        dv = node(m, unreal.MaterialExpressionDivide, -1350, i * 200, const_b=190.0); link(mk, '', dv, 'A')
+        ts = node(m, unreal.MaterialExpressionTextureSample, -1100, i * 200, texture=alb); link(dv, '', ts, 'UVs'); link(ts, 'RGB', c, 'Tex' + nm)
+        if nrm:
+            tn = node(m, unreal.MaterialExpressionTextureSample, -1100, i * 200 + 100, texture=nrm, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+            link(dv, '', tn, 'UVs'); link(tn, 'RGB', c, 'N' + nm)
+        else: link(node(m, unreal.MaterialExpressionConstant3Vector, -1100, i * 200 + 100, constant=unreal.LinearColor(0, 0, 1, 1)), '', c, 'N' + nm)
+    link(wp, '', c, 'WP'); link(node(m, unreal.MaterialExpressionVertexNormalWS, -900, 700), '', c, 'N')
+    link(node(m, unreal.MaterialExpressionVertexColor, -900, 800), '', c, 'VC')
+    feed(m, c, {'Tint': ('vector', (0.74, 0.67, 0.58)), 'Relief': ('scalar', 1.6), 'MossC': ('vector', lin((92, 132, 26))), 'Moss': ('scalar', moss)}, x=-700)
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(c, 'Nrm', unreal.MaterialProperty.MP_NORMAL)
     MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.88), '', unreal.MaterialProperty.MP_ROUGHNESS)
 
 ROCKLIB = '/Game/RPG/Environment/Rocks'
@@ -669,8 +778,7 @@ def m_rock_stone():
     else:
         m = TOOLS.create_asset('M_Rock_Stone', f'{ROCKLIB}/Materials', unreal.Material, unreal.MaterialFactoryNew())
     stone_graph(m)
-    m.set_editor_property('used_with_instanced_static_meshes', True); m.set_editor_property('used_with_nanite', True)
-    MEL.recompile_material(m); EAL.save_loaded_asset(m)
+    finish(m)
     mpath = f'{ROCKLIB}/Materials/MI_Rock_Stone_Moss'
     mi = unreal.load_asset(mpath) if EAL.does_asset_exist(mpath) else \
         TOOLS.create_asset('MI_Rock_Stone_Moss', f'{ROCKLIB}/Materials', unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
@@ -689,21 +797,34 @@ def b_rocks():
         mesh = mesh_asset(f'SM_{n}', fbx, dest=f'{ROCKLIB}/Meshes', size_cm=max(info['dimensions_m']) * 100,
                           min_hulls=info['collision_hulls'], scale=100.0)
         if not mesh: continue
-        mesh.set_material(0, mossy if info.get('material') == 'M_Rock_Stone_Moss' else stone)
+        set_all(mesh, mossy if info.get('material') == 'M_Rock_Stone_Moss' else stone)
         nanite(mesh)
 
 def b_textures():
-    """painted textures from the Blender libraries (in place: re-import into the same texture asset)."""
-    for name, png, srgb in (('T_Leaf_Cluster_Atlas_BaseColor', f'{SRC}/Trees_R02/textures/Leaf_Cluster_Atlas_BaseColor.png', True),
-                            ('T_Bark_Painted_R02_BaseColor', f'{SRC}/Trees_R02/textures/Bark_Painted_R02_BaseColor.png', True)):
+    """painted textures from the Blender libraries (in place: re-import into the same texture asset).
+    kind: 'c' colour (sRGB), 'n' normal map, 'leaf' colour with sharpened mips."""
+    T2, W2 = f'{SRC}/Trees_R02/textures', f'{SRC}/World_R02/textures'
+    for name, png, kind in (('T_Leaf_Cluster_Atlas_BaseColor', f'{T2}/Leaf_Cluster_Atlas_BaseColor.png', 'leaf'),
+                            ('T_Bark_Painted_R02_BaseColor', f'{T2}/Bark_Painted_R02_BaseColor.png', 'c'),
+                            ('T_Bark_R02_Normal', f'{W2}/Bark_R02_Normal.png', 'n'),
+                            ('T_Stone_R02_BaseColor', f'{W2}/Stone_R02_BaseColor.png', 'c'),
+                            ('T_Stone_R02_Normal', f'{W2}/Stone_R02_Normal.png', 'n'),
+                            ('T_GrassBlade_R02_BaseColor', f'{W2}/GrassBlade_R02_BaseColor.png', 'c'),
+                            ('T_Petal_R02_BaseColor', f'{W2}/Petal_R02_BaseColor.png', 'c'),
+                            ('T_GroundGrass_R02_BaseColor', f'{W2}/GroundGrass_R02_BaseColor.png', 'c'),
+                            ('T_GroundDirt_R02_BaseColor', f'{W2}/GroundDirt_R02_BaseColor.png', 'c'),
+                            ('T_GroundDirt_R02_Normal', f'{W2}/GroundDirt_R02_Normal.png', 'n')):
         if not os.path.exists(png): problem(f'{name}: missing {png}'); continue
         t = unreal.AssetImportTask(); t.filename = png; t.destination_path = TEXTURES; t.destination_name = name
         t.automated = True; t.replace_existing = True; t.save = True
         TOOLS.import_asset_tasks([t])
         tx = tex(name)
         if not tx: problem(f'{name}: import failed'); continue
-        tx.set_editor_property('srgb', srgb)
-        if 'Leaf' in name:
+        if kind == 'n':
+            tx.set_editor_property('compression_settings', unreal.TextureCompressionSettings.TC_NORMALMAP); tx.set_editor_property('srgb', False)
+        else:
+            tx.set_editor_property('srgb', True)
+        if kind == 'leaf':
             tx.set_editor_property('mip_gen_settings', unreal.TextureMipGenSettings.TMGS_SHARPEN4)   # leaf edges stay crisp at distance
         EAL.save_loaded_asset(tx); unreal.log(f'TEXTURE {name}')
 
@@ -741,7 +862,7 @@ def b_cliffs():
 def b_effects():
     for n, mat in (('SM_Vista_Motes', 'M_Vista_Motes'), ('SM_Vista_DriftLeaves', 'M_Vista_DriftLeaf')):
         mesh = mesh_asset(n, pick(f'{EXP2}/{n}.fbx', f'{EXP1}/{n}.fbx'), keep_size=False)
-        mesh.set_material(0, M(mat))
+        set_all(mesh, M(mat))
         # drifting cards move far from their rest position (WPO): widen bounds so they are not culled
         mesh.set_editor_property('positive_bounds_extension', unreal.Vector(1500, 1500, 300))
         mesh.set_editor_property('negative_bounds_extension', unreal.Vector(1500, 1500, 300))
@@ -768,7 +889,7 @@ def b_review():
     finish(m)
     sw = mesh_asset('SM_Review_GroundSwatch', f'{EXP2}/SM_Review_GroundSwatch.fbx', keep_size=False)
     if sw:
-        sw.set_material(0, M('M_Vista_Terrain')); nanite(sw)
+        set_all(sw, M('M_Vista_Terrain')); nanite(sw)
 
 BUILDERS = {'textures': b_textures, 'materials': b_materials, 'review': b_review, 'ground': b_ground, 'grass': b_grass, 'flowers': b_flowers, 'trees_round': b_trees_round,
             'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'details': b_details, 'rocks': b_rocks, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}

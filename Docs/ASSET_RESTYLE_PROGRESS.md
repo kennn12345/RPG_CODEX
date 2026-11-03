@@ -1,54 +1,53 @@
 # Asset restyle progress
 
-Last update: 2026-11-03T17:50:00-06:00
+Last update: 2026-11-03T17:30:00-06:00
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
-## Blockers
-- 2026-11-03 15:27 -> still at 17:50: an interactive UnrealEditor.exe (PID 9524, started 14:59 by the user on
-  RPG_CODEX.uproject) is running. Per the brief it is NOT killed -> no Unreal import / render / C++ build yet.
-  All non-Unreal work for every asset group is done (below). NEXT RUN, once the editor is closed, in order:
-  1. C++ build (Visual.AssetShots test in Source/RPG_CODEX/RPGWaterShots.cpp - written, NOT compiled yet):
-     Build.bat RPG_CODEXEditor Win64 Development -Project=... -WaitMutex -NoHotReload
-  2. UnrealEditor -ExecutePythonScript="C:/UNREAL PROJECTS/RPG_CODEX/Tools/World/build_vista_assets.py all"
-     -> check the log for ASSETS_PROBLEM, LogPython: Error, Failed to compile, Error saving. First real run of the
-     script: expect API fixes (set_lods: StaticMeshEditorSubsystem.import_lod / set_lod_screen_sizes names unverified;
-     soft_normal sets tangent_space_normal False; texture import options). Run builders one by one if it fails
-     (e.g. "textures materials", then "trees_round", ...).
-  3. UnrealEditor -ExecutePythonScript=".../Tools/World/build_asset_review.py" (makes L_AssetReview)
-  4. -ExecCmds="Automation RunTests Visual.AssetShots" -TestExit="Automation Test Queue Empty" -> Saved/Screenshots/Assets
-  5. Sheets with Tools/World/make_sheet.ps1 (reference | ours) -> outputs/World_R01/review; iterate each asset
-     (max ~4 iterations), commit per asset group; also Visual.WorldShots for the vista + check the log for
-     performance warnings.
+## Status
+First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
+quality everywhere, add moss and small details from the video"). The user closed-editor blocker is gone (the user said
+"close unreal and continue", 16:47; it closed cleanly). Not ALL_DONE: see "Next iteration" - the user reviews first.
 
-## Queue (Blender = source done, Unreal = import + review in L_AssetReview still pending for ALL)
+Unreal previews (send/open these): outputs/World_R01/review/
+- Unreal_R02_Gallery_1600.png / _1730.png - every asset alone in L_AssetReview (afternoon gold / vista start light)
+- Unreal_R02_vs_Reference.png - video frames next to ours
+- Unreal_R02_WorldVista.png - L_WorldVista with the new assets (layout, water, sky untouched)
+Raw shots: Saved/Screenshots/Assets (AS_*_16.00 / _17.30), Saved/Screenshots/World.
+
+## Queue
 | # | Step | Status |
 |---|---|---|
-| 0 | Branch, reference frames + palette (World_R01/reference, PALETTE.md) | done |
-| 1 | build_vista_assets.py (assets only, in place) + build_vista.py layout-only | done (script); first Unreal run pending |
-| 2 | L_AssetReview map script + Visual.AssetShots test | written; C++ build + run pending |
-| 3 | Trees: Trees_R02 (ancient + 4 forest, LODs) | Blender done (outputs/Trees_R02, HANDOFF.md); Unreal pending |
-| 4 | Trees: round world trees R02 + LODs; far tree colours (M_Vista_Canopy palette) | Blender done (World_R02); Unreal pending |
-| 5 | Grass + flowers + wheat | Blender done (grass/tall/tuft/wheat/poppies/daisies + LODs), materials written; Unreal pending |
-| 6 | Ground + path (M_Vista_Terrain) | material rewritten (palette, ragged path edge, damp rim, sand/wet shore, warm rock); swatch exported; Unreal pending |
-| 7 | Transitions + detail pieces | bushes A/B, tuft, reeds, path stones, fallen leaves + FTs (builder details); edges in M_Vista_Terrain; Unreal pending |
-| 8 | Rocks colour/surface | Blender Rocks_R02 done (bevel + vertex colour, dims within 1%, same hulls); builder rocks + M_Rock_Stone R02; Unreal pending |
-| 9 | Cliffs + ivy | Blender done (R01 slabs replayed, edge light, thick ivy); M_Vista_Rock = stone graph; Unreal pending |
-| 10 | Small effects (mist, pollen, drifting leaves) | materials restyled (round additive motes, masked leaf shape, mist 0.3); Unreal pending |
+| 0 | Reference frames + palette | done |
+| 1 | build_vista_assets.py (in place, checked) + build_vista.py layout only | done, runs clean (ASSETS_DONE problems=0) |
+| 2 | L_AssetReview + Visual.AssetShots (16:00 + 17:30, gallery AS_Item_*) | done |
+| 3 | Trees_R02 ancient + 4 forest (LOD0-2, screen sizes 1/.4/.14, ancient 1/.3/.1) | done in Unreal |
+| 4 | Round trees R02 + LODs, far tree colours | done in Unreal |
+| 5 | Grass/tall/tuft (LOD 1/.22/.07), wheat (own mesh), poppies, daisies | done in Unreal |
+| 6 | Ground (M_Vista_Terrain: painted turf + dirt/pebble textures, ragged path edge, shore bands) | done in Unreal |
+| 7 | Detail pieces: bushes, tuft, reeds, path stones, fallen leaves + R02b moss patch, fern, bellflowers, blue flowers, clover, mushrooms, log, stump, branches, ivy curtain (all with FT_*) | done in Unreal |
+| 8 | Rocks (Rocks_R02 + painted triplanar stone + relief normals, warm-neutral) | done in Unreal |
+| 9 | Cliffs + ivy (stone graph, thicker ivy) | done in Unreal |
+| 10 | Effects (round additive motes, masked drift leaves, mist 0.3) | materials done (not separately reviewed) |
 
 ## Commits
 - 84f52c4 Split world asset build from layout; add R02 restyle sources and review stage
 - 33d54cb Restyle rocks, ground, cliffs and small effects toward the reference palette
+- d9c2320 Update asset restyle progress
+- (this commit) Painted textures + relief, new forest-floor details, first Unreal import + review
 
-## Notes
-- Reference frames = browser screenshots of the 480p video (787x448 crops), saved as PNG; colours sampled in PALETTE.md.
-- Blender sources outside the repo: outputs/Trees_R02/source, outputs/Rocks_R02/source (rocks_restyle.py, rocks_preview.py);
-  repo: Tools/World/export_vista_assets.py (-> outputs/World_R02).
-- Blender previews (golden-hour Cycles) are only a shape/density check; colours are tuned in Unreal (two-sided foliage
-  back faces look dark in Cycles - the Unreal materials use world-space soft normals instead).
-- Review sheets so far (Blender stage): outputs/World_R01/review/Trees_R02_Blender_iter1.png, Rocks_R02_Blender_lineup.png,
-  Cliffs_R02_Blender.png.
-- make_sheet.ps1: run it through the PowerShell tool, or powershell -ExecutionPolicy Bypass -File (scripts are disabled
-  by policy for plain -File).
-- The vista's scatter counts/positions are layout (not changed): density changes come from the meshes themselves
-  (blades per clump, LODs, cull distances in the foliage types).
+## Next iteration (if the user asks / scheduled run)
+- Cliffs: ivy still lighter than the video's thick mats; slabs could use more stepped breaks.
+- Rocks at 17.3 h in the vista pick up a pink cast from the sunset sky (albedo is neutral-warm now).
+- The new detail pieces are reusable assets with Foliage Types but are NOT placed in L_WorldVista (layout frozen) -
+  placing them needs the user's OK to change the layout.
+- FPS not measured in a packaged/PIE run; triangle budgets: grass 228/~60/10 tris per clump by LOD, trees 6-15k LOD0.
+- make_sheet.ps1: run through the PowerShell tool (scripts are disabled for plain -File).
+
+## Gotchas found this round
+- In-place FBX re-import keeps the asset's OLD material slot 0 and adds the new geometry on a NEW slot -> set_material(0)
+  left grass/rocks on WorldGridMaterial (orange in golden light). build_vista_assets.set_all() sets every slot.
+- "Failed to compile ... missing input" lines while building materials are intermediate compiles of half-built graphs;
+  the final compile is clean (check the shots log, not the build log). tangent_space_normal is switched in finish().
+- Normal maps (TC_NORMALMAP) must be sampled with SAMPLERTYPE_NORMAL (values already -1..1).
+- An editor Python error before quit_editor() leaves the editor running - kill it before the next run.
