@@ -65,6 +65,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scatter")
 	TArray<FVector> ExcludeCircles;
 
+	// Keep instances WITHIN this distance (cm) of the ExcludePath polyline (0 = off). With ExcludeRadius it makes a band
+	// along the path edges (tufts, path stones, bushes lining a path).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scatter")
+	float NearPathMax = 0.f;
+
+	// Keep-in circles (world XY): if any are set, instances only go inside one of them (X, Y = centre, Z = radius cm) -
+	// e.g. tree feet, lake shores, cliff bases.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scatter")
+	TArray<FVector> IncludeCircles;
+
+	// Down-traces ignore every other ARPGScatter (tree canopies, rocks, grass) and only land on the ground itself.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scatter")
+	bool bIgnoreOtherScatters = false;
+
 	// No instances where the ground is below this world Z (e.g. under a lake surface).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scatter")
 	float MinGroundZ = -1.0e7f;

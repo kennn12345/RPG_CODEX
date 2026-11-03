@@ -3,6 +3,7 @@
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Materials/MaterialInterface.h"
 #include "RPGWaterZoneComponent.h"
 
@@ -43,13 +44,19 @@ void ARPGScatter::Rebuild()
 
 	FRandomStream Rng(Seed);
 	FCollisionQueryParams Query(TEXT("RPGScatter"), true, this);
+	if (bIgnoreOtherScatters)
+		for (TActorIterator<ARPGScatter> It(World); It; ++It) Query.AddIgnoredActor(*It);
 	const FVector Origin = GetActorLocation();
 	TArray<FTransform> Out;
 	Out.Reserve(Count);
-	for (int32 Attempt = 0; Attempt < Count * 6 && Out.Num() < Count; ++Attempt)
+	// narrow keep-in areas (path band, circles) reject most random points: try much harder there
+	const int32 Tries = Count * ((NearPathMax > 0.f || IncludeCircles.Num()) ? 60 : 6);
+	for (int32 Attempt = 0; Attempt < Tries && Out.Num() < Count; ++Attempt)
 	{
 		const FVector2D XY(Origin.X + Rng.FRandRange(-HalfExtent.X, HalfExtent.X), Origin.Y + Rng.FRandRange(-HalfExtent.Y, HalfExtent.Y));
 		if (ExcludeRadius > 0.f && ExcludePath.Num() > 1 && DistanceToPath2D(XY, ExcludePath) < ExcludeRadius) continue;
+		if (NearPathMax > 0.f && ExcludePath.Num() > 1 && DistanceToPath2D(XY, ExcludePath) > NearPathMax) continue;
+		if (IncludeCircles.Num() && !IncludeCircles.ContainsByPredicate([&XY](const FVector& C) { return FVector2D::DistSquared(XY, FVector2D(C)) < C.Z * C.Z; })) continue;
 		if (ExcludeCircles.ContainsByPredicate([&XY](const FVector& C) { return FVector2D::DistSquared(XY, FVector2D(C)) < C.Z * C.Z; })) continue;
 		if (PatchSize > 0.f && FMath::PerlinNoise2D(XY / PatchSize + FVector2D(Seed * 0.37f, Seed * 0.71f)) * 0.5f + 0.5f < 1.f - PatchCoverage) continue;
 		FHitResult Hit;

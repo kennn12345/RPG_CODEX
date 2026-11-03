@@ -210,7 +210,7 @@ def wheat(name, seed, stalks=26, lod=0):
     rnd = random.Random(seed); M = Mesh(); spread = .3
     for k in range(stalks):
         a = rnd.uniform(0, 2 * math.pi); rr = spread * math.sqrt(rnd.random())
-        base = Vector((math.cos(a) * rr, math.sin(a) * rr, -.03)); h = rnd.uniform(.85, 1.15)
+        base = Vector((math.cos(a) * rr, math.sin(a) * rr, -.03)); h = rnd.uniform(.6, .82)          # ~0.7-1.0 m in the world (scale 0.9-1.3)
         lean = Vector((rnd.uniform(-.08, .08), rnd.uniform(-.08, .08), 0)) + Vector((math.cos(a), math.sin(a), 0)) * rr * .3
         top = base + Vector((0, 0, h)) + lean * h
         # stalk: thin ribbon

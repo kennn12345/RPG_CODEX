@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-03T17:30:00-06:00
+Last update: 2026-11-03T23:50:55.300Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -34,13 +34,15 @@ Raw shots: Saved/Screenshots/Assets (AS_*_16.00 / _17.30), Saved/Screenshots/Wor
 - 84f52c4 Split world asset build from layout; add R02 restyle sources and review stage
 - 33d54cb Restyle rocks, ground, cliffs and small effects toward the reference palette
 - d9c2320 Update asset restyle progress
-- (this commit) Painted textures + relief, new forest-floor details, first Unreal import + review
+- 67291b3 Painted textures + relief, new forest-floor details, first Unreal import + review
+- (this commit) Place the detail pieces in L_WorldVista; ARPGScatter NearPathMax / IncludeCircles / bIgnoreOtherScatters; wheat 0.7-1 m
 
 ## Next iteration (if the user asks / scheduled run)
 - Cliffs: ivy still lighter than the video's thick mats; slabs could use more stepped breaks.
 - Rocks at 17.3 h in the vista pick up a pink cast from the sunset sky (albedo is neutral-warm now).
-- The new detail pieces are reusable assets with Foliage Types but are NOT placed in L_WorldVista (layout frozen) -
-  placing them needs the user's OK to change the layout.
+- DONE (user OK 2026-11-03 "Yes, place them"): Tools/World/place_vista_details.py adds Detail_* scatters to L_WorldVista
+  (path tufts/stones/bushes, tree-foot ferns/moss/mushrooms/clover/leaves/branches/logs/stumps, rock moss, shore reeds,
+  wildflower drifts); re-runnable, nothing else in the map touched. Sheet: review/Unreal_R02_WorldVista_Details.png.
 - FPS not measured in a packaged/PIE run; triangle budgets: grass 228/~60/10 tris per clump by LOD, trees 6-15k LOD0.
 - make_sheet.ps1: run through the PowerShell tool (scripts are disabled for plain -File).
 
