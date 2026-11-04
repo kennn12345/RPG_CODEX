@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T04:14:47.135Z
+Last update: 2026-11-04T04:21:26.697Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -47,6 +47,9 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   video palette, emissive 0.05), cards use the whole texture (HERO_FULL_UV). Pack elm placed in the hero grove (autumn
   red). Inspector: Tools/World/inspect_mayu_pack.py. Sheet: review/Unreal_Hero01_iter15_MayuLeaves.png.
   DECIDED (user 2026-11-03): keep the pack leaves (MI_Hero_MayuLeaves) on the hero tree.
+  16/17 ("keep refining"): pack "Texture Size" only drives its billboard mode (no effect on our cards) -> own
+  T_Hero_LeafSpray_2x2_Mask (2x2 tile of the pack spray, rotated) = half-size leaves at no geometry cost; Color 1
+  lighter blue-green, SmoothStep Min 0.2, Emissive 0.12 (lifts shade). Sheet: review/Unreal_Hero01_iter17_SmallerLeaves.png.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same

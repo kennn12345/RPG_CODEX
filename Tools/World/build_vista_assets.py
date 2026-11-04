@@ -730,10 +730,10 @@ def mayu_leaf_mi():
         except Exception: pass
     if changed: MEL.recompile_material(master); save(master)
     mi = instance('MI_Hero_MayuLeaves', master,
-                  vectors={'Color 1': lin((26, 58, 42)), 'Color 2': lin((104, 156, 40)), 'Tip Color 3': lin((188, 214, 78))},
-                  scalars={'Height': 1450.0, 'SmoothStep Min': 0.35, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.05,
+                  vectors={'Color 1': lin((56, 96, 84)), 'Color 2': lin((108, 160, 46)), 'Tip Color 3': lin((192, 218, 84))},   # lighter blue-green shade (video)
+                  scalars={'Height': 1450.0, 'SmoothStep Min': 0.2, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.12,
                            'Texture Size': 1.0, 'BillBoard Inflate': 0.0, 'Billboard Sscale': 1.0})
-    tx = load(f'{MAYU}/Variation/Texture/T_Leaf_Billboard_Texture_3')
+    tx = tex('T_Hero_LeafSpray_2x2_Mask') or load(f'{MAYU}/Variation/Texture/T_Leaf_Billboard_Texture_3')
     if tx: MEL.set_material_instance_texture_parameter_value(mi, 'Leaf Texture', tx); save(mi)
     return mi
 
@@ -852,6 +852,7 @@ def b_textures():
                             ('T_Bark_Painted_R02_BaseColor', f'{T2}/Bark_Painted_R02_BaseColor.png', 'c'),
                             ('T_Bark_R02_Normal', f'{W2}/Bark_R02_Normal.png', 'n'),
                             ('T_Leaf_Dapple_Atlas_BaseColor', f'{W2}/Leaf_Dapple_Atlas_BaseColor.png', 'leaf'),
+                            ('T_Hero_LeafSpray_2x2_Mask', f'{W2}/Hero_LeafSpray_2x2_Mask.png', 'leaf'),   # 2x2 tile of the Mayu pack spray mask (smaller leaves)
                             ('T_Stone_R02_BaseColor', f'{W2}/Stone_R02_BaseColor.png', 'c'),
                             ('T_Stone_R02_Normal', f'{W2}/Stone_R02_Normal.png', 'n'),
                             ('T_GrassBlade_R02_BaseColor', f'{W2}/GrassBlade_R02_BaseColor.png', 'c'),
