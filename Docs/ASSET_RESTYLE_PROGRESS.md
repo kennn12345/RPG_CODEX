@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T04:09:48.887Z
+Last update: 2026-11-04T04:14:47.135Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -45,7 +45,8 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   to Content/StylizedTreesByMayu - NOT committed: Fab content, re-add from Fab on another machine; its M_StylizedTree got
   the instanced-mesh usage flag). Hero leaves = MI_Hero_MayuLeaves (M_StylizedTree, mask T_Leaf_Billboard_Texture_3,
   video palette, emissive 0.05), cards use the whole texture (HERO_FULL_UV). Pack elm placed in the hero grove (autumn
-  red). Inspector: Tools/World/inspect_mayu_pack.py. Sheet: review/Unreal_Hero01_iter15_MayuLeaves.png. Waiting for user.
+  red). Inspector: Tools/World/inspect_mayu_pack.py. Sheet: review/Unreal_Hero01_iter15_MayuLeaves.png.
+  DECIDED (user 2026-11-03): keep the pack leaves (MI_Hero_MayuLeaves) on the hero tree.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
