@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T04:33:09.288Z
+Last update: 2026-11-04T04:41:56.168Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -53,6 +53,10 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   18 (user: "optimize it"): leaf 2.6 m cards (2x2 mask keeps leaf size), twig_step .34, cards every .36 m, 20% of
   twigs drop the up/down tier, twig tubes off (HERO_TWIGS), far LOD bark decimated .35 -> 13.3k/8.6k/3.4k tris
   (was 42k/17k/10k), same look. Sheet: review/Unreal_Hero01_iter18_Optimised.png.
+  19 (user: "smooth where branches meet the tree"): branch collars - each branch starts inside the trunk below the
+  junction (kept inside the bark), rises, curves out with a 1.12x collar at the surface; fork + crown branches too.
+  First try poked a ridge through the bark -> inner point moved deeper. 15.9k/11.2k/4.3k tris.
+  Cameras AS_Hero_Junction0/1. Sheet: review/Unreal_Hero01_iter19_BranchCollars.png.
 
 ## Fab pack trees: keep for later (user 2026-11-03)
 - The user wants to use Mayu's Stylized Trees (Content/StylizedTreesByMayu: elm, fir, willow, spherical tree, trunk +

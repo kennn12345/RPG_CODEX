@@ -260,6 +260,8 @@ if hero:
     scatter('Grass_Hero', load(f'{MESHES}/SM_Vista_Grass'), 6000, hx, hy, (2600, 2600), 41)
     scatter('Daisies_Hero', load(f'{MESHES}/SM_Vista_Daisies'), 300, hx, hy, (2600, 2600), 42, patch=900, cover=.4)
     e = W(hx, hy, 500, -1700); cam('AS_Hero_LowUp', (e[0], e[1], 60), (hx, hy, 900), 75.0)
+    for k_, (a_, b_) in enumerate(((-260, -330), (300, 260))):        # branch-trunk junction close-ups (two sides)
+        e = W(hx, hy, a_, b_); cam(f'AS_Hero_Junction{k_}', (e[0], e[1], 330), (hx, hy, 470), 55.0)
     e = W(hx, hy, -300, -900); cam('AS_Hero_UnderCanopy', (e[0], e[1], 170), (hx + DX * 600, hy + DY * 600, 350), 80.0)
     e = W(hx, hy, 0, -3200); cam('AS_Hero_Mid', (e[0], e[1], 200), (hx, hy, 650), 60.0)
     e = W(hx, hy, 1400, -3600); cam('AS_Hero_VsMayuElm', (e[0], e[1], 200), (hx + PX * 1450 + DX * 600, hy + PY * 1450 + DY * 600, 650), 62.0)

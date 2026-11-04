@@ -490,6 +490,11 @@ def hero_tree(name, seed, H=12.0, n_branch=11, leaf=2.6, twig_step=.34):   # opt
         for a, b in zip(tp, tp[1:]):
             if a.z <= z <= b.z: return a.lerp(b, (z - a.z) / max(b.z - a.z, 1e-3))
         return tp[-1]
+    TR = [r0 * 1.95, r0 * 1.25, r0 * .92, r0 * .72, r0 * .52, r0 * .3]
+    def trunk_r(z):                                                     # trunk radius at height z (matches the sweep radii)
+        for (a, ra), (b, rb_) in zip(zip(tp, TR), list(zip(tp, TR))[1:]):
+            if a.z <= z <= b.z: return ra + (rb_ - ra) * (z - a.z) / max(b.z - a.z, 1e-3)
+        return TR[-1]
     branches = []                                       # (polyline points, base radius, scale 0..1)
     gold = 2.39996; az0 = rnd.uniform(0, 6.28)
     for k in range(n_branch):
@@ -501,20 +506,26 @@ def hero_tree(name, seed, H=12.0, n_branch=11, leaf=2.6, twig_step=.34):   # opt
         d = Vector((math.cos(az) * math.sin(up), math.sin(az) * math.sin(up), math.cos(up)))
         p0 = trunk_at(z); p1 = p0 + d * L * .5 + Vector((0, 0, L * .05)); p2 = p0 + d * L + Vector((0, 0, L * .12))
         rb = r0 * rnd.uniform(.42, .55) * (1.05 - .4 * t)
-        sweep(bm, col, [p0 - d * .1, p0, p1, p2], [rb, rb, rb * .62, rb * .3], 8)
+        # branch COLLAR (R02e): the branch starts inside the trunk below the junction, rises along it, then curves out,
+        # thicker where it leaves the bark -> grows out of the trunk instead of a tube stuck into it (no hard crease)
+        hd = Vector((d.x, d.y, 0)).normalized(); tr = trunk_r(z)
+        s_in = trunk_at(z - rb * 1.6); s_mid = trunk_at(z - rb * .25) + hd * max(0.0, tr - rb * 1.15)   # stays inside the bark
+        s_out = trunk_at(z) + hd * (tr + rb * .55) + UP * rb * .45
+        sweep(bm, col, [s_in, s_mid, s_out, p1, p2], [rb * .7, rb * 1.0, rb * 1.12, rb * .62, rb * .3], 10)
         branches.append(([p0, p1, p2], rb, 1.0 - .3 * t))
         if rnd.random() < .85:                                              # fork
             q0 = p0.lerp(p1, rnd.uniform(.9, 1.3)); sd = (d + Vector((math.cos(az + 1.6), math.sin(az + 1.6), .6)) * rnd.choice((-1, 1)) * .8).normalized()
             if sd.z < .3: sd.z = .3; sd.normalize()
             q1 = q0 + sd * L * rnd.uniform(.4, .55)
-            sweep(bm, col, [q0 - sd * .05, q0, q1], [rb * .55, rb * .5, rb * .2], 6)
+            q_in = q0 - (q0 - p0).normalized() * rb * .9                   # fork collar: starts inside the parent branch
+            sweep(bm, col, [q_in, q0, q0 + sd * rb * 1.2, q1], [rb * .5, rb * .7, rb * .52, rb * .2], 8)
             branches.append(([q0, q0.lerp(q1, .5), q1], rb * .5, .75 - .2 * t))
     top = tp[-1]                                                            # crown: short branches spreading from the top
     for k in range(rnd.randint(4, 5)):
         a = az0 + k * 2 * math.pi / 6.5 + rnd.uniform(-.4, .4); d = Vector((math.cos(a) * .7, math.sin(a) * .7, .75)).normalized()
         Lc = H * rnd.uniform(.15, .22); s0 = trunk_at(H * .9)
         e = s0 + d * Lc
-        sweep(bm, col, [s0, s0.lerp(e, .5), e], [r0 * .25, r0 * .18, r0 * .08], 6)
+        sweep(bm, col, [trunk_at(H * .84), s0 + d * r0 * .3, s0.lerp(e, .5), e], [r0 * .3, r0 * .32, r0 * .18, r0 * .08], 8)
         branches.append(([s0, s0.lerp(e, .5), e], r0 * .2, .7))
     # bark -> Mesh (smooth), wrapped UVs
     bark = Mesh(); bm.verts.ensure_lookup_table(); vid = {v: bark.vert(v.co, (0, 1, .5, 1)) for v in bm.verts}
