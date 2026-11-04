@@ -76,9 +76,10 @@ def ramp(t):
             k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
     return RAMP[-1][1] + (1,)
 
-def bunch_card(M, rnd, p, facing, size, col, shade_n, mat=1, fold_deg=(14, 28)):
+def bunch_card(M, rnd, p, facing, size, col, shade_n, mat=1, fold_deg=(14, 28), tip_dir=None):
     """folded leaf-bunch card (Trees_R02 Leaf_Cluster_Atlas 2x2), centred near p, facing ~facing."""
     tv = Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1))) * .45 - UP * .35 + facing.cross(UP) * .5
+    if tip_dir is not None: tv = tip_dir.copy()                     # card points the way its twig grows
     tv = tv - facing * tv.dot(facing)
     if tv.length < 1e-4: tv = facing.orthogonal()
     tip = tv.normalized(); side = tip.cross(facing).normalized(); fold = math.radians(rnd.uniform(*fold_deg))
@@ -464,50 +465,54 @@ def hero_ramp(t):
             k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
     return HERO_RAMP[-1][1] + (1,)
 
-def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.8, 2.6), leaf=1.7, density=10.5):
-    """Video-style tree (reference/USER_REFS.md): tall slim red-brown trunk visible for ~45% of the height, a few long
-    branches forking upward at 30-50 deg, and an OPEN canopy of separate flattened-dome clumps (dappled small-leaf cards,
-    slot 'Dapple') at the branch ends with sky gaps between them. Each clump is shaded like a soft sphere (vertex colour +
-    bent normals from the clump centre). LOD1/2 = subsets of the same cards (no popping). Returns (LOD0, [UCX], [LOD1, LOD2])."""
+def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.55, twig_step=.28):
+    """Video-style tree (reference/USER_REFS.md), R02c: leaves GROW FROM THE BRANCHES.
+    Trunk -> 11 spiral branches (most fork) + a crown of short top branches -> twigs along the outer part of every branch
+    (alternating sides, angled outward and a little up; long near the inner end, short toward the tip, plus a terminal
+    twig = a fan-shaped spray), in three tiers (up / level / drooping) so each branch carries a FULL volume of foliage that
+    clearly grows outward along it. Leaf cards (slot 'Dapple', ~110 small leaves each) sit along each twig, pointing the
+    way it grows, folded down the middle like real leaf sprays, mostly face-up, drooping at the tips.
+    Shading: every card corner takes colour + normal from its place on the BRANCH's spray volume (an ellipsoid around the
+    outer branch) -> each spray reads as one soft rounded mass. LOD1/2 = subsets of the same cards (no popping).
+    Returns (LOD0, [UCX], [LOD1, LOD2])."""
     rnd = random.Random(seed)
     bm = bmesh.new(); col = bm.verts.layers.float_color.new('Col'); bm.loops.layers.uv.new('UVMap')
     lean = Vector((rnd.uniform(-.25, .25), rnd.uniform(-.25, .25), 0))
     tp = [Vector((0, 0, -.35)), Vector((0, 0, .35))]
     for f in (.3, .55, .78, .95):
         tp.append(Vector((0, 0, H * f)) + lean * f * f * H * .06 + Vector((rnd.uniform(-.12, .12), rnd.uniform(-.12, .12), 0)) * f)
-    r0 = .034 * H                                                           # ~41 cm at 12 m
-    sweep(bm, col, tp, [r0 * 1.95, r0 * 1.25, r0 * .92, r0 * .72, r0 * .52, r0 * .3], 14, flare_rings=2)   # stronger root flare
+    r0 = .034 * H
+    sweep(bm, col, tp, [r0 * 1.95, r0 * 1.25, r0 * .92, r0 * .72, r0 * .52, r0 * .3], 14, flare_rings=2)
     def trunk_at(z):
         for a, b in zip(tp, tp[1:]):
             if a.z <= z <= b.z: return a.lerp(b, (z - a.z) / max(b.z - a.z, 1e-3))
         return tp[-1]
-    clumps = []                                                             # (centre, radius)
-    gold = 2.39996
-    az0 = rnd.uniform(0, 6.28)
+    branches = []                                       # (polyline points, base radius, scale 0..1)
+    gold = 2.39996; az0 = rnd.uniform(0, 6.28)
     for k in range(n_branch):
         t = k / max(1, n_branch - 1)
-        z = H * (.3 + .42 * t + rnd.uniform(-.03, .03))
+        z = H * (.34 + .36 * t + rnd.uniform(-.03, .03))
         az = az0 + k * gold + rnd.uniform(-.3, .3)
-        up = math.radians(rnd.uniform(48, 66) - 16 * t)                      # angle from vertical: wide spread low, steeper up top
-        L = H * rnd.uniform(.34, .45) * (1.15 - .4 * t)
+        up = math.radians(rnd.uniform(60, 76) - 14 * t)                      # wide, nearly level spread (broad crown)
+        L = H * rnd.uniform(.4, .5) * (1.15 - .38 * t)
         d = Vector((math.cos(az) * math.sin(up), math.sin(az) * math.sin(up), math.cos(up)))
         p0 = trunk_at(z); p1 = p0 + d * L * .5 + Vector((0, 0, L * .05)); p2 = p0 + d * L + Vector((0, 0, L * .12))
         rb = r0 * rnd.uniform(.42, .55) * (1.05 - .4 * t)
         sweep(bm, col, [p0 - d * .1, p0, p1, p2], [rb, rb, rb * .62, rb * .3], 8)
-        cr = rnd.uniform(*clump_r) * (1.05 - .25 * t)
-        clumps.append((p2 + Vector((0, 0, cr * .25)), cr))
-        cm = cr * rnd.uniform(.5, .66); clumps.append((p1.lerp(p2, .35) + Vector((0, 0, cm * .45)) + Vector((-d.y, d.x, 0)) * rnd.uniform(-.5, .5), cm))   # mid-branch clump
-        if rnd.random() < .97:                                              # a fork: side clump
+        branches.append(([p0, p1, p2], rb, 1.0 - .3 * t))
+        if rnd.random() < .85:                                              # fork
             q0 = p0.lerp(p1, rnd.uniform(.9, 1.3)); sd = (d + Vector((math.cos(az + 1.6), math.sin(az + 1.6), .6)) * rnd.choice((-1, 1)) * .8).normalized()
             if sd.z < .3: sd.z = .3; sd.normalize()
-            q1 = q0 + sd * L * rnd.uniform(.35, .5)
+            q1 = q0 + sd * L * rnd.uniform(.4, .55)
             sweep(bm, col, [q0 - sd * .05, q0, q1], [rb * .55, rb * .5, rb * .2], 6)
-            cr2 = cr * rnd.uniform(.8, .95); clumps.append((q1 + Vector((0, 0, cr2 * .2)), cr2))
-    top = tp[-1]                                                            # crown: 2-3 clumps around the top
-    for k in range(rnd.randint(6, 8)):
-        a = rnd.uniform(0, 6.28); o = Vector((math.cos(a), math.sin(a), 0)) * rnd.uniform(.8, 2.4)
-        clumps.append((top + o + Vector((0, 0, rnd.uniform(.0, 1.2))), rnd.uniform(*clump_r)))
-    zlo = min(c.z - r for c, r in clumps); zhi = max(c.z + r for c, r in clumps)
+            branches.append(([q0, q0.lerp(q1, .5), q1], rb * .5, .75 - .2 * t))
+    top = tp[-1]                                                            # crown: short branches spreading from the top
+    for k in range(rnd.randint(4, 5)):
+        a = az0 + k * 2 * math.pi / 6.5 + rnd.uniform(-.4, .4); d = Vector((math.cos(a) * .7, math.sin(a) * .7, .75)).normalized()
+        Lc = H * rnd.uniform(.15, .22); s0 = trunk_at(H * .9)
+        e = s0 + d * Lc
+        sweep(bm, col, [s0, s0.lerp(e, .5), e], [r0 * .25, r0 * .18, r0 * .08], 6)
+        branches.append(([s0, s0.lerp(e, .5), e], r0 * .2, .7))
     # bark -> Mesh (smooth), wrapped UVs
     bark = Mesh(); bm.verts.ensure_lookup_table(); vid = {v: bark.vert(v.co, (0, 1, .5, 1)) for v in bm.verts}
     for f in bm.faces:
@@ -515,40 +520,89 @@ def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.8, 2.6), leaf=1.7, den
         if max(us) - min(us) > 1.0: us = [u + 2.0 if u < 1.0 else u for u in us]
         bark.face([vid[v] for v in f.verts], [(u, v.co.z / 2.5) for u, v in zip(us, f.verts)], 0)
     bm.free()
-    # one card list for all LODs (per-card seeds)
-    cards = []; crnd = random.Random(seed * 101)
-    for ci, (c, r) in enumerate(clumps):
-        tint = crnd.uniform(-.07, .07)
-        for k in range(int(density * r * r)):
-            u = Vector((crnd.gauss(0, 1), crnd.gauss(0, 1), crnd.gauss(0, 1) * .8 + .35)).normalized()   # more on top
-            rad = r * (crnd.uniform(.55, 1.0) if crnd.random() < .7 else crnd.uniform(1.0, 1.3))                 # soft dome + stray leaves past the rim
-            p = c + Vector((u.x, u.y, u.z * (.88 if u.z > 0 else .8))) * rad                                  # rounder ball (slightly squashed)
-            key, cs = crnd.random(), crnd.randrange(1 << 30)
-            h = smoothstep(zlo, zhi, p.z)
-            t = .5 + .5 * u.z + .12 * (h - .5) + tint + crnd.gauss(0, .06)                               # soft sphere per clump
-            facing = (u + Vector((crnd.uniform(-.18, .18), crnd.uniform(-.18, .18), crnd.uniform(-.1, .15)))).normalized()   # tangent to the clump ball -> round outline
-            shade_n = (u * .75 + UP * .25).normalized()
-            cards.append((key, cs, p, facing, leaf * crnd.uniform(.85, 1.15), t, shade_n, crnd.random() < .5, c, r, tint))
+
+    def along(pts, s):
+        """point + tangent at arc length s on a polyline."""
+        acc = 0.0
+        for a, b in zip(pts, pts[1:]):
+            l = (b - a).length
+            if acc + l >= s: return a.lerp(b, (s - acc) / max(l, 1e-4)), (b - a).normalized()
+            acc += l
+        return pts[-1], (pts[-1] - pts[-2]).normalized()
+    # twigs + cards (one list for all LODs; per-card seeds)
+    twigs = Mesh(); cards = []; crnd = random.Random(seed * 101)
+    for bi, (pts, rb, sc) in enumerate(branches):
+        blen = sum((b - a).length for a, b in zip(pts, pts[1:]))
+        s_start = blen * .18
+        # the branch's spray volume (for rounded shading): ellipsoid around its leafy outer part
+        p_mid, T_mid = along(pts, (s_start + blen) * .5)
+        vol_c = p_mid + T_mid * blen * .12 + UP * .35
+        vol_r = Vector((max(1.4, (blen - s_start) * .65 + 1.0), max(1.4, (blen - s_start) * .65 + 1.0), 1.25))
+        tint = crnd.uniform(-.06, .06)
+        twig_list = []
+        s = s_start; side = 1
+        while s < blen:
+            q, T = along(pts, s)
+            f = (s - s_start) / max(blen - s_start, .1)                     # 0 inner .. 1 tip
+            sv = T.cross(UP); sv = sv.normalized() if sv.length > 1e-3 else Vector((1, 0, 0))
+            for tier, lift in ((0, crnd.uniform(.08, .28)), (1, crnd.uniform(.45, .7)), (-1, crnd.uniform(-.32, -.12))):
+                if tier != 0 and crnd.random() < .12: continue
+                dirv = (T * crnd.uniform(.45, .65) + sv * side * crnd.uniform(.7, .95) + UP * lift).normalized()
+                tl = (2.3 - 1.2 * f) * max(sc, .8) * crnd.uniform(.85, 1.15)
+                twig_list.append((q + UP * tier * .12, dirv, tl))
+            side = -side; s += twig_step * crnd.uniform(.8, 1.2)
+        qe, Te = along(pts, blen)                                           # terminal twig: the spray's tip
+        sv_ = Te.cross(UP); sv_ = sv_.normalized() if sv_.length > 1e-3 else Vector((1, 0, 0))
+        for a_ in (-.5, 0, .5):                                             # terminal fan: the spray's tip
+            twig_list.append((qe, (Te + UP * .3 + sv_ * a_).normalized(), 1.7 * max(sc, .8)))
+        for q, dirv, tl in twig_list:
+            e = q + dirv * tl
+            if tl > 1.0: R1['tube'](_TB, _TC, q, e, .03, .01, 3)          # visible twigs only (short ones hide in the leaves)
+            n_c = max(3, int(tl / .24))
+            for j in range(n_c):
+                tt = .15 + .87 * j / max(1, n_c - 1)                          # cards from 30% of the twig to its tip
+                droop = -UP * .16 * tt * tt
+                cpos = q + dirv * tl * tt + droop * tl
+                tip = (dirv + droop * 1.6 + Vector((crnd.uniform(-.15, .15), crnd.uniform(-.15, .15), 0))).normalized()
+                perp = dirv.cross(UP); perp = perp.normalized() if perp.length > 1e-3 else Vector((1, 0, 0))
+                facing = (UP * .75 + perp * crnd.uniform(-.45, .45) - dirv * .12).normalized()   # mostly face-up, rolled a little
+                sz = leaf * (1.05 - .3 * tt) * crnd.uniform(.85, 1.1)
+                key, cs = crnd.random(), crnd.randrange(1 << 30)
+                cards.append((key, cs, cpos, facing, tip, sz, vol_c, vol_r, tint))
+    # twig geometry -> its own Mesh (bark material): only the closest LOD draws twigs
+    twig_mesh = Mesh(); _flush_twigs(twig_mesh)
     lods = []
     for lod in range(3):
         M = Mesh(); M.v, M.c, M.n, M.f, M.uv, M.m = list(bark.v), list(bark.c), list(bark.n), list(bark.f), list(bark.uv), list(bark.m)
-        for ci, (c, r) in enumerate(clumps):                               # dark core: closes the see-through INSIDE a clump only
-            blob(M, c - Vector((0, 0, r * .12)), r * (.26 if lod < 2 else .2), lambda p, u: .32 + .15 * max(0, u.z), .5, 2 if lod < 2 else 1, .6, ci * 1.7)
-        for key, cs, p, facing, sz, t, sn, cross, cc, cr_, tn in cards:
+        if lod == 0:
+            off = len(M.v); M.v += twig_mesh.v; M.c += twig_mesh.c; M.n += twig_mesh.n
+            M.f += [tuple(i + off for i in f) for f in twig_mesh.f]; M.uv += twig_mesh.uv; M.m += twig_mesh.m
+        for key, cs, p, facing, tip, sz, vc, vr, tn in cards:
             if key > LOD_KEEP[lod]: continue
-            def vcol(q, cc=cc, cr_=cr_, tn=tn, t=t):                 # colour from the corner's place on its clump ball
-                n = (q - cc) / max(cr_, .1); d = n.normalized() if n.length > 1e-4 else UP
-                return hero_ramp(.5 + .48 * d.z + .1 * (min(1.0, n.length) - .7) + tn + (t - (.5 + .5 * ((p - cc).normalized().z if (p - cc).length > 1e-4 else 1))) * .5)
-            def vnrm(q, cc=cc):                                          # normal = straight out of the clump ball
-                d = q - cc; return (d.normalized() * .9 + UP * .1).normalized() if d.length > 1e-4 else UP
-            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], vcol, vnrm, fold_deg=(3, 9))   # nearly flat
-            if cross and lod < 2:                                          # crossed partner: a leaf face from every view
-                f2 = facing.cross(UP if abs(facing.z) < .9 else Vector((1, 0, 0))).normalized()
-                bunch_card(M, random.Random(cs + 7), p, (f2 + facing * .3).normalized(), sz * LOD_GROW[lod] * .9, vcol, vnrm, fold_deg=(3, 9))
+            def vcol(q, vc=vc, vr=vr, tn=tn):                              # colour from the corner's place on the spray volume
+                n = Vector(((q.x - vc.x) / vr.x, (q.y - vc.y) / vr.y, (q.z - vc.z) / vr.z))
+                d = n.normalized() if n.length > 1e-4 else UP
+                return hero_ramp(.52 + .46 * d.z + .12 * (min(1.2, n.length) - .7) + tn)
+            def vnrm(q, vc=vc, vr=vr):                                    # normal out of the spray volume
+                n = Vector(((q.x - vc.x) / vr.x ** 2, (q.y - vc.y) / vr.y ** 2, (q.z - vc.z) / vr.z ** 2))
+                return (n.normalized() * .85 + UP * .15).normalized() if n.length > 1e-6 else UP
+            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], vcol, vnrm, fold_deg=(18, 32), tip_dir=tip)
         ob = M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bark', 'Dapple', 'Fill'), (True, True, True))
         lods.append(ob)
     hull = trunk_hull(name, Vector((0, 0, -.3)), trunk_at(H * .45), r0 * 1.1)
     return lods[0], [hull], lods[1:]
+
+_TB = None; _TC = None
+def _new_twig_bm():
+    global _TB, _TC
+    _TB = bmesh.new(); _TC = _TB.verts.layers.float_color.new('Col')
+def _flush_twigs(bark):
+    """append the twig tubes (built in _TB with R01 tube()) to the bark Mesh, then reset."""
+    global _TB, _TC
+    _TB.verts.ensure_lookup_table(); vid = {v: bark.vert(v.co, (0, 1, .5, 1)) for v in _TB.verts}
+    for f in _TB.faces: bark.face([vid[v] for v in f.verts], [(0, v.co.z / 2.5) for v in f.verts], 0)
+    _TB.free(); _new_twig_bm()
+_new_twig_bm()
 
 # ---------------------------------------------------------------- R02b detail pieces (moss, ferns, wildflowers, mushrooms, wood)
 def moss_patch(name, seed, r=0.7, lod=0):

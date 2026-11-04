@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T03:20:55.757Z
+Last update: 2026-11-04T03:31:23.371Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -31,7 +31,11 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   18.6k/12.8k/6.3k tris -> 8 ("keep refining"): smaller mid clumps + small light cores (more air), softer cooler lighter
   shade ramp, LeafDapple saturation 1.05; 14.9k/11k/5.8k tris -> 9 (user: "bunches should be rounder, look like flat stacked renders"): per-VERTEX
   colour + normal from each clump ball (bunch_card takes callables), cards tangent to the ball, rounder clumps,
-  LeafDapple up-bias 0.03. Sheet: review/Unreal_Hero01_iter9_RoundClumps.png. Waiting for user.
+  LeafDapple up-bias 0.03 -> 10/11 (user: "make leaves grow from branches, fuller shapes supporting the growth"):
+  hero_tree rewritten - twigs alternate along the outer 82% of every branch in 3 tiers (up/level/drooping) + a
+  terminal fan; folded cards along each twig point the way it grows (bunch_card tip_dir), mostly face-up, drooping
+  tips; per-vertex shading from each branch spray ellipsoid; twig tubes only in LOD0. Wider level branches (60-76 deg).
+  31.5k/13k/8k tris (optimise once approved). Sheet: review/Unreal_Hero01_iter11_BranchSprays.png. Waiting for user.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
