@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T02:23:14.986Z
+Last update: 2026-11-04T03:20:55.757Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -29,7 +29,9 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   every view; up-facing cards smeared from the side). 22k/15k/7k tris -> 7 (user: "keep refining"): bigger readable
   leaves (105-125 per cell, 10-14% of a cell), draped lower clump halves, hero_ramp teal shade -> warm lime, leaf SSS 1.3;
   18.6k/12.8k/6.3k tris -> 8 ("keep refining"): smaller mid clumps + small light cores (more air), softer cooler lighter
-  shade ramp, LeafDapple saturation 1.05; 14.9k/11k/5.8k tris. Sheet: review/Unreal_Hero01_iter8.png. Waiting for user.
+  shade ramp, LeafDapple saturation 1.05; 14.9k/11k/5.8k tris -> 9 (user: "bunches should be rounder, look like flat stacked renders"): per-VERTEX
+  colour + normal from each clump ball (bunch_card takes callables), cards tangent to the ball, rounder clumps,
+  LeafDapple up-bias 0.03. Sheet: review/Unreal_Hero01_iter9_RoundClumps.png. Waiting for user.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same

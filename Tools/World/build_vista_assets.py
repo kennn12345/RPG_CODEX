@@ -469,7 +469,7 @@ return c;
     sway_wpo(m, 2.5)
     return finish(m, dither=True)
 
-def m_leaf(name='M_Vista_Leaf', atlas='T_Leaf_Cluster_Atlas_BaseColor', sss=0.9, sat=1.25):
+def m_leaf(name='M_Vista_Leaf', atlas='T_Leaf_Cluster_Atlas_BaseColor', sss=0.9, sat=1.25, up=0.15):
     m = new_material(name)
     m.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE); m.set_editor_property('two_sided', True)
     m.set_editor_property('blend_mode', unreal.BlendMode.BLEND_MASKED)
@@ -493,7 +493,7 @@ return c;
     MEL.connect_material_property(c, 'Sss', unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
     MEL.connect_material_property(ts, 'A', unreal.MaterialProperty.MP_OPACITY_MASK)
     MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.8), '', unreal.MaterialProperty.MP_ROUGHNESS)
-    soft_normal(m, 0.15)
+    soft_normal(m, up)
     sway_wpo(m, 3.0)
     return finish(m, dither=True)
 
@@ -655,7 +655,7 @@ def b_materials():
     m_grass('M_Vista_GrassTall', (40, 86, 12), (146, 172, 22), 18.0, 0.8)
     m_grass('M_Vista_Wheat', (150, 112, 30), (232, 180, 36), 16.0, 0.9, ear=(246, 196, 58))
     instance('MI_Vista_Daisies', m_flowers(), {'Petal': lin((250, 246, 232)), 'PetalBase': (0.8, 0.8, 0.75), 'Centre': lin((240, 176, 24))})
-    m_canopy(); m_leaf(); m_leaf('M_Vista_LeafDapple', 'T_Leaf_Dapple_Atlas_BaseColor', 1.3, 1.05); m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
+    m_canopy(); m_leaf(); m_leaf('M_Vista_LeafDapple', 'T_Leaf_Dapple_Atlas_BaseColor', 1.3, 1.05, 0.03)   # hero: keep the clump-ball normals; m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
     flowers = M('M_Vista_Poppies')
     instance('MI_Vista_Bellflowers', flowers, {'Petal': lin((186, 130, 236)), 'PetalBase': (0.55, 0.5, 0.65), 'Centre': lin((90, 60, 130))})
     instance('MI_Vista_BlueFlowers', flowers, {'Petal': lin((120, 165, 255)), 'PetalBase': (0.75, 0.8, 0.9), 'Centre': lin((250, 226, 96))})
