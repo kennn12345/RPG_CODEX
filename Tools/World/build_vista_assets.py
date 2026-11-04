@@ -735,6 +735,15 @@ def mayu_leaf_mi():
                            'Texture Size': 1.0, 'BillBoard Inflate': 0.0, 'Billboard Sscale': 1.0})
     tx = tex('T_Hero_LeafSpray_2x2_Mask') or load(f'{MAYU}/Variation/Texture/T_Leaf_Billboard_Texture_3')
     if tx: MEL.set_material_instance_texture_parameter_value(mi, 'Leaf Texture', tx); save(mi)
+    # review only: the pack's elm with green video-palette leaves (its own MI_Elm is autumn red)
+    elm = instance('MI_Pack_ElmGreen', master, vectors={'Color 1': lin((40, 78, 52)), 'Color 2': lin((108, 160, 46)), 'Tip Color 3': lin((192, 218, 84))},
+                   scalars={'Height': 780.0, 'SmoothStep Min': 0.2, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.12})
+    et = load(f'{MAYU}/Elm/Texture/T_elm_leaf')
+    if et:
+        MEL.set_material_instance_texture_parameter_value(elm, 'Leaf Texture', et)
+        try: MEL.set_material_instance_static_switch_parameter_value(elm, 'Use Alpha Channel?', True)
+        except Exception as ex: problem(f'MI_Pack_ElmGreen alpha switch: {ex}')
+        save(elm)
     return mi
 
 def b_hero():

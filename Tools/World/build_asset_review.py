@@ -265,6 +265,35 @@ if hero:
     e = W(hx, hy, 1400, -3600); cam('AS_Hero_VsMayuElm', (e[0], e[1], 200), (hx + PX * 1450 + DX * 600, hy + PY * 1450 + DY * 600, 650), 62.0)
     bx, by = rot2(DX, DY, 150.0); cam('AS_Hero_Backlit', (hx - bx * 2600, hy - by * 2600, 180), (hx, hy, 700), 70.0)
 
+# 12 the Fab pack's trees (Mayu's Stylized Trees) with their showcase-level materials, in a row next to our hero tree
+P_ = '/Game/StylizedTreesByMayu/01_Trees'
+PACK = [('Elm', [('Elm/Mesh/SM_Elm_Bark', '00_Base/Material/M_Bark'), ('Elm/Mesh/SM_Elm_leaves', 'Elm/Material/MI_Elm')]),
+        ('ElmGreen', [('Elm/Mesh/SM_Elm_Bark', '00_Base/Material/M_Bark'), ('Elm/Mesh/SM_Elm_leaves', '/Game/RPG/Environment/World/Materials/MI_Pack_ElmGreen')]),
+        ('Fir', [('Fir/Mesh/SM_Fir_bark', '00_Base/Material/M_Bark'), ('Fir/Mesh/SM_Fir_leaf', 'Fir/Material/MI_Fir')]),
+        ('Willow', [('Willow/Mesh/SM_Willow_Bark', '00_Base/Material/M_Bark'), ('Willow/Mesh/SM_Willow', 'Willow/Material/MI_Willow')]),
+        ('Spherical', [('Variation/Mesh/SM_SphericalTree', None)]),
+        ('TreeitLeaves', [('Variation/Mesh/SM_Bark_02', '00_Base/Material/M_Bark'), ('Variation/Mesh/SM_Treeit_Leaves_2', 'Variation/Material/MI_Leaves')]),
+        ('HighLeaves', [('Variation/Mesh/SM_Trunk', '00_Base/Material/M_Bark'), ('Variation/Mesh/SM_TreeLeaves_High', 'Variation/Material/MI_Leaves')])]
+px0, py0 = DX * -30000.0 - PX * 9000.0, DY * -30000.0 - PY * 9000.0
+for k, (nm, parts) in enumerate(PACK):
+    x, y = px0 + PX * k * 1100.0, py0 + PY * k * 1100.0
+    top = 0.0
+    for mp, matp in parts:
+        mm = load(f'{P_}/{mp}')
+        if not mm: continue
+        act = spawn(mm, (x, y, 0), (0, 0, 0), f'Pack_{nm}')
+        if matp:
+            mt = load(matp if matp.startswith('/Game') else f'{P_}/{matp}')
+            if mt:
+                for i in range(act.static_mesh_component.get_num_materials()): act.static_mesh_component.set_material(i, mt)
+        top = max(top, mm.get_bounds().box_extent.z * 2)
+    e = (x - DX * top * 1.5, y - DY * top * 1.5)
+    cam(f'AS_Pack_{k:02d}_{nm}', (e[0], e[1], 180), (x, y, top * .5), 55.0)
+if hero: place(hero, px0, py0, -1500, 0, 0, 1.0, 'Pack_OurHero')
+scatter('Grass_Pack', load(f'{MESHES}/SM_Vista_Grass'), 4000, px0 + PX * 3000, py0 + PY * 3000, (4800, 1600), 43)
+mx, my = px0 + PX * 2800, py0 + PY * 2800
+e = (mx - DX * 3200, my - DY * 3200); cam('AS_Pack_Group', (e[0], e[1], 300), (mx, my, 500), 75.0)
+
 les.save_current_level()
 unreal.log('ASSET_REVIEW_BUILT')
 unreal.SystemLibrary.quit_editor()
