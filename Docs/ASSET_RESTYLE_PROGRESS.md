@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T04:26:51.930Z
+Last update: 2026-11-04T04:33:09.288Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -53,6 +53,12 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   18 (user: "optimize it"): leaf 2.6 m cards (2x2 mask keeps leaf size), twig_step .34, cards every .36 m, 20% of
   twigs drop the up/down tier, twig tubes off (HERO_TWIGS), far LOD bark decimated .35 -> 13.3k/8.6k/3.4k tris
   (was 42k/17k/10k), same look. Sheet: review/Unreal_Hero01_iter18_Optimised.png.
+
+## Fab pack trees: keep for later (user 2026-11-03)
+- The user wants to use Mayu's Stylized Trees (Content/StylizedTreesByMayu: elm, fir, willow, spherical tree, trunk +
+  canopy pieces) later. Do NOT delete or replace the pack. Material pairing = its showcase level (bark M_Bark; leaves
+  MI_Elm / MI_Fir / MI_Willow / MI_Leaves / MI_SphericalLeaves); green elm = MI_Pack_ElmGreen. Review shots:
+  review/Unreal_MayuPack_Trees_Review.png, L_AssetReview cameras AS_Pack_*. The pack is not in git (Fab content).
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
