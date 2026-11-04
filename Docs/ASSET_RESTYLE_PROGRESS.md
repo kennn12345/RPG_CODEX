@@ -77,7 +77,25 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   Review: AS_FabOurs_* + grove -> review/Unreal_FabTrees_OurLeaves_15-20m.png. Not placed in L_WorldVista yet.
 - StyleHex Forest Sample: creator forbids AI use - never script / modify it (user may place by hand).
 
-## Where we paused (2026-11-03, user taking a break)
+## Where we paused (2026-11-04): Fab trees rebuilt as rounded clumps
+- User: "full, rounded clumps instead of flat meshes stacked". Cause (wireframe): the pack canopies are a few hundred big
+  single flat quads (Tree I: 900, each ~1/6 of the tree height = ~3 m at 15-20 m); our edge-to-edge leaf-spray mask makes
+  every quad a flat sheet. Fix: Tools/World/grow_fab_canopies.py (Blender) keeps the pack trunk + branches, drops the leaf
+  quads, groups their centres into 4-10 clumps (ellipsoids) and grows hero-style sprays over each clump's front, back,
+  sides and underside (rooted on the nearest branch, staggered depth 75-105%, 1.2-1.9 m folded cards at varied tilt, 35%
+  crossed, noise gaps); normals from the clump ellipsoid (+ crown + up). Output outputs/FabPacks/_canopy_fbx (not in git).
+  restyle_fab_trees.py imports these when present (scale 1, normals kept, LOD 1/.3/.1, UCX trunk hull) + makes the
+  reference SM_Lux_Tree_I_Before (old way). 11k-18k / 5-8k / 2-3.5k tris.
+- Tree I iterations: iter 1 (full, merged clumps) -> iter 2 (tighter clumps with gaps, branches visible) -> USER PICKED
+  ITER 1 ("this version looked good"); kept those settings (1.7 sigma radius, pad .3, k = sqrt(n)/4). The approved render
+  used hash() seeds (random per run); seeds are now stable (crc32), so Tree I is the same settings, not the identical layout.
+- L_AssetReview section 15: AS_TreeCheck_<Before|After>_<34|Side|Up> (Tree I alone, identical cameras).
+- Sheets: review/Unreal_TreeI_Clumps_BeforeAfter.png (= approved iter-1 look), Unreal_TreeI_Clumps_iter2.png (rejected),
+  Unreal_FabTrees_RoundClumps_BeforeAfter.png (all trees). Before shots: Saved/Screenshots/Assets_before_canopy.
+- Still not placed in L_WorldVista. FPS not measured. Unreal sometimes segfaults on quit after build_asset_review (level
+  is saved first - harmless).
+
+## Earlier pause (2026-11-03, user taking a break)
 - User verdict: the Lux/Jabami trees WITH OUR LEAVES (restyle_fab_trees.py) "look really bad" - do not place them.
   Their own leaves looked fine in review/Unreal_FabPacks_LuxJabami_Review.png. Refine later with the user (likely:
   keep the packs' leaf textures, adjust colour/height instead of swapping in our leaf material).

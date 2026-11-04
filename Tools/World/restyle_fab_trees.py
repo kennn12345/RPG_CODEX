@@ -52,6 +52,38 @@ def scaled_copy(src_path, name, target_cm):
         if i < len(m.static_materials): m.set_material(i, mat)
     return m, f
 
+CANOPY = 'C:/Users/cedar/Documents/Codex/2026-11-02/ok/outputs/FabPacks/_canopy_fbx'   # Tools/World/grow_fab_canopies.py
+SMES = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+ONLY = [x for x in os.environ.get('RPG_FAB_TREES', '').replace(',', ' ').split() if x]   # e.g. "I" = only SM_Lux_Tree_I
+
+def canopy_copy(src_path, name, mi):
+    """R2 (user 2026-11-04): the tree with its foliage REBUILT as rounded clumps in Blender (pack trunk + branches kept,
+    pack leaf quads replaced) - already at its 15-20 m size; LOD1/2 + UCX trunk hull from the same export."""
+    src = unreal.load_asset(src_path)
+    bark = next((s.material_interface for s in src.static_materials if not is_leaf(str(s.material_slot_name), s.material_interface)), None)
+    path = f'{OUT}/{name}'
+    if EAL.does_asset_exist(path): EAL.delete_asset(path)
+    it = unreal.AssetImportTask(); it.filename = f'{CANOPY}/{name}.fbx'; it.destination_path = OUT; it.destination_name = name
+    it.automated = True; it.replace_existing = True; it.save = True
+    ui = unreal.FbxImportUI(); ui.import_mesh = True; ui.import_materials = False; ui.import_textures = False; ui.import_as_skeletal = False
+    sm = ui.static_mesh_import_data; sm.combine_meshes = True; sm.auto_generate_collision = False
+    sm.generate_lightmap_u_vs = False; sm.vertex_color_import_option = unreal.VertexColorImportOption.REPLACE
+    sm.normal_import_method = unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS      # keep the clump normals
+    sm.set_editor_property('reorder_material_to_fbx_order', True)
+    it.options = ui; TOOLS.import_asset_tasks([it])
+    m = unreal.load_asset(path)
+    for i in (1, 2):
+        f = f'{CANOPY}/{name}_LOD{i}.fbx'
+        if os.path.exists(f) and SMES.import_lod(m, i, f) != i: unreal.log_warning(f'FABSTYLE {name} LOD{i} import failed')
+    try: m.set_editor_property('auto_compute_lod_screen_size', False)
+    except Exception: pass
+    try: SMES.set_lod_screen_sizes(m, [1.0, 0.3, 0.1][:m.get_num_lods()])
+    except Exception as ex: unreal.log_warning(f'FABSTYLE {name} LOD screen sizes not set: {ex}')
+    for i, s in enumerate(m.static_materials):
+        m.set_material(i, mi if 'leaves' in str(s.material_slot_name).lower() else bark)
+    EAL.save_loaded_asset(m)
+    return m
+
 mi_lux = leaf_mi('MI_Fab_OurLeaves_Lux', 1600.0)
 mi_jab = leaf_mi('MI_Fab_OurLeaves_Jabami', 1600.0)
 TARGET = {c: 1500 + 500 * ((i * 0.618) % 1.0) for i, c in enumerate('ABCDEFGHIJ')}   # 15-20 m, varied per tree
@@ -59,6 +91,12 @@ jobs = [(f'{LUX}/S_Tree_{c}', f'SM_Lux_Tree_{c}', mi_lux, TARGET[c]) for c in 'A
        [('/Game/FabPacks/JabamiAnimeTree/SM_Jabami_Tree', 'SM_Jabami_Tree_Ours', mi_jab, 1750)]
 for src, name, mi, tgt in jobs:
     if not EAL.does_asset_exist(src): unreal.log_warning(f'FABSTYLE missing {src}'); continue
+    if ONLY and not any(name.endswith('_' + o) or name == o for o in ONLY): continue
+    if os.path.exists(f'{CANOPY}/{name}.fbx'):
+        m = canopy_copy(src, name, mi)
+        unreal.log(f'FABSTYLE {name} rebuilt canopy -> {m.get_bounds().box_extent.z * 2 / 100:.1f} m tall, lods={m.get_num_lods()}, '
+                   f'hulls={unreal.EditorStaticMeshLibrary.get_convex_collision_count(m)}, slots={[str(s.material_slot_name) for s in m.static_materials]}')
+        continue
     m, f = scaled_copy(src, name, tgt)
     if not m: continue
     swapped = []
@@ -68,5 +106,12 @@ for src, name, mi, tgt in jobs:
     EAL.save_loaded_asset(m)
     unreal.log(f'FABSTYLE {name} x{f:.2f} -> {m.get_bounds().box_extent.z * 2 / 100:.1f} m tall, lods={m.get_num_lods()}, '
                f'hulls={unreal.EditorStaticMeshLibrary.get_convex_collision_count(m)}, our leaves on {swapped}')
+# foliage-check reference (L_AssetReview section 15): Tree I the OLD way (pack leaf quads + our leaves) next to the rebuilt one
+if not ONLY or 'I' in ONLY:
+    m, f = scaled_copy(f'{LUX}/S_Tree_I', 'SM_Lux_Tree_I_Before', TARGET['I'])
+    if m:
+        for i, s in enumerate(m.static_materials):
+            if is_leaf(str(s.material_slot_name), s.material_interface): m.set_material(i, mi_lux)
+        EAL.save_loaded_asset(m); unreal.log(f'FABSTYLE SM_Lux_Tree_I_Before (reference) x{f:.2f}')
 unreal.log('FABSTYLE_DONE')
 unreal.SystemLibrary.quit_editor()

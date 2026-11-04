@@ -343,6 +343,23 @@ scatter('Daisies_Grove', load(f'{MESHES}/SM_Vista_Daisies'), 500, gx2, gy2, (350
 e = W(gx2, gy2, 0, -4200); cam('AS_FabOurs_GroveMid', (e[0], e[1], 220), (gx2, gy2, 800), 70.0)
 e = W(gx2, gy2, 300, -500); cam('AS_FabOurs_GroveUnder', (e[0], e[1], 170), (gx2 + DX * 800, gy2 + DY * 800, 450), 80.0)
 
+# 15 foliage check (user 2026-11-04): one tree BEFORE (pack leaf quads + our leaves) and AFTER (rebuilt rounded clumps,
+# Tools/World/grow_fab_canopies.py) each alone in the open, same yaw + identical cameras: three-quarter, side (90 deg),
+# ground level under the canopy looking up. Cameras AS_TreeCheck_<Before|After>_<34|Side|Up>.
+CHECK = [('Before', f'{RS}/SM_Lux_Tree_I_Before'), ('After', f'{RS}/SM_Lux_Tree_I')]
+cx0, cy0 = ox0 - DX * 20000.0, oy0 - DY * 20000.0
+sx_, sy_ = rot2(DX, DY, 90.0)
+for k, (nm, mp) in enumerate(CHECK):
+    mm = load(mp)
+    if not mm: continue
+    x, y = cx0 + PX * 7000.0 * k, cy0 + PY * 7000.0 * k
+    spawn(mm, (x, y, 0), (320, 0, 0), f'Check_{nm}')
+    hz = mm.get_bounds().box_extent.z * 2; d = hz * 1.25; tz = hz * .48
+    cam(f'AS_TreeCheck_{nm}_34', (x - DX * d, y - DY * d, 200), (x, y, tz), 60.0)
+    cam(f'AS_TreeCheck_{nm}_Side', (x - sx_ * d, y - sy_ * d, 200), (x, y, tz), 60.0)
+    cam(f'AS_TreeCheck_{nm}_Up', (x - DX * hz * .2, y - DY * hz * .2, 170), (x + DX * hz * .08, y + DY * hz * .08, hz * .62), 85.0)
+scatter('Grass_Check', load(f'{MESHES}/SM_Vista_Grass'), 5000, cx0 + PX * 3500, cy0 + PY * 3500, (7000, 3000), 48)
+
 les.save_current_level()
 unreal.log('ASSET_REVIEW_BUILT')
 unreal.SystemLibrary.quit_editor()
