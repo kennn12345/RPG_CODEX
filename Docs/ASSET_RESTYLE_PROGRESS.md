@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T05:12:08.398Z
+Last update: 2026-11-04T05:12:54.278Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -76,6 +76,12 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   Tree C has no collision hull (the pack original has none). Jabami leaves read very dark (its leaf UVs vs our mask).
   Review: AS_FabOurs_* + grove -> review/Unreal_FabTrees_OurLeaves_15-20m.png. Not placed in L_WorldVista yet.
 - StyleHex Forest Sample: creator forbids AI use - never script / modify it (user may place by hand).
+
+## Where we paused (2026-11-03, user taking a break)
+- User verdict: the Lux/Jabami trees WITH OUR LEAVES (restyle_fab_trees.py) "look really bad" - do not place them.
+  Their own leaves looked fine in review/Unreal_FabPacks_LuxJabami_Review.png. Refine later with the user (likely:
+  keep the packs' leaf textures, adjust colour/height instead of swapping in our leaf material).
+- Nothing new is placed in L_WorldVista; hero tree, Mayu, Lux and Jabami assets all live only in L_AssetReview.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
