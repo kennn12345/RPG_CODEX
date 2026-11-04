@@ -466,8 +466,9 @@ def hero_ramp(t):
             k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
     return HERO_RAMP[-1][1] + (1,)
 
+HERO_TWIGS = False      # twig tubes (hidden by the leaf sprays) - off to save ~6k triangles
 HERO_FULL_UV = True     # hero leaf cards show one whole leaf-spray texture (Mayu pack masks) instead of an atlas quarter
-def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.9, twig_step=.24):
+def hero_tree(name, seed, H=12.0, n_branch=11, leaf=2.6, twig_step=.34):   # optimised: fewer, bigger cards (2x2 tiled mask keeps leaf size)
     """Video-style tree (reference/USER_REFS.md), R02c: leaves GROW FROM THE BRANCHES.
     Trunk -> 11 spiral branches (most fork) + a crown of short top branches -> twigs along the outer part of every branch
     (alternating sides, angled outward and a little up; long near the inner end, short toward the tip, plus a terminal
@@ -548,7 +549,7 @@ def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.9, twig_step=.24):
             f = (s - s_start) / max(blen - s_start, .1)                     # 0 inner .. 1 tip
             sv = T.cross(UP); sv = sv.normalized() if sv.length > 1e-3 else Vector((1, 0, 0))
             for tier, lift in ((0, crnd.uniform(.08, .28)), (1, crnd.uniform(.45, .7)), (-1, crnd.uniform(-.32, -.12))):
-                if tier != 0 and crnd.random() < .02: continue           # all three tiers: full sprays
+                if tier != 0 and crnd.random() < .2: continue            # most twigs keep all three tiers
                 dirv = (T * crnd.uniform(.45, .65) + sv * side * crnd.uniform(.7, .95) + UP * lift).normalized()
                 tl = (2.3 - 1.2 * f) * max(sc, .8) * crnd.uniform(.85, 1.15)
                 twig_list.append((q + UP * tier * .12, dirv, tl))
@@ -559,8 +560,8 @@ def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.9, twig_step=.24):
             twig_list.append((qe, (Te + UP * .3 + sv_ * a_).normalized(), 1.7 * max(sc, .8)))
         for q, dirv, tl in twig_list:
             e = q + dirv * tl
-            if tl > 1.0: R1['tube'](_TB, _TC, q, e, .03, .01, 3)          # visible twigs only (short ones hide in the leaves)
-            n_c = max(3, int(tl / .2))
+            if HERO_TWIGS and tl > 1.0: R1['tube'](_TB, _TC, q, e, .03, .01, 3)   # twigs hide inside the leaves: off (optimised)
+            n_c = max(2, int(tl / .36))
             for j in range(n_c):
                 tt = .15 + .87 * j / max(1, n_c - 1)                          # cards from 30% of the twig to its tip
                 droop = -UP * .16 * tt * tt
@@ -590,6 +591,7 @@ def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.9, twig_step=.24):
                 return (n.normalized() * .85 + UP * .15).normalized() if n.length > 1e-6 else UP
             bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], vcol, vnrm, fold_deg=(18, 32), tip_dir=tip, full_uv=HERO_FULL_UV)
         ob = M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bark', 'Dapple', 'Fill'), (True, True, True))
+        if lod == 2: decimate_mat(ob, 0, .35)                              # far LOD: simpler trunk + branches
         lods.append(ob)
     hull = trunk_hull(name, Vector((0, 0, -.3)), trunk_at(H * .45), r0 * 1.1)
     return lods[0], [hull], lods[1:]

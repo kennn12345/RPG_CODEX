@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T04:21:26.697Z
+Last update: 2026-11-04T04:26:51.930Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -50,6 +50,9 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   16/17 ("keep refining"): pack "Texture Size" only drives its billboard mode (no effect on our cards) -> own
   T_Hero_LeafSpray_2x2_Mask (2x2 tile of the pack spray, rotated) = half-size leaves at no geometry cost; Color 1
   lighter blue-green, SmoothStep Min 0.2, Emissive 0.12 (lifts shade). Sheet: review/Unreal_Hero01_iter17_SmallerLeaves.png.
+  18 (user: "optimize it"): leaf 2.6 m cards (2x2 mask keeps leaf size), twig_step .34, cards every .36 m, 20% of
+  twigs drop the up/down tier, twig tubes off (HERO_TWIGS), far LOD bark decimated .35 -> 13.3k/8.6k/3.4k tris
+  (was 42k/17k/10k), same look. Sheet: review/Unreal_Hero01_iter18_Optimised.png.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
