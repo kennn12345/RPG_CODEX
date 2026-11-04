@@ -128,6 +128,45 @@ if want('ground'):
     save('GroundDirt_R02_Height', .5 + .2 * (b - .5) + .5 * peb - .25 * rim)
 print('VISTA_TEXTURES_DONE')
 
+# ---------------------------------------------------------------- hero-tree leaves: dappled clusters of small round leaves
+# (user screenshots User_01..07: every leaf readable at a clump edge -> scalloped "dappled" outline). 2x2 atlas, each cell
+# a loose rounded cluster of ~80 small oval leaves; back leaves darker, a thin dark gap between overlapping leaves, near-grey
+# values (hue from vertex colour), colour dilated behind transparency, 3% edge fade (no straight tile cuts).
+if want('dapple'):
+    C = 512
+    def dapple(seed):
+        r = np.random.default_rng(seed)
+        yy, xx = np.mgrid[0:C, 0:C].astype(np.float32); X = (xx + .5) / C; Y = 1 - (yy + .5) / C
+        val = np.zeros((C, C), np.float32); alpha = np.zeros((C, C), np.float32)
+        n = r.integers(125, 150); leaves = []
+        for i in range(n):
+            a = r.uniform(0, 2 * math.pi); rr = .40 * math.sqrt(r.random())         # leaf centres fill a rounded blob
+            cx, cy = .5 + math.cos(a) * rr, .5 + math.sin(a) * rr * .85
+            ang = a + r.uniform(-.7, .7)                                           # leaves point roughly outward
+            L = r.uniform(.07, .1); Wd = L * r.uniform(.58, .72)
+            leaves.append((cy, cx, ang, L, Wd, r.uniform(-.06, .06)))
+        leaves.sort(key=lambda q: -q[0])                                           # paint lower (back) leaves first
+        for k, (cy, cx, ang, L, Wd, tone) in enumerate(leaves):
+            ca, sa = math.cos(ang), math.sin(ang)
+            u = ((X - cx) * ca + (Y - cy) * sa) / L + .5                           # 0 base .. 1 tip
+            v = (-(X - cx) * sa + (Y - cy) * ca) / L
+            uu = np.clip(u, 0, 1)
+            prof = (Wd / L) * .5 * np.power(np.maximum(np.sin(uu * math.pi), 0), .8) * (1 - .25 * uu)   # rounded oval (sin(pi) < 0 in float32 -> NaN without the max)
+            inside = (prof - np.abs(v)) * L * C
+            a_ = np.clip(inside + .5, 0, 1) * (u > 0) * (u < 1)
+            edge = 1 - smooth(0, 3.5, inside)                                      # thin dark rim = gap to the leaf behind
+            depth = k / max(1, len(leaves) - 1)
+            lv = .58 + .22 * depth + .12 * uu + .06 * (v > 0) - .32 * edge + tone
+            val = val * (1 - a_) + lv * a_; alpha = np.maximum(alpha, a_)
+        mean = float((val * alpha).sum() / max(alpha.sum(), 1.0))
+        val = np.where(alpha > .02, val, mean)
+        alpha = alpha * np.clip(np.minimum(np.minimum(X, 1 - X), np.minimum(Y, 1 - Y)) / .03, 0, 1)
+        return np.dstack([val * .97, val, val * .9, alpha])
+    atlas = np.zeros((2 * C, 2 * C, 4), np.float32)
+    for i in range(4):
+        r_, c_ = divmod(i, 2); atlas[r_ * C:(r_ + 1) * C, c_ * C:(c_ + 1) * C] = dapple(101 + i * 13)
+    save('Leaf_Dapple_Atlas_BaseColor', atlas)
+
 # ---------------------------------------------------------------- normal maps from the height maps (tangent space, Unreal/DirectX: green = down)
 def normal_from(name, strength):
     im = bpy.data.images.load(os.path.join(OUT, name + '_Height.png')); w, h = im.size

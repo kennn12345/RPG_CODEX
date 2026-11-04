@@ -469,8 +469,8 @@ return c;
     sway_wpo(m, 2.5)
     return finish(m, dither=True)
 
-def m_leaf():
-    m = new_material('M_Vista_Leaf')
+def m_leaf(name='M_Vista_Leaf', atlas='T_Leaf_Cluster_Atlas_BaseColor'):
+    m = new_material(name)
     m.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE); m.set_editor_property('two_sided', True)
     m.set_editor_property('blend_mode', unreal.BlendMode.BLEND_MASKED)
     # R02: leaf-bunch atlas (Trees_R02: ~30 small leaves per card) x vertex colour (video ramp shade -> lit), gentle
@@ -484,7 +484,7 @@ Sss = lerp(c, GlowC, 0.45) * SssGain * saturate(l * 3.0 + 0.2);
 return c;
 '''
     c = custom(m, code, ['Tex', 'VC', 'OP', 'Gain', 'Sat', 'SssGain', 'GlowC'], F3, (('Sss', F3),), -300, 0)
-    ts = node(m, unreal.MaterialExpressionTextureSample, -900, 0, texture=tex('T_Leaf_Cluster_Atlas_BaseColor') or tex('T_Leaf_Maple_Atlas_BaseColor'))
+    ts = node(m, unreal.MaterialExpressionTextureSample, -900, 0, texture=tex(atlas) or tex('T_Leaf_Maple_Atlas_BaseColor'))
     vc = node(m, unreal.MaterialExpressionVertexColor, -900, 200)
     link(ts, 'RGB', c, 'Tex'); link(vc, '', c, 'VC')
     feed(m, c, {'OP': ('node', unreal.MaterialExpressionObjectPositionWS), 'Gain': ('scalar', 1.35), 'Sat': ('scalar', 1.25),
@@ -655,7 +655,7 @@ def b_materials():
     m_grass('M_Vista_GrassTall', (40, 86, 12), (146, 172, 22), 18.0, 0.8)
     m_grass('M_Vista_Wheat', (150, 112, 30), (232, 180, 36), 16.0, 0.9, ear=(246, 196, 58))
     instance('MI_Vista_Daisies', m_flowers(), {'Petal': lin((250, 246, 232)), 'PetalBase': (0.8, 0.8, 0.75), 'Centre': lin((240, 176, 24))})
-    m_canopy(); m_leaf(); m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
+    m_canopy(); m_leaf(); m_leaf('M_Vista_LeafDapple', 'T_Leaf_Dapple_Atlas_BaseColor'); m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
     flowers = M('M_Vista_Poppies')
     instance('MI_Vista_Bellflowers', flowers, {'Petal': lin((186, 130, 236)), 'PetalBase': (0.55, 0.5, 0.65), 'Centre': lin((90, 60, 130))})
     instance('MI_Vista_BlueFlowers', flowers, {'Petal': lin((120, 165, 255)), 'PetalBase': (0.75, 0.8, 0.9), 'Centre': lin((250, 226, 96))})
@@ -715,6 +715,12 @@ def b_trees_round():
     far = SM('SM_Vista_Tree_Far') or mesh_asset('SM_Vista_Tree_Far', f'{EXP1}/SM_Vista_Tree_Far.fbx')   # shape unchanged; colours = M_Vista_Canopy
     assign(far, {'Bark': M('M_Vista_Bark'), 'Leaves': M('M_Vista_Canopy')})
     foliage_type(far, 1, (1.0, 1.8), shadow=False)
+
+def b_hero():
+    """step-2 hero trees (video style, reference/USER_REFS.md): new assets, not yet placed in the vista."""
+    for n in ('SM_Vista_Tree_Hero01',):
+        mesh = world_asset(n, {'Bark': M('M_Vista_Bark'), 'Dapple': M('M_Vista_LeafDapple'), 'Fill': M('M_Vista_Canopy')}, TREE_LODS, normals=True, min_hulls=1)
+        if mesh: foliage_type(mesh, 0.5, (0.85, 1.25), collision=True, up_deg=30)
 
 def b_details():
     """NEW detail pieces that tie things together (all with Foliage Types): bushes, path-edge tufts (SM_Vista_Tuft, in
@@ -823,6 +829,7 @@ def b_textures():
     for name, png, kind in (('T_Leaf_Cluster_Atlas_BaseColor', f'{T2}/Leaf_Cluster_Atlas_BaseColor.png', 'leaf'),
                             ('T_Bark_Painted_R02_BaseColor', f'{T2}/Bark_Painted_R02_BaseColor.png', 'c'),
                             ('T_Bark_R02_Normal', f'{W2}/Bark_R02_Normal.png', 'n'),
+                            ('T_Leaf_Dapple_Atlas_BaseColor', f'{W2}/Leaf_Dapple_Atlas_BaseColor.png', 'leaf'),
                             ('T_Stone_R02_BaseColor', f'{W2}/Stone_R02_BaseColor.png', 'c'),
                             ('T_Stone_R02_Normal', f'{W2}/Stone_R02_Normal.png', 'n'),
                             ('T_GrassBlade_R02_BaseColor', f'{W2}/GrassBlade_R02_BaseColor.png', 'c'),
@@ -908,7 +915,7 @@ def b_review():
         set_all(sw, M('M_Vista_Terrain')); nanite(sw)
 
 BUILDERS = {'textures': b_textures, 'materials': b_materials, 'review': b_review, 'ground': b_ground, 'grass': b_grass, 'flowers': b_flowers, 'trees_round': b_trees_round,
-            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'details': b_details, 'rocks': b_rocks, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
+            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'details': b_details, 'rocks': b_rocks, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
 ORDER = list(BUILDERS)                       # materials first: the mesh builders assign them
 
 def requested():

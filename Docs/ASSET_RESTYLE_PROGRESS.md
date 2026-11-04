@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T00:41:19.476Z
+Last update: 2026-11-04T01:09:57.990Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -15,6 +15,15 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   Imported + verified in Unreal (no slit, LOD sweep stable): review/Unreal_R02b_Step1_BeforeAfter.png, Unreal_R02b_LOD_Sweep.png.
   NEXT (user decides): step 2 = one hero tree at a time against the video. Was: run build_vista_assets.py "textures trees_round tree_ancient trees_forest details",
   then Visual.AssetShots (AS_LOD_* sweep, AS_Seam_RoundTrunk) and compare with Saved/Screenshots/Assets_before_R02b.
+
+## Step 2: hero tree (user: "start from here", 2026-11-03)
+- User 1080p screenshots: World_R01/reference/User_01..07 (+ USER_REFS.md style spec). webp ones do not load in
+  make_sheet (System.Drawing) - use the jpg ones (User_02/03/05) for sheets.
+- New asset SM_Vista_Tree_Hero01 (export_vista_assets.hero_tree, builder "hero"), leaf atlas Leaf_Dapple_Atlas
+  (small round leaves, vista_textures.py "dapple") + M_Vista_LeafDapple. NOT placed in the vista; the round trees are
+  unchanged until the user approves the hero. Review: L_AssetReview AS_Hero_* (grove of 3).
+- Iterations: 1 poplar-narrow crown -> 2 wider branches/bigger clumps -> 3 more clumps (mid-branch), lower canopy,
+  feathered edges, lighter cores. Sheet: review/Unreal_Hero01_iter3_vs_Reference.png. Waiting for user feedback.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same

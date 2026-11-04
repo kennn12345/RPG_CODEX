@@ -243,6 +243,20 @@ for k, (n, a_) in enumerate((('SM_Vista_Tree_Round', -900), ('SM_Tree_Forest_02'
     if k == 0:
         cam('AS_Seam_RoundTrunk', (x - DX * 260 + PX * 60, y - DY * 260 + PY * 60, 290), (x, y, 300), 45.0)
 
+# 11 hero grove (step 2): three copies of the hero tree with grass + daisies, cameras like the user's screenshots:
+# low angle up into the crowns against the sky (User_05), eye level under the canopy (User_01/04), mid distance (User_03)
+hx, hy = DX * -30000.0 + PX * 6000.0, DY * -30000.0 + PY * 6000.0
+hero = load(f'{MESHES}/SM_Vista_Tree_Hero01')
+if hero:
+    for k, (a_, b_, yaw, sc) in enumerate(((0, 0, 0, 1.0), (-1300, 900, 130, .9), (1200, 1400, 250, 1.1))):
+        place(hero, hx, hy, a_, b_, yaw, sc, f'Hero_{k}')
+    scatter('Grass_Hero', load(f'{MESHES}/SM_Vista_Grass'), 6000, hx, hy, (2600, 2600), 41)
+    scatter('Daisies_Hero', load(f'{MESHES}/SM_Vista_Daisies'), 300, hx, hy, (2600, 2600), 42, patch=900, cover=.4)
+    e = W(hx, hy, 500, -1700); cam('AS_Hero_LowUp', (e[0], e[1], 60), (hx, hy, 900), 75.0)
+    e = W(hx, hy, -300, -900); cam('AS_Hero_UnderCanopy', (e[0], e[1], 170), (hx + DX * 600, hy + DY * 600, 350), 80.0)
+    e = W(hx, hy, 0, -3200); cam('AS_Hero_Mid', (e[0], e[1], 200), (hx, hy, 650), 60.0)
+    bx, by = rot2(DX, DY, 150.0); cam('AS_Hero_Backlit', (hx - bx * 2600, hy - by * 2600, 180), (hx, hy, 700), 70.0)
+
 les.save_current_level()
 unreal.log('ASSET_REVIEW_BUILT')
 unreal.SystemLibrary.quit_editor()
