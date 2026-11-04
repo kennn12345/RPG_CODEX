@@ -716,10 +716,32 @@ def b_trees_round():
     assign(far, {'Bark': M('M_Vista_Bark'), 'Leaves': M('M_Vista_Canopy')})
     foliage_type(far, 1, (1.0, 1.8), shadow=False)
 
+MAYU = '/Game/StylizedTreesByMayu/01_Trees'
+def mayu_leaf_mi():
+    """hero leaves on the Fab pack's stylized leaf material (Mayu's Stylized Trees, Standard License): white leaf-spray
+    mask + material colouring (height gradient Color 1 -> Color 2, tip colour, fresnel rim, soft emissive, wind), tuned
+    to the video palette. The pack's master needs the instancing / LOD-dither usage flags for our foliage."""
+    master = load(f'{MAYU}/00_Base/Material/M_StylizedTree')
+    if not master: problem('Mayu pack missing (/Game/StylizedTreesByMayu)'); return None
+    changed = False
+    for k in ('used_with_instanced_static_meshes', 'used_with_static_lighting'):
+        try:
+            if not master.get_editor_property(k): master.set_editor_property(k, True); changed = True
+        except Exception: pass
+    if changed: MEL.recompile_material(master); save(master)
+    mi = instance('MI_Hero_MayuLeaves', master,
+                  vectors={'Color 1': lin((26, 58, 42)), 'Color 2': lin((104, 156, 40)), 'Tip Color 3': lin((188, 214, 78))},
+                  scalars={'Height': 1450.0, 'SmoothStep Min': 0.35, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.05,
+                           'Texture Size': 1.0, 'BillBoard Inflate': 0.0, 'Billboard Sscale': 1.0})
+    tx = load(f'{MAYU}/Variation/Texture/T_Leaf_Billboard_Texture_3')
+    if tx: MEL.set_material_instance_texture_parameter_value(mi, 'Leaf Texture', tx); save(mi)
+    return mi
+
 def b_hero():
     """step-2 hero trees (video style, reference/USER_REFS.md): new assets, not yet placed in the vista."""
     for n in ('SM_Vista_Tree_Hero01',):
-        mesh = world_asset(n, {'Bark': M('M_Vista_Bark'), 'Dapple': M('M_Vista_LeafDapple'), 'Fill': M('M_Vista_Canopy')}, TREE_LODS, normals=True, min_hulls=1)
+        leaves = mayu_leaf_mi() or M('M_Vista_LeafDapple')
+        mesh = world_asset(n, {'Bark': M('M_Vista_Bark'), 'Dapple': leaves, 'Fill': M('M_Vista_Canopy')}, TREE_LODS, normals=True, min_hulls=1)
         if mesh: foliage_type(mesh, 0.5, (0.85, 1.25), collision=True, up_deg=30)
 
 def b_details():

@@ -250,11 +250,19 @@ hero = load(f'{MESHES}/SM_Vista_Tree_Hero01')
 if hero:
     for k, (a_, b_, yaw, sc) in enumerate(((0, 0, 0, 1.0), (-1300, 900, 130, .9), (1200, 1400, 250, 1.1))):
         place(hero, hx, hy, a_, b_, yaw, sc, f'Hero_{k}')
+    # the Fab pack's elm (reference for the leaf technique), 1.8x so it matches our hero's size
+    MP = '/Game/StylizedTreesByMayu/01_Trees'
+    for k, (mn, mat) in enumerate(((f'{MP}/Elm/Mesh/SM_Elm_Bark', f'{MP}/00_Base/Material/M_Bark'), (f'{MP}/Elm/Mesh/SM_Elm_leaves', f'{MP}/Elm/Material/MI_Elm'))):
+        mm = load(mn)
+        if mm:
+            a_ = place(mm, hx, hy, 2900, 1200, 0, 1.8, f'MayuElm_{k}')
+            if load(mat): a_.static_mesh_component.set_material(0, load(mat))
     scatter('Grass_Hero', load(f'{MESHES}/SM_Vista_Grass'), 6000, hx, hy, (2600, 2600), 41)
     scatter('Daisies_Hero', load(f'{MESHES}/SM_Vista_Daisies'), 300, hx, hy, (2600, 2600), 42, patch=900, cover=.4)
     e = W(hx, hy, 500, -1700); cam('AS_Hero_LowUp', (e[0], e[1], 60), (hx, hy, 900), 75.0)
     e = W(hx, hy, -300, -900); cam('AS_Hero_UnderCanopy', (e[0], e[1], 170), (hx + DX * 600, hy + DY * 600, 350), 80.0)
     e = W(hx, hy, 0, -3200); cam('AS_Hero_Mid', (e[0], e[1], 200), (hx, hy, 650), 60.0)
+    e = W(hx, hy, 1400, -3600); cam('AS_Hero_VsMayuElm', (e[0], e[1], 200), (hx + PX * 1450 + DX * 600, hy + PY * 1450 + DY * 600, 650), 62.0)
     bx, by = rot2(DX, DY, 150.0); cam('AS_Hero_Backlit', (hx - bx * 2600, hy - by * 2600, 180), (hx, hy, 700), 70.0)
 
 les.save_current_level()

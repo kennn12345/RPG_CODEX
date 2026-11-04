@@ -76,7 +76,7 @@ def ramp(t):
             k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
     return RAMP[-1][1] + (1,)
 
-def bunch_card(M, rnd, p, facing, size, col, shade_n, mat=1, fold_deg=(14, 28), tip_dir=None):
+def bunch_card(M, rnd, p, facing, size, col, shade_n, mat=1, fold_deg=(14, 28), tip_dir=None, full_uv=False):
     """folded leaf-bunch card (Trees_R02 Leaf_Cluster_Atlas 2x2), centred near p, facing ~facing."""
     tv = Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1))) * .45 - UP * .35 + facing.cross(UP) * .5
     if tip_dir is not None: tv = tip_dir.copy()                     # card points the way its twig grows
@@ -89,6 +89,7 @@ def bunch_card(M, rnd, p, facing, size, col, shade_n, mat=1, fold_deg=(14, 28), 
     i = [M.vert(c, col(c) if callable(col) else col, shade_n(c) if callable(shade_n) else shade_n) for c in (b0, t0, t0 + sl * w, b0 + sl * w, b0 + sr * w, t0 + sr * w)]
     cell = rnd.randrange(4); u0 = (cell % 2) * .5; v0 = .5 if cell < 2 else 0.0
     um, ul, ur, vb, vt = u0 + .25, u0, u0 + .5, v0, v0 + .5
+    if full_uv: um, ul, ur, vb, vt = .5, 0.0, 1.0, 0.0, 1.0           # one whole texture per card (e.g. a leaf-spray mask)
     M.face((i[0], i[1], i[2], i[3]), [(um, vb), (um, vt), (ul, vt), (ul, vb)], mat)
     M.face((i[0], i[4], i[5], i[1]), [(um, vb), (ur, vb), (ur, vt), (um, vt)], mat)
 
@@ -465,6 +466,7 @@ def hero_ramp(t):
             k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
     return HERO_RAMP[-1][1] + (1,)
 
+HERO_FULL_UV = True     # hero leaf cards show one whole leaf-spray texture (Mayu pack masks) instead of an atlas quarter
 def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.9, twig_step=.24):
     """Video-style tree (reference/USER_REFS.md), R02c: leaves GROW FROM THE BRANCHES.
     Trunk -> 11 spiral branches (most fork) + a crown of short top branches -> twigs along the outer part of every branch
@@ -586,7 +588,7 @@ def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.9, twig_step=.24):
             def vnrm(q, vc=vc, vr=vr):                                    # normal out of the spray volume
                 n = Vector(((q.x - vc.x) / vr.x ** 2, (q.y - vc.y) / vr.y ** 2, (q.z - vc.z) / vr.z ** 2))
                 return (n.normalized() * .85 + UP * .15).normalized() if n.length > 1e-6 else UP
-            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], vcol, vnrm, fold_deg=(18, 32), tip_dir=tip)
+            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], vcol, vnrm, fold_deg=(18, 32), tip_dir=tip, full_uv=HERO_FULL_UV)
         ob = M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bark', 'Dapple', 'Fill'), (True, True, True))
         lods.append(ob)
     hull = trunk_hull(name, Vector((0, 0, -.3)), trunk_at(H * .45), r0 * 1.1)
