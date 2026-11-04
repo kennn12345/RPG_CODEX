@@ -229,6 +229,20 @@ for k, n in enumerate(GALLERY):
     ex, ey = x - DX * d * .92 + PX * d * .38, y - DY * d * .92 + PY * d * .38
     cam(f'AS_Item_{k:02d}_{n.split(":")[-1].replace("SM_Vista_", "").replace("SM_", "")}', (ex, ey, tz + d * .28), (x, y, tz), 50.0)
 
+# 10 LOD sweep + seam check (R02b): a round tree and a forest tree photographed from 6 distances along one line, so the
+# LOD switches can be compared frame to frame (AS_LOD_<tree>_dNN), plus a close-up of the round tree's mid trunk (AS_Seam)
+sx, sy = DX * -30000.0, DY * -30000.0                    # 300 m behind the stations: open ground
+for k, (n, a_) in enumerate((('SM_Vista_Tree_Round', -900), ('SM_Tree_Forest_02', 900))):
+    mesh = load(f'{MESHES}/{n}')
+    if not mesh: continue
+    x, y = sx + PX * a_, sy + PY * a_
+    spawn(mesh, (x, y, 0), (0, 0, 0), 'LOD_' + n)
+    for d in (6, 12, 20, 32, 50, 80):
+        e = (x - DX * d * 100, y - DY * d * 100)
+        cam(f'AS_LOD_{n.replace("SM_Vista_", "").replace("SM_", "")}_d{d:02d}', (e[0], e[1], 170), (x, y, 520 if d > 12 else 420), 60.0)
+    if k == 0:
+        cam('AS_Seam_RoundTrunk', (x - DX * 260 + PX * 60, y - DY * 260 + PY * 60, 290), (x, y, 300), 45.0)
+
 les.save_current_level()
 unreal.log('ASSET_REVIEW_BUILT')
 unreal.SystemLibrary.quit_editor()

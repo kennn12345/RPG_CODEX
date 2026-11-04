@@ -106,25 +106,57 @@ def blob(M, centre, r, light_fn, tint, sub=1, squash=.75, seed=0.0, mat=2):
         M.vert(p, (1.0, light_fn(p, u), tint, 1), u)
     for f in fs: M.face([base + i for i in f], [(0, 0)] * len(f), mat)
 
+LOD_KEEP, LOD_GROW = (1.0, .5, .22), (1.0, 1.3, 1.75)      # canopy cards kept / enlarged per LOD (subsets of LOD0)
 def dome_canopy(M, rnd, domes, C, zlo, zhi, leaf, density, lod):
-    """leaf-bunch cards over every dome + dark cores (LOD0/1), or lit blobs only (LOD2)."""
-    keep = (1.0, .42, 0)[lod]; grow = (1.0, 1.45, 0)[lod]
+    """leaf-bunch cards over every dome + dark cores. R02b: every LOD uses the SAME cards (positions, angles, atlas cells
+    from per-card seeds) - a lower LOD only keeps a subset (per-card key) and grows them a little, so the canopy thins
+    instead of rearranging when the LOD switches (the R02 LODs re-rolled every card -> leaves jumped on approach)."""
+    keep, grow = LOD_KEEP[lod], LOD_GROW[lod]
     for di, (c, r) in enumerate(domes):
         tint = .5 + rnd.uniform(-.08, .08)
-        if lod == 2:
-            blob(M, c, r * .97, lambda p, u: max(.15, min(1, .42 + .45 * u.z + .3 * (smoothstep(zlo, zhi, p.z) - .5))), tint, 2 if r > 1.0 else 1, .75, di * 2.3)
-            continue
-        blob(M, c, r * .6, lambda p, u: .10 + .14 * max(0, u.z), tint, 1, .75, di * 2.3)
-        for k in range(int(density * r * r * keep)):
+        if lod < 2 or r > .8:
+            blob(M, c, r * .6, lambda p, u: .10 + .14 * max(0, u.z), tint, 2 if r > 1.0 else 1, .75, di * 2.3)
+        for k in range(int(density * r * r)):
             u = Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1))).normalized()
-            if u.z < -.5 and rnd.random() < .6: continue
+            skip_under = u.z < -.5 and rnd.random() < .6
             f = rnd.uniform(.84, 1.04); p = c + u * r * f
+            key, card_seed = rnd.random(), rnd.randrange(1 << 30)
+            tj, fj = rnd.gauss(0, .07), (rnd.uniform(-.4, .4), rnd.uniform(-.4, .4), rnd.uniform(-.1, .5))
+            sz = rnd.uniform(.85, 1.15)
+            if skip_under or key > keep: continue
             if any((p - c2).length < r2 * .78 for c2, r2 in domes if c2 is not c): continue
             up = smoothstep(zlo, zhi, p.z)
-            t = .5 + .42 * u.z + .25 * (up - .5) + 1.0 * (f - .94) + (tint - .5) + rnd.gauss(0, .07)
-            facing = (u + Vector((rnd.uniform(-.4, .4), rnd.uniform(-.4, .4), rnd.uniform(-.1, .5)))).normalized()
+            t = .5 + .42 * u.z + .25 * (up - .5) + 1.0 * (f - .94) + (tint - .5) + tj
+            facing = (u + Vector(fj)).normalized()
             shade_n = ((p - C).normalized() * .5 + u * .4 + UP * .15).normalized()
-            bunch_card(M, rnd, p, facing, leaf * grow * rnd.uniform(.85, 1.15), ramp(t), shade_n)
+            bunch_card(M, random.Random(card_seed), p, facing, leaf * grow * sz, ramp(t), shade_n)
+
+def sweep(bm, col, pts, radii, sides, flare_rings=0):
+    """ONE continuous tube through pts (Catmull-Rom, parallel-transported frames - no twist, no seams), closed at the top,
+    root-flare lumps on the first flare_rings rings. Material 0 (bark)."""
+    dense = []
+    P = [pts[0] * 2 - pts[1]] + list(pts) + [pts[-1] * 2 - pts[-2]]; R = [radii[0]] + list(radii) + [radii[-1]]
+    for i in range(1, len(P) - 2):
+        for k in range(4):
+            t = k / 4; t2, t3 = t * t, t * t * t
+            p = .5 * ((2 * P[i]) + (-P[i - 1] + P[i + 1]) * t + (2 * P[i - 1] - 5 * P[i] + 4 * P[i + 1] - P[i + 2]) * t2 + (-P[i - 1] + 3 * P[i] - 3 * P[i + 1] + P[i + 2]) * t3)
+            dense.append((p, R[i] + (R[i + 1] - R[i]) * t, i - 1 < flare_rings))
+    dense.append((pts[-1], radii[-1], False))
+    T = [(dense[min(i + 1, len(dense) - 1)][0] - dense[max(i - 1, 0)][0]).normalized() for i in range(len(dense))]
+    n = T[0].orthogonal().normalized(); rings = []
+    for i, (p, r, fl) in enumerate(dense):
+        if i: n = T[i - 1].rotation_difference(T[i]) @ n; n = (n - T[i] * n.dot(T[i])).normalized()
+        b = T[i].cross(n); ring = []
+        for j in range(sides):
+            a = 2 * math.pi * j / sides
+            k = 1 + (.22 * noise.noise(Vector((math.cos(a) * 1.7, math.sin(a) * 1.7, i * .3))) + .12 * math.cos(a * 5) if fl else 0)
+            v = bm.verts.new(p + (n * math.cos(a) + b * math.sin(a)) * r * k); v[col] = (0, 1, .5, 1); ring.append(v)
+        rings.append(ring)
+    for i in range(len(rings) - 1):
+        for j in range(sides):
+            f = bm.faces.new((rings[i][j], rings[i][(j + 1) % sides], rings[i + 1][(j + 1) % sides], rings[i + 1][j])); f.material_index = 0
+    tip = bm.verts.new(dense[-1][0] + T[-1] * radii[-1] * .5); tip[col] = (0, 1, .5, 1)
+    for j in range(sides): bm.faces.new((rings[-1][j], rings[-1][(j + 1) % sides], tip)).material_index = 0
 
 # ---------------------------------------------------------------- round world trees (R01 shape replayed)
 def round_tree(name, seed, trunk_h, canopy_r, clumps, lean=0.4, leaf_size=.5, density=210):
@@ -134,8 +166,8 @@ def round_tree(name, seed, trunk_h, canopy_r, clumps, lean=0.4, leaf_size=.5, de
     for k in R1['NKEYS']: bm.verts.layers.float.new(k)
     top = Vector((rnd.uniform(-lean, lean), rnd.uniform(-lean, lean), trunk_h))
     mid = Vector((top.x * .35 + rnd.uniform(-.2, .2), top.y * .35 + rnd.uniform(-.2, .2), trunk_h * .5))
-    tube(bm, col, Vector((0, 0, -.4)), mid, .42 * trunk_h / 6, .3 * trunk_h / 6, 10, flare=.7)
-    tube(bm, col, mid, top, .3 * trunk_h / 6, .2 * trunk_h / 6, 10)
+    sweep(bm, col, [Vector((0, 0, -.4)), Vector((0, 0, .05)), mid * .5, mid, mid.lerp(top, .5), top, top + (top - mid).normalized() * .4],
+          [.42 * trunk_h / 6 * 1.55, .42 * trunk_h / 6 * 1.2, .36 * trunk_h / 6, .3 * trunk_h / 6, .25 * trunk_h / 6, .2 * trunk_h / 6, .12 * trunk_h / 6], 16, flare_rings=2)
     C = top + Vector((0, 0, canopy_r * .4))
     domes = [(C + Vector((0, 0, canopy_r * .1)), canopy_r * .6)]
     for k in range(clumps):
@@ -147,21 +179,23 @@ def round_tree(name, seed, trunk_h, canopy_r, clumps, lean=0.4, leaf_size=.5, de
         d = Vector((math.cos(a) * math.cos(el), math.sin(a) * math.cos(el), math.sin(el)))
         domes.append((C + d * canopy_r * rnd.uniform(1.0, 1.15), canopy_r * rnd.uniform(.28, .38)))
     for c, r in domes[1:]:
-        tube(bm, col, top.lerp(mid, rnd.uniform(0, .4)), c, .14 * trunk_h / 6, .06, 6)
+        tube(bm, col, top.lerp(mid, rnd.uniform(0, .4)), c, .14 * trunk_h / 6, .06, 9)
     zlo = min(c.z - r for c, r in domes); zhi = max(c.z + r for c, r in domes)
     # bark -> Mesh (faceted), with R01 bark UVs (around x height); moss weight 0 (material adds the ground collar)
     bark = Mesh()
     bm.verts.ensure_lookup_table(); vid = {}
     for v in bm.verts: vid[v] = bark.vert(v.co, (0, 1, .5, 1))
     for f in bm.faces:
-        bark.face([vid[v] for v in f.verts], [((math.atan2(v.co.y, v.co.x) / math.pi + 1), v.co.z / 2.0) for v in f.verts], 0)
+        us = [(math.atan2(v.co.y, v.co.x) / math.pi + 1) for v in f.verts]
+        if max(us) - min(us) > 1.0: us = [u + 2.0 if u < 1.0 else u for u in us]    # no texture smear across the wrap seam
+        bark.face([vid[v] for v in f.verts], [(u, v.co.z / 2.0) for u, v in zip(us, f.verts)], 0)
     bm.free()
     hull = trunk_hull(name, Vector((0, 0, -.3)), mid.lerp(top, .5), .42 * trunk_h / 6)
     lods = []
     for lod in range(3):
         M = Mesh(); M.v, M.c, M.n, M.f, M.uv, M.m = list(bark.v), list(bark.c), list(bark.n), list(bark.f), list(bark.uv), list(bark.m)
-        dome_canopy(M, random.Random(seed * 31 + lod), domes, C, zlo, zhi, leaf_size * 1.25, density * .8, lod)
-        ob = M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bark', 'Leaves', 'Fill'), (False, True, True))
+        dome_canopy(M, random.Random(seed * 31), domes, C, zlo, zhi, leaf_size * 1.25, density * .8, lod)
+        ob = M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bark', 'Leaves', 'Fill'), (True, True, True))   # smooth round bark
         lods.append(ob)
     hull.parent = None
     return lods[0], [hull], lods[1:]
@@ -291,7 +325,7 @@ def bush(name, seed, r=0.9, lobes=5, lod_count=3):
     out = []
     for lod in range(lod_count):
         M = Mesh()
-        dome_canopy(M, random.Random(seed * 7 + lod), domes, C, zlo, zhi, .55, 150, lod)
+        dome_canopy(M, random.Random(seed * 7), domes, C, zlo, zhi, .55, 150, lod)
         M.m = [m - 1 for m in M.m]                              # no bark: cards -> slot 0 (Leaves), blobs -> slot 1 (Fill)
         out.append(M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Leaves', 'Fill'), (True, True)))
     return out[0], [], out[1:]

@@ -21,6 +21,22 @@ SMES = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
 PROBLEMS = []                                     # printed at the end (ASSETS_PROBLEM lines)
 
 def lin(c): return [((v / 255) / 12.92) if v / 255 <= .04045 else ((v / 255 + .055) / 1.055) ** 2.4 for v in c]
+def other_editors():
+    """PIDs of other running UnrealEditor processes (they lock the packages they have loaded -> saves fail)."""
+    import subprocess
+    try:
+        out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq UnrealEditor.exe', '/FO', 'CSV', '/NH'], capture_output=True, text=True).stdout
+    except Exception:
+        return []
+    pids = [int(l.split('","')[1]) for l in out.splitlines() if l.startswith('"UnrealEditor')]
+    return [p for p in pids if p != os.getpid()]
+
+def save(asset):
+    """save + check: a package locked by another process (e.g. an open editor that has the map loaded) fails to save
+    while the import itself reports success - that must show up as ASSETS_PROBLEM, not pass silently."""
+    ok = EAL.save_loaded_asset(asset, only_if_is_dirty=False)
+    if not ok: problem(f'save failed (file locked? close other Unreal editors): {asset.get_path_name()}')
+    return ok
 def problem(msg): PROBLEMS.append(msg); unreal.log_warning('ASSETS_PROBLEM ' + msg)
 def manifest(folder):
     p = folder + '/manifest.json'
@@ -89,7 +105,7 @@ def set_lods(mesh, lod_fbx, screen):
         SMES.set_lod_screen_sizes(mesh, screen[:mesh.get_num_lods()])
     except Exception as ex:
         problem(f'{mesh.get_name()}: LOD screen sizes not set ({ex})')
-    EAL.save_loaded_asset(mesh)
+    save(mesh)
 
 def assign(mesh, by_slot):
     """materials by FBX slot name (Bark/Leaves/Fill/Rock), falling back to slot order."""
@@ -97,17 +113,17 @@ def assign(mesh, by_slot):
         nm = str(sm.material_slot_name)
         mat = next((v for k, v in by_slot.items() if k.lower() in nm.lower()), list(by_slot.values())[min(i, len(by_slot) - 1)])
         mesh.set_material(i, mat)
-    EAL.save_loaded_asset(mesh)
+    save(mesh)
 
 def set_all(mesh, mat):
     """one material on EVERY slot: an in-place re-import keeps the asset's old slot 0 (e.g. 'WorldGridMaterial') and puts the new
     geometry on a new slot, so set_material(0) alone would leave the geometry on the engine grid material."""
     for i in range(len(mesh.static_materials)): mesh.set_material(i, mat)
-    EAL.save_loaded_asset(mesh)
+    save(mesh)
 
 def nanite(mesh, on=True):
     ns = mesh.get_editor_property('nanite_settings'); ns.set_editor_property('enabled', on)
-    mesh.set_editor_property('nanite_settings', ns); EAL.save_loaded_asset(mesh)
+    mesh.set_editor_property('nanite_settings', ns); save(mesh)
 
 def variant(src, name, mat):
     """a mesh asset of its own (same geometry, own material), updated in place: e.g. daisies from the flower mesh."""
@@ -171,7 +187,7 @@ def finish(m, dither=False):
     m.set_editor_property('used_with_nanite', True)                    # terrain / far hills / rocks are Nanite
     if dither: m.set_editor_property('dithered_lod_transition', True)  # smooth LOD switches on trees / foliage
     m.set_editor_property('tangent_space_normal', m.get_name() not in WORLD_NORMAL)
-    MEL.recompile_material(m); EAL.save_loaded_asset(m); return m
+    MEL.recompile_material(m); save(m); return m
 
 def cpd(m, name, index, x, y, default=0.0):
     """scalar read from the component's custom primitive data (written by ARPGSkyCycle for its SkyReceivers)."""
@@ -189,7 +205,7 @@ def instance(name, parent, vectors=None, scalars=None):
     MEL.set_material_instance_parent(mi, parent)
     for k, rgb in (vectors or {}).items(): MEL.set_material_instance_vector_parameter_value(mi, k, unreal.LinearColor(*rgb, 1))
     for k, v in (scalars or {}).items(): MEL.set_material_instance_scalar_parameter_value(mi, k, v)
-    EAL.save_loaded_asset(mi); return mi
+    save(mi); return mi
 
 TEXTURES = '/Game/RPG/Environment/Textures'
 def tex(name):
@@ -292,7 +308,7 @@ def foliage_type(mesh, density, scale, align=False, shadow=True, cull=0, collisi
     if sink:
         try: ft.set_editor_property('z_offset', unreal.FloatInterval(-sink, -sink * .5))
         except Exception as ex: unreal.log_warning(f'foliage type {name} sink: {ex}')
-    EAL.save_loaded_asset(ft); unreal.log(f'FOLIAGE_TYPE {name}'); return ft
+    save(ft); unreal.log(f'FOLIAGE_TYPE {name}'); return ft
 
 def load(path): return unreal.load_asset(path) if EAL.does_asset_exist(path) else None
 def M(name): return load(f'{MATS}/{name}')
@@ -578,7 +594,7 @@ return lerp(DayC, NightC, Night);
     link(df, '', c, 'Fade')
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     MEL.connect_material_property(c, 'Op', unreal.MaterialProperty.MP_OPACITY)
-    MEL.recompile_material(m); EAL.save_loaded_asset(m); return m
+    MEL.recompile_material(m); save(m); return m
 
 def m_moss():
     """moss cushions (R02b): painted moss texture projected from above x vertex G light (lit top, darker rim), soft, no wind."""
@@ -670,7 +686,7 @@ def world_asset(name, slots, screens, normals=False, keep_size=False, min_hulls=
     return mesh
 
 # LOD screen sizes: small foliage drops detail early (most of the 60k grass clumps draw LOD1/LOD2)
-GRASS_LODS, FLOWER_LODS, TREE_LODS, BUSH_LODS = (1.0, 0.22, 0.07), (1.0, 0.12), (1.0, 0.4, 0.13), (1.0, 0.3, 0.1)
+GRASS_LODS, FLOWER_LODS, TREE_LODS, BUSH_LODS = (1.0, 0.22, 0.07), (1.0, 0.12), (1.0, 0.3, 0.1), (1.0, 0.25, 0.08)   # R02b: trees switch further out
 
 def b_grass():
     for n, mat, dens, sc, cull in (('SM_Vista_Grass', 'M_Vista_Grass', 400, (0.8, 1.3), 9000),
@@ -782,7 +798,7 @@ def m_rock_stone():
     mpath = f'{ROCKLIB}/Materials/MI_Rock_Stone_Moss'
     mi = unreal.load_asset(mpath) if EAL.does_asset_exist(mpath) else \
         TOOLS.create_asset('MI_Rock_Stone_Moss', f'{ROCKLIB}/Materials', unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
-    MEL.set_material_instance_parent(mi, m); MEL.set_material_instance_scalar_parameter_value(mi, 'Moss', 1.0); EAL.save_loaded_asset(mi)
+    MEL.set_material_instance_parent(mi, m); MEL.set_material_instance_scalar_parameter_value(mi, 'Moss', 1.0); save(mi)
     return m, mi
 
 def b_rocks():
@@ -826,9 +842,9 @@ def b_textures():
             tx.set_editor_property('srgb', True)
         if kind == 'leaf':
             tx.set_editor_property('mip_gen_settings', unreal.TextureMipGenSettings.TMGS_SHARPEN4)   # leaf edges stay crisp at distance
-        EAL.save_loaded_asset(tx); unreal.log(f'TEXTURE {name}')
+        save(tx); unreal.log(f'TEXTURE {name}')
 
-def tree_asset(name, fbx_dir, density, scale, lod_screens=(1.0, 0.4, 0.14), shadow=True):
+def tree_asset(name, fbx_dir, density, scale, lod_screens=(1.0, 0.3, 0.1), shadow=True):
     """Blender tree (Trees_R02) with its hand-made LODs + collision hulls; materials by slot (Bark/Leaves/Fill)."""
     info = manifest(os.path.dirname(fbx_dir)).get(name[3:], {})                 # Trees_R02/manifest.json: Blender dims (m)
     mesh = mesh_asset(name, f'{fbx_dir}/{name}.fbx', min_hulls=info.get('hulls', 1), size_cm=max(info['dims']) * 100 if info else None)
@@ -857,7 +873,7 @@ def b_cliffs():
         mesh = mesh_asset(n, pick(f'{EXP2}/{n}.fbx', f'{EXP1}/{n}.fbx'), normals=True)
         assign(mesh, {'Rock': M('M_Vista_Rock'), 'Leaves': M('M_Vista_Leaf')})
         mesh.get_editor_property('body_setup').set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
-        EAL.save_loaded_asset(mesh)
+        save(mesh)
 
 def b_effects():
     for n, mat in (('SM_Vista_Motes', 'M_Vista_Motes'), ('SM_Vista_DriftLeaves', 'M_Vista_DriftLeaf')):
@@ -866,12 +882,12 @@ def b_effects():
         # drifting cards move far from their rest position (WPO): widen bounds so they are not culled
         mesh.set_editor_property('positive_bounds_extension', unreal.Vector(1500, 1500, 300))
         mesh.set_editor_property('negative_bounds_extension', unreal.Vector(1500, 1500, 300))
-        EAL.save_loaded_asset(mesh)
+        save(mesh)
     path = f'{MESHES}/SM_Vista_MistSheet'
     plane = load(path) or EAL.duplicate_asset('/Engine/BasicShapes/Plane', path)
     plane.set_material(0, M('M_Vista_Mist')); unreal.EditorStaticMeshLibrary.remove_collisions(plane)
     plane.get_editor_property('body_setup').set_editor_property('collision_trace_flag', unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX)
-    EAL.save_loaded_asset(plane)
+    save(plane)
 
 def b_frozen():
     """sky dome material + clouds: frozen (user decision) - only created if missing (exec'd from the R03 builder code)."""
@@ -900,7 +916,13 @@ def requested():
     names = [n for n in raw.replace(',', ' ').split() if n]
     return ORDER if 'all' in names else [n for n in ORDER if n in names] + [n for n in names if n not in ORDER]
 
-for name in requested():
+_others = other_editors()
+if _others and os.environ.get('RPG_VISTA_ASSETS_FORCE') != '1':
+    problem(f'another Unreal Editor is running (PID {_others}) and locks the assets it has loaded - close it first; nothing was built')
+    REQ = []
+else:
+    REQ = requested()
+for name in REQ:
     if name not in BUILDERS: problem(f'unknown builder {name}'); continue
     unreal.log(f'ASSETS_BUILD {name}')
     try: BUILDERS[name]()

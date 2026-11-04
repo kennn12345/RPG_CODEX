@@ -1,8 +1,19 @@
 # Asset restyle progress
 
-Last update: 2026-11-03T23:50:55.300Z
+Last update: 2026-11-04T00:30:08.722Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
+
+## Step 1 of the quality plan (user 2026-11-03: LOD popping, angular shapes, see-through trunk slits)
+- Sources DONE: LODs are subsets of the LOD0 cards (same leaves, per-card seeds; keep 1/.5/.22, grow 1/1.3/1.75),
+  trees switch at 0.3/0.1 (was 0.4/0.13); round-tree trunk = one 16-sided smooth sweep (R01 two open tubes slit
+  halfway up); smooth bark everywhere; Blender-tree LOD1/2 drop twigs instead of decimating (no holes); leaf atlas
+  colour-dilated + 3% edge fade (no dark halo / straight cuts). Verified in Blender (closed trunk, faces outward).
+- BLOCKED: the user opened the Unreal Editor at 17:52 (PID 6536, L_WorldVista loaded) - it locks every asset in the
+  world, so the import saved ONLY the 4 forest trees; round trees, ancient, bushes, details and R02 textures failed
+  to save. build_vista_assets.py now refuses to run while another editor is open and reports failed saves.
+  NEXT: once the editor is closed run build_vista_assets.py "textures trees_round tree_ancient trees_forest details",
+  then Visual.AssetShots (AS_LOD_* sweep, AS_Seam_RoundTrunk) and compare with Saved/Screenshots/Assets_before_R02b.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
