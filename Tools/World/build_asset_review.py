@@ -315,6 +315,34 @@ scatter('Grass_Fab', load(f'{MESHES}/SM_Vista_Grass'), 6000, fx0 + PX * off * .5
 gx_, gy_ = fx0 + PX * 2600, fy0 + PY * 2600
 cam('AS_Fab_Group', (gx_ - DX * 3600, gy_ - DY * 3600, 320), (gx_, gy_, 450), 78.0)
 
+# 14 the Fab trees restyled with OUR leaves and scaled to 15-20 m (Tools/World/restyle_fab_trees.py), a grove + one camera each
+RS = '/Game/FabPacks/Restyled'
+OURS = [(f'Lux_Tree_{c}', f'{RS}/SM_Lux_Tree_{c}') for c in 'ABCDEFGHIJ'] + [('Jabami_Tree', f'{RS}/SM_Jabami_Tree_Ours')]
+ox0, oy0 = DX * -30000.0 - PX * 30000.0, DY * -30000.0 - PY * 30000.0
+off = 0.0
+for k, (nm, mp) in enumerate(OURS):
+    mm = load(mp)
+    if not mm: continue
+    e_ = mm.get_bounds().box_extent
+    off += max(e_.x, e_.y) + 400.0
+    x, y = ox0 + PX * off, oy0 + PY * off; off += max(e_.x, e_.y) + 400.0
+    spawn(mm, (x, y, 0), (k * 40, 0, 0), f'Ours_{nm}')
+    d = e_.z * 2 * 1.25; tz = e_.z * 2 * .48
+    cam(f'AS_FabOurs_{k:02d}_{nm}', (x - DX * d, y - DY * d, 200), (x, y, tz), 60.0)
+if hero: place(hero, ox0, oy0, -2000, 0, 0, 1.0, 'Ours_HeroRef')
+scatter('Grass_Ours', load(f'{MESHES}/SM_Vista_Grass'), 9000, ox0 + PX * off * .5, oy0 + PY * off * .5, (off * .55 + 2500, 2500), 45)
+# a forest grove of the restyled trees (how they read together, like the reference screenshots)
+gx2, gy2 = ox0 - DX * 9000, oy0 - DY * 9000
+for k in range(14):
+    mm = load(OURS[k % len(OURS)][1])
+    if not mm: continue
+    a_ = (k * 2.39996); r_ = 900 + 380 * math.sqrt(k)
+    place(mm, gx2, gy2, math.cos(a_) * r_, math.sin(a_) * r_ * .7, k * 57, 1.0, f'Grove_{k}')
+scatter('Grass_Grove', load(f'{MESHES}/SM_Vista_Grass'), 7000, gx2, gy2, (3500, 3500), 46)
+scatter('Daisies_Grove', load(f'{MESHES}/SM_Vista_Daisies'), 500, gx2, gy2, (3500, 3500), 47, patch=900, cover=.4)
+e = W(gx2, gy2, 0, -4200); cam('AS_FabOurs_GroveMid', (e[0], e[1], 220), (gx2, gy2, 800), 70.0)
+e = W(gx2, gy2, 300, -500); cam('AS_FabOurs_GroveUnder', (e[0], e[1], 170), (gx2 + DX * 800, gy2 + DY * 800, 450), 80.0)
+
 les.save_current_level()
 unreal.log('ASSET_REVIEW_BUILT')
 unreal.SystemLibrary.quit_editor()

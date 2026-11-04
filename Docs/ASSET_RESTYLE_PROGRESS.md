@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T05:00:16.215Z
+Last update: 2026-11-04T05:12:08.398Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -70,6 +70,11 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   clovers, foliage types). JABAMI Anime Tree v4 (CC BY 4.0): Tools/World/import_fab_trees.py -> /Game/FabPacks/JabamiAnimeTree
   (leaf materials render black - opacity/texture to fix). Downloads + extracted files: outputs/FabPacks/. All pack
   folders git-ignored; credits in Docs/CREDITS.md. Review: L_AssetReview AS_Fab_* -> review/Unreal_FabPacks_LuxJabami_Review.png.
+- Restyled copies (user: "add our leaves", "scale to 15-20 m"): Tools/World/restyle_fab_trees.py -> /Game/FabPacks/Restyled/
+  SM_Lux_Tree_A..J + SM_Jabami_Tree_Ours, exported to FBX with LODs + collision and re-imported at 15-20 m (LOD build
+  scale is ignored by these meshes), leaf slots = MI_Fab_OurLeaves_* (child of MI_Hero_MayuLeaves, Height 1600).
+  Tree C has no collision hull (the pack original has none). Jabami leaves read very dark (its leaf UVs vs our mask).
+  Review: AS_FabOurs_* + grove -> review/Unreal_FabTrees_OurLeaves_15-20m.png. Not placed in L_WorldVista yet.
 - StyleHex Forest Sample: creator forbids AI use - never script / modify it (user may place by hand).
 
 ## Status
