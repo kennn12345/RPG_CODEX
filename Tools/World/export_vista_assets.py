@@ -454,7 +454,7 @@ def cliff_r02(name, seed, layers=4):
     return rock, [], []
 
 # ---------------------------------------------------------------- hero tree (step 2, user screenshots User_01..07)
-HERO_RAMP = [(0, lin((34, 66, 56))), (.3, lin((52, 98, 58))), (.55, lin((96, 146, 44))), (.78, lin((158, 200, 44))), (1, lin((214, 230, 92)))]
+HERO_RAMP = [(0, lin((62, 98, 80))), (.3, lin((74, 116, 72))), (.55, lin((108, 154, 56))), (.78, lin((160, 200, 56))), (1, lin((212, 228, 100)))]   # softer, cooler, lighter shade
 def hero_ramp(t):
     """hero leaves: cool soft teal shade -> green -> warm lime in sun (user screenshots), wider than the R02 ramp."""
     t = max(0.0, min(1.0, t))
@@ -463,7 +463,7 @@ def hero_ramp(t):
             k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
     return HERO_RAMP[-1][1] + (1,)
 
-def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.65, density=13.0):
+def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.8, 2.6), leaf=1.7, density=10.5):
     """Video-style tree (reference/USER_REFS.md): tall slim red-brown trunk visible for ~45% of the height, a few long
     branches forking upward at 30-50 deg, and an OPEN canopy of separate flattened-dome clumps (dappled small-leaf cards,
     slot 'Dapple') at the branch ends with sky gaps between them. Each clump is shaded like a soft sphere (vertex colour +
@@ -495,7 +495,7 @@ def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.65, d
         sweep(bm, col, [p0 - d * .1, p0, p1, p2], [rb, rb, rb * .62, rb * .3], 8)
         cr = rnd.uniform(*clump_r) * (1.05 - .25 * t)
         clumps.append((p2 + Vector((0, 0, cr * .25)), cr))
-        cm = cr * rnd.uniform(.68, .88); clumps.append((p1.lerp(p2, .35) + Vector((0, 0, cm * .45)) + Vector((-d.y, d.x, 0)) * rnd.uniform(-.5, .5), cm))   # mid-branch clump
+        cm = cr * rnd.uniform(.5, .66); clumps.append((p1.lerp(p2, .35) + Vector((0, 0, cm * .45)) + Vector((-d.y, d.x, 0)) * rnd.uniform(-.5, .5), cm))   # mid-branch clump
         if rnd.random() < .97:                                              # a fork: side clump
             q0 = p0.lerp(p1, rnd.uniform(.9, 1.3)); sd = (d + Vector((math.cos(az + 1.6), math.sin(az + 1.6), .6)) * rnd.choice((-1, 1)) * .8).normalized()
             if sd.z < .3: sd.z = .3; sd.normalize()
@@ -532,7 +532,7 @@ def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.65, d
     for lod in range(3):
         M = Mesh(); M.v, M.c, M.n, M.f, M.uv, M.m = list(bark.v), list(bark.c), list(bark.n), list(bark.f), list(bark.uv), list(bark.m)
         for ci, (c, r) in enumerate(clumps):                               # dark core: closes the see-through INSIDE a clump only
-            blob(M, c - Vector((0, 0, r * .12)), r * (.34 if lod < 2 else .24), lambda p, u: .25 + .15 * max(0, u.z), .5, 2 if lod < 2 else 1, .6, ci * 1.7)
+            blob(M, c - Vector((0, 0, r * .12)), r * (.26 if lod < 2 else .2), lambda p, u: .32 + .15 * max(0, u.z), .5, 2 if lod < 2 else 1, .6, ci * 1.7)
         for key, cs, p, facing, sz, t, sn, cross in cards:
             if key > LOD_KEEP[lod]: continue
             bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], hero_ramp(t), sn, fold_deg=(3, 9))   # nearly flat

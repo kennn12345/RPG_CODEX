@@ -469,7 +469,7 @@ return c;
     sway_wpo(m, 2.5)
     return finish(m, dither=True)
 
-def m_leaf(name='M_Vista_Leaf', atlas='T_Leaf_Cluster_Atlas_BaseColor', sss=0.9):
+def m_leaf(name='M_Vista_Leaf', atlas='T_Leaf_Cluster_Atlas_BaseColor', sss=0.9, sat=1.25):
     m = new_material(name)
     m.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE); m.set_editor_property('two_sided', True)
     m.set_editor_property('blend_mode', unreal.BlendMode.BLEND_MASKED)
@@ -487,7 +487,7 @@ return c;
     ts = node(m, unreal.MaterialExpressionTextureSample, -900, 0, texture=tex(atlas) or tex('T_Leaf_Maple_Atlas_BaseColor'))
     vc = node(m, unreal.MaterialExpressionVertexColor, -900, 200)
     link(ts, 'RGB', c, 'Tex'); link(vc, '', c, 'VC')
-    feed(m, c, {'OP': ('node', unreal.MaterialExpressionObjectPositionWS), 'Gain': ('scalar', 1.35), 'Sat': ('scalar', 1.25),
+    feed(m, c, {'OP': ('node', unreal.MaterialExpressionObjectPositionWS), 'Gain': ('scalar', 1.35), 'Sat': ('scalar', sat),
                 'SssGain': ('scalar', sss), 'GlowC': ('vector', lin((190, 210, 40)))}, x=-900)
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
     MEL.connect_material_property(c, 'Sss', unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
@@ -655,7 +655,7 @@ def b_materials():
     m_grass('M_Vista_GrassTall', (40, 86, 12), (146, 172, 22), 18.0, 0.8)
     m_grass('M_Vista_Wheat', (150, 112, 30), (232, 180, 36), 16.0, 0.9, ear=(246, 196, 58))
     instance('MI_Vista_Daisies', m_flowers(), {'Petal': lin((250, 246, 232)), 'PetalBase': (0.8, 0.8, 0.75), 'Centre': lin((240, 176, 24))})
-    m_canopy(); m_leaf(); m_leaf('M_Vista_LeafDapple', 'T_Leaf_Dapple_Atlas_BaseColor', 1.3); m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
+    m_canopy(); m_leaf(); m_leaf('M_Vista_LeafDapple', 'T_Leaf_Dapple_Atlas_BaseColor', 1.3, 1.05); m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
     flowers = M('M_Vista_Poppies')
     instance('MI_Vista_Bellflowers', flowers, {'Petal': lin((186, 130, 236)), 'PetalBase': (0.55, 0.5, 0.65), 'Centre': lin((90, 60, 130))})
     instance('MI_Vista_BlueFlowers', flowers, {'Petal': lin((120, 165, 255)), 'PetalBase': (0.75, 0.8, 0.9), 'Centre': lin((250, 226, 96))})
