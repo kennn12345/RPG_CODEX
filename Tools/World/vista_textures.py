@@ -138,12 +138,12 @@ if want('dapple'):
         r = np.random.default_rng(seed)
         yy, xx = np.mgrid[0:C, 0:C].astype(np.float32); X = (xx + .5) / C; Y = 1 - (yy + .5) / C
         val = np.zeros((C, C), np.float32); alpha = np.zeros((C, C), np.float32)
-        n = r.integers(200, 230); leaves = []                                   # dense: every card reads as a full leaf mass
+        n = r.integers(105, 125); leaves = []                                   # fewer, bigger, readable leaves (user refs)
         for i in range(n):
             a = r.uniform(0, 2 * math.pi); rr = .42 * math.pow(r.random(), .55)     # leaf centres fill a rounded blob evenly (no hole)
             cx, cy = .5 + math.cos(a) * rr, .5 + math.sin(a) * rr * .85
             ang = a + r.uniform(-.7, .7)                                           # leaves point roughly outward
-            L = r.uniform(.07, .1); Wd = L * r.uniform(.58, .72)
+            L = r.uniform(.1, .14); Wd = L * r.uniform(.6, .74)
             leaves.append((cy, cx, ang, L, Wd, r.uniform(-.06, .06)))
         leaves.sort(key=lambda q: -q[0])                                           # paint lower (back) leaves first
         for k, (cy, cx, ang, L, Wd, tone) in enumerate(leaves):

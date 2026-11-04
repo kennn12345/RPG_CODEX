@@ -454,7 +454,16 @@ def cliff_r02(name, seed, layers=4):
     return rock, [], []
 
 # ---------------------------------------------------------------- hero tree (step 2, user screenshots User_01..07)
-def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.4, density=17.0):
+HERO_RAMP = [(0, lin((34, 66, 56))), (.3, lin((52, 98, 58))), (.55, lin((96, 146, 44))), (.78, lin((158, 200, 44))), (1, lin((214, 230, 92)))]
+def hero_ramp(t):
+    """hero leaves: cool soft teal shade -> green -> warm lime in sun (user screenshots), wider than the R02 ramp."""
+    t = max(0.0, min(1.0, t))
+    for (a, ca), (b, cb) in zip(HERO_RAMP, HERO_RAMP[1:]):
+        if t <= b:
+            k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
+    return HERO_RAMP[-1][1] + (1,)
+
+def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.65, density=13.0):
     """Video-style tree (reference/USER_REFS.md): tall slim red-brown trunk visible for ~45% of the height, a few long
     branches forking upward at 30-50 deg, and an OPEN canopy of separate flattened-dome clumps (dappled small-leaf cards,
     slot 'Dapple') at the branch ends with sky gaps between them. Each clump is shaded like a soft sphere (vertex colour +
@@ -511,24 +520,25 @@ def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.4, de
         tint = crnd.uniform(-.07, .07)
         for k in range(int(density * r * r)):
             u = Vector((crnd.gauss(0, 1), crnd.gauss(0, 1), crnd.gauss(0, 1) * .8 + .35)).normalized()   # more on top
-            p = c + Vector((u.x, u.y, u.z * (.75 if u.z > 0 else .5))) * r * (crnd.uniform(.55, 1.0) if crnd.random() < .7 else crnd.uniform(1.0, 1.3))   # soft dome + stray leaves past the rim
+            rad = r * (crnd.uniform(.55, 1.0) if crnd.random() < .7 else crnd.uniform(1.0, 1.3))                 # soft dome + stray leaves past the rim
+            p = c + Vector((u.x * (1.12 if u.z < 0 else 1.0), u.y * (1.12 if u.z < 0 else 1.0), u.z * (.7 if u.z > 0 else .95))) * rad   # lower half drapes outward-down
             key, cs = crnd.random(), crnd.randrange(1 << 30)
             h = smoothstep(zlo, zhi, p.z)
-            t = .56 + .4 * u.z + .12 * (h - .5) + tint + crnd.gauss(0, .07)                              # soft sphere per clump
-            facing = (u * .85 + UP * .25 + Vector((crnd.uniform(-.25, .25), crnd.uniform(-.25, .25), 0))).normalized()   # outward: face-on from any side
+            t = .5 + .5 * u.z + .12 * (h - .5) + tint + crnd.gauss(0, .06)                               # soft sphere per clump
+            facing = (u * .85 + UP * (.25 if u.z > -.2 else -.1) + Vector((crnd.uniform(-.25, .25), crnd.uniform(-.25, .25), 0))).normalized()   # outward; hanging leaves tilt down
             shade_n = (u * .75 + UP * .25).normalized()
             cards.append((key, cs, p, facing, leaf * crnd.uniform(.85, 1.15), t, shade_n, crnd.random() < .5))
     lods = []
     for lod in range(3):
         M = Mesh(); M.v, M.c, M.n, M.f, M.uv, M.m = list(bark.v), list(bark.c), list(bark.n), list(bark.f), list(bark.uv), list(bark.m)
         for ci, (c, r) in enumerate(clumps):                               # dark core: closes the see-through INSIDE a clump only
-            blob(M, c - Vector((0, 0, r * .12)), r * (.36 if lod < 2 else .26), lambda p, u: .22 + .16 * max(0, u.z), .5, 2 if lod < 2 else 1, .6, ci * 1.7)
+            blob(M, c - Vector((0, 0, r * .12)), r * (.34 if lod < 2 else .24), lambda p, u: .25 + .15 * max(0, u.z), .5, 2 if lod < 2 else 1, .6, ci * 1.7)
         for key, cs, p, facing, sz, t, sn, cross in cards:
             if key > LOD_KEEP[lod]: continue
-            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], ramp(t), sn, fold_deg=(3, 9))   # nearly flat
+            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], hero_ramp(t), sn, fold_deg=(3, 9))   # nearly flat
             if cross and lod < 2:                                          # crossed partner: a leaf face from every view
                 f2 = facing.cross(UP if abs(facing.z) < .9 else Vector((1, 0, 0))).normalized()
-                bunch_card(M, random.Random(cs + 7), p, (f2 + facing * .3).normalized(), sz * LOD_GROW[lod] * .9, ramp(t - .03), sn, fold_deg=(3, 9))
+                bunch_card(M, random.Random(cs + 7), p, (f2 + facing * .3).normalized(), sz * LOD_GROW[lod] * .9, hero_ramp(t - .03), sn, fold_deg=(3, 9))
         ob = M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bark', 'Dapple', 'Fill'), (True, True, True))
         lods.append(ob)
     hull = trunk_hull(name, Vector((0, 0, -.3)), trunk_at(H * .45), r0 * 1.1)
