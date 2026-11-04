@@ -296,6 +296,25 @@ scatter('Grass_Pack', load(f'{MESHES}/SM_Vista_Grass'), 4000, px0 + PX * 3000, p
 mx, my = px0 + PX * 2800, py0 + PY * 2800
 e = (mx - DX * 3200, my - DY * 3200); cam('AS_Pack_Group', (e[0], e[1], 300), (mx, my, 500), 75.0)
 
+# 13 AI-permitted Fab packs (CC BY 4.0): Lux Art Studios Vegetation Stylized Kit + JABAMI anime tree, one camera each + group
+LUXP = '/Game/Vegetation_Stylized_Pack_ByLuxArtStudios/Mesh'
+FABITEMS = [(f'Lux_Tree_{c}', f'{LUXP}/Trees/S_Tree_{c}') for c in 'ABCDEFGHIJ'] + [('Jabami_Tree', '/Game/FabPacks/JabamiAnimeTree/SM_Jabami_Tree')] +            [(f'Lux_{n}', f'{LUXP}/Bushes/S_{n}') for n in ('Bush_A', 'Bush_C', 'Fern_B', 'Flowers_A', 'Flowers_E', 'Cattail_A', 'Clovers_A', 'Grass_01A')]
+fx0, fy0 = DX * -30000.0 + PX * 16000.0, DY * -30000.0 + PY * 16000.0
+off = 0.0
+for k, (nm, mp) in enumerate(FABITEMS):
+    mm = load(mp)
+    if not mm: continue
+    e_ = mm.get_bounds().box_extent; sz = max(e_.x, e_.y, e_.z)
+    off += max(e_.x, e_.y) + 250.0
+    x, y = fx0 + PX * off, fy0 + PY * off; off += max(e_.x, e_.y) + 250.0
+    spawn(mm, (x, y, 0), (k * 40, 0, 0), f'Fab_{nm}')
+    d = max(sz * 2.7, 220.0); tz = e_.z * 2 * .48
+    cam(f'AS_Fab_{k:02d}_{nm}', (x - DX * d, y - DY * d, max(160.0, tz * .55)), (x, y, tz), 55.0)
+if hero: place(hero, fx0, fy0, -1600, 0, 0, 1.0, 'Fab_OurHero')
+scatter('Grass_Fab', load(f'{MESHES}/SM_Vista_Grass'), 6000, fx0 + PX * off * .5, fy0 + PY * off * .5, (off * .55 + 2000, 2000), 44)
+gx_, gy_ = fx0 + PX * 2600, fy0 + PY * 2600
+cam('AS_Fab_Group', (gx_ - DX * 3600, gy_ - DY * 3600, 320), (gx_, gy_, 450), 78.0)
+
 les.save_current_level()
 unreal.log('ASSET_REVIEW_BUILT')
 unreal.SystemLibrary.quit_editor()

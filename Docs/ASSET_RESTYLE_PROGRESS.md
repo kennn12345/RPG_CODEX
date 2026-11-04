@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T04:41:56.168Z
+Last update: 2026-11-04T05:00:16.215Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -63,6 +63,14 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   canopy pieces) later. Do NOT delete or replace the pack. Material pairing = its showcase level (bark M_Bark; leaves
   MI_Elm / MI_Fir / MI_Willow / MI_Leaves / MI_SphericalLeaves); green elm = MI_Pack_ElmGreen. Review shots:
   review/Unreal_MayuPack_Trees_Review.png, L_AssetReview cameras AS_Pack_*. The pack is not in git (Fab content).
+
+## AI-permitted Fab tree packs (user 2026-11-03: "Both")
+- Lux Art Studios Vegetation Stylized Kit (CC BY 4.0, credit required): UE project content copied to
+  Content/Vegetation_Stylized_Pack_ByLuxArtStudios (10 trees with 4 LODs, bushes, ferns, flowers, grass, cattails,
+  clovers, foliage types). JABAMI Anime Tree v4 (CC BY 4.0): Tools/World/import_fab_trees.py -> /Game/FabPacks/JabamiAnimeTree
+  (leaf materials render black - opacity/texture to fix). Downloads + extracted files: outputs/FabPacks/. All pack
+  folders git-ignored; credits in Docs/CREDITS.md. Review: L_AssetReview AS_Fab_* -> review/Unreal_FabPacks_LuxJabami_Review.png.
+- StyleHex Forest Sample: creator forbids AI use - never script / modify it (user may place by hand).
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same

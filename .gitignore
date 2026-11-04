@@ -25,3 +25,8 @@ New folder/
 # Large intermediate animation dumps (regenerate with Tools/AnimImport/dump_poses.py / compose.py)
 Tools/AnimImport/source_poses.json
 Tools/AnimImport/mocap_clips.json
+
+# Third-party Fab packs: licences forbid redistributing the raw assets - keep them out of git (re-add from Fab)
+/Content/StylizedTreesByMayu/
+/Content/Vegetation_Stylized_Pack_ByLuxArtStudios/
+/Content/FabPacks/
