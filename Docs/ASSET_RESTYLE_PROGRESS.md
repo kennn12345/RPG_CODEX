@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T03:31:23.371Z
+Last update: 2026-11-04T03:37:19.713Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -35,7 +35,10 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   hero_tree rewritten - twigs alternate along the outer 82% of every branch in 3 tiers (up/level/drooping) + a
   terminal fan; folded cards along each twig point the way it grows (bunch_card tip_dir), mostly face-up, drooping
   tips; per-vertex shading from each branch spray ellipsoid; twig tubes only in LOD0. Wider level branches (60-76 deg).
-  31.5k/13k/8k tris (optimise once approved). Sheet: review/Unreal_Hero01_iter11_BranchSprays.png. Waiting for user.
+  31.5k/13k/8k tris -> 12 (user: "clumps like round bushes, sprays look flat stacked"): each branch carries a chain
+  of 2-3 rounded leaf bushes (BUSH_R 1.7 m, big mid-branch -> small at the tip); cards tangent on a fibonacci sphere,
+  leaning along the branch, per-vertex ball shading, dark core 0.6 r; 15.3k/11.8k/6.6k tris.
+  Sheet: review/Unreal_Hero01_iter12_Bushes.png. Waiting for user.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
