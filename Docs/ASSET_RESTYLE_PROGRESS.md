@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T01:15:00.333Z
+Last update: 2026-11-04T01:21:51.873Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -24,7 +24,9 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   unchanged until the user approves the hero. Review: L_AssetReview AS_Hero_* (grove of 3).
 - Iterations: 1 poplar-narrow crown -> 2 wider branches/bigger clumps -> 3 more clumps (mid-branch), lower canopy,
   feathered edges, lighter cores -> 4 (user: "Fuller, bigger crown") clumps 1.85-2.7 m, 11 branches, 6-8 crown clumps,
-  stronger root flare; 25k/16k/9k tris. Sheet: review/Unreal_Hero01_iter4_vs_Reference.png. Waiting for user feedback.
+  stronger root flare -> 5/6 (user: "leaves look partially there"): denser dapple atlas (200-230 leaves per cell),
+  nearly flat cards (fold 3-9 deg) facing outward from each clump + a crossed partner on half of them (a leaf face from
+  every view; up-facing cards smeared from the side). 22k/15k/7k tris. Sheet: review/Unreal_Hero01_iter6.png. Waiting.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same

@@ -76,12 +76,12 @@ def ramp(t):
             k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
     return RAMP[-1][1] + (1,)
 
-def bunch_card(M, rnd, p, facing, size, col, shade_n, mat=1):
+def bunch_card(M, rnd, p, facing, size, col, shade_n, mat=1, fold_deg=(14, 28)):
     """folded leaf-bunch card (Trees_R02 Leaf_Cluster_Atlas 2x2), centred near p, facing ~facing."""
     tv = Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1))) * .45 - UP * .35 + facing.cross(UP) * .5
     tv = tv - facing * tv.dot(facing)
     if tv.length < 1e-4: tv = facing.orthogonal()
-    tip = tv.normalized(); side = tip.cross(facing).normalized(); fold = math.radians(rnd.uniform(14, 28))
+    tip = tv.normalized(); side = tip.cross(facing).normalized(); fold = math.radians(rnd.uniform(*fold_deg))
     sl = -side * math.cos(fold) + facing * math.sin(fold); sr = side * math.cos(fold) + facing * math.sin(fold)
     b0 = p - tip * .45 * size; t0 = p + tip * .55 * size; w = .5 * size
     i = [M.vert(c, col, shade_n) for c in (b0, t0, t0 + sl * w, b0 + sl * w, b0 + sr * w, t0 + sr * w)]
@@ -454,7 +454,7 @@ def cliff_r02(name, seed, layers=4):
     return rock, [], []
 
 # ---------------------------------------------------------------- hero tree (step 2, user screenshots User_01..07)
-def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.05, density=31.0):
+def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.4, density=17.0):
     """Video-style tree (reference/USER_REFS.md): tall slim red-brown trunk visible for ~45% of the height, a few long
     branches forking upward at 30-50 deg, and an OPEN canopy of separate flattened-dome clumps (dappled small-leaf cards,
     slot 'Dapple') at the branch ends with sky gaps between them. Each clump is shaded like a soft sphere (vertex colour +
@@ -514,18 +514,21 @@ def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.05, d
             p = c + Vector((u.x, u.y, u.z * (.75 if u.z > 0 else .5))) * r * (crnd.uniform(.55, 1.0) if crnd.random() < .7 else crnd.uniform(1.0, 1.3))   # soft dome + stray leaves past the rim
             key, cs = crnd.random(), crnd.randrange(1 << 30)
             h = smoothstep(zlo, zhi, p.z)
-            t = .52 + .45 * u.z + .12 * (h - .5) + tint + crnd.gauss(0, .07)                              # soft sphere per clump
-            facing = (u * .8 + UP * .35 + Vector((crnd.uniform(-.3, .3), crnd.uniform(-.3, .3), 0))).normalized()
+            t = .56 + .4 * u.z + .12 * (h - .5) + tint + crnd.gauss(0, .07)                              # soft sphere per clump
+            facing = (u * .85 + UP * .25 + Vector((crnd.uniform(-.25, .25), crnd.uniform(-.25, .25), 0))).normalized()   # outward: face-on from any side
             shade_n = (u * .75 + UP * .25).normalized()
-            cards.append((key, cs, p, facing, leaf * crnd.uniform(.85, 1.15), t, shade_n))
+            cards.append((key, cs, p, facing, leaf * crnd.uniform(.85, 1.15), t, shade_n, crnd.random() < .5))
     lods = []
     for lod in range(3):
         M = Mesh(); M.v, M.c, M.n, M.f, M.uv, M.m = list(bark.v), list(bark.c), list(bark.n), list(bark.f), list(bark.uv), list(bark.m)
         for ci, (c, r) in enumerate(clumps):                               # dark core: closes the see-through INSIDE a clump only
-            blob(M, c - Vector((0, 0, r * .12)), r * (.36 if lod < 2 else .26), lambda p, u: .14 + .14 * max(0, u.z), .5, 2 if lod < 2 else 1, .6, ci * 1.7)
-        for key, cs, p, facing, sz, t, sn in cards:
+            blob(M, c - Vector((0, 0, r * .12)), r * (.36 if lod < 2 else .26), lambda p, u: .22 + .16 * max(0, u.z), .5, 2 if lod < 2 else 1, .6, ci * 1.7)
+        for key, cs, p, facing, sz, t, sn, cross in cards:
             if key > LOD_KEEP[lod]: continue
-            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], ramp(t), sn)
+            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], ramp(t), sn, fold_deg=(3, 9))   # nearly flat
+            if cross and lod < 2:                                          # crossed partner: a leaf face from every view
+                f2 = facing.cross(UP if abs(facing.z) < .9 else Vector((1, 0, 0))).normalized()
+                bunch_card(M, random.Random(cs + 7), p, (f2 + facing * .3).normalized(), sz * LOD_GROW[lod] * .9, ramp(t - .03), sn, fold_deg=(3, 9))
         ob = M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bark', 'Dapple', 'Fill'), (True, True, True))
         lods.append(ob)
     hull = trunk_hull(name, Vector((0, 0, -.3)), trunk_at(H * .45), r0 * 1.1)
