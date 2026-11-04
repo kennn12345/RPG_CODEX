@@ -454,7 +454,7 @@ def cliff_r02(name, seed, layers=4):
     return rock, [], []
 
 # ---------------------------------------------------------------- hero tree (step 2, user screenshots User_01..07)
-def hero_tree(name, seed, H=12.0, n_branch=10, clump_r=(1.5, 2.2), leaf=1.0, density=34.0):
+def hero_tree(name, seed, H=12.0, n_branch=11, clump_r=(1.85, 2.7), leaf=1.05, density=31.0):
     """Video-style tree (reference/USER_REFS.md): tall slim red-brown trunk visible for ~45% of the height, a few long
     branches forking upward at 30-50 deg, and an OPEN canopy of separate flattened-dome clumps (dappled small-leaf cards,
     slot 'Dapple') at the branch ends with sky gaps between them. Each clump is shaded like a soft sphere (vertex colour +
@@ -466,7 +466,7 @@ def hero_tree(name, seed, H=12.0, n_branch=10, clump_r=(1.5, 2.2), leaf=1.0, den
     for f in (.3, .55, .78, .95):
         tp.append(Vector((0, 0, H * f)) + lean * f * f * H * .06 + Vector((rnd.uniform(-.12, .12), rnd.uniform(-.12, .12), 0)) * f)
     r0 = .034 * H                                                           # ~41 cm at 12 m
-    sweep(bm, col, tp, [r0 * 1.5, r0 * 1.12, r0 * .9, r0 * .72, r0 * .52, r0 * .3], 14, flare_rings=2)
+    sweep(bm, col, tp, [r0 * 1.95, r0 * 1.25, r0 * .92, r0 * .72, r0 * .52, r0 * .3], 14, flare_rings=2)   # stronger root flare
     def trunk_at(z):
         for a, b in zip(tp, tp[1:]):
             if a.z <= z <= b.z: return a.lerp(b, (z - a.z) / max(b.z - a.z, 1e-3))
@@ -479,24 +479,24 @@ def hero_tree(name, seed, H=12.0, n_branch=10, clump_r=(1.5, 2.2), leaf=1.0, den
         z = H * (.3 + .42 * t + rnd.uniform(-.03, .03))
         az = az0 + k * gold + rnd.uniform(-.3, .3)
         up = math.radians(rnd.uniform(48, 66) - 16 * t)                      # angle from vertical: wide spread low, steeper up top
-        L = H * rnd.uniform(.3, .4) * (1.15 - .4 * t)
+        L = H * rnd.uniform(.34, .45) * (1.15 - .4 * t)
         d = Vector((math.cos(az) * math.sin(up), math.sin(az) * math.sin(up), math.cos(up)))
         p0 = trunk_at(z); p1 = p0 + d * L * .5 + Vector((0, 0, L * .05)); p2 = p0 + d * L + Vector((0, 0, L * .12))
         rb = r0 * rnd.uniform(.42, .55) * (1.05 - .4 * t)
         sweep(bm, col, [p0 - d * .1, p0, p1, p2], [rb, rb, rb * .62, rb * .3], 8)
         cr = rnd.uniform(*clump_r) * (1.05 - .25 * t)
         clumps.append((p2 + Vector((0, 0, cr * .25)), cr))
-        cm = cr * rnd.uniform(.55, .75); clumps.append((p1.lerp(p2, .35) + Vector((0, 0, cm * .45)) + Vector((-d.y, d.x, 0)) * rnd.uniform(-.5, .5), cm))   # mid-branch clump
-        if rnd.random() < .9:                                               # a fork: side clump
+        cm = cr * rnd.uniform(.68, .88); clumps.append((p1.lerp(p2, .35) + Vector((0, 0, cm * .45)) + Vector((-d.y, d.x, 0)) * rnd.uniform(-.5, .5), cm))   # mid-branch clump
+        if rnd.random() < .97:                                              # a fork: side clump
             q0 = p0.lerp(p1, rnd.uniform(.9, 1.3)); sd = (d + Vector((math.cos(az + 1.6), math.sin(az + 1.6), .6)) * rnd.choice((-1, 1)) * .8).normalized()
             if sd.z < .3: sd.z = .3; sd.normalize()
             q1 = q0 + sd * L * rnd.uniform(.35, .5)
             sweep(bm, col, [q0 - sd * .05, q0, q1], [rb * .55, rb * .5, rb * .2], 6)
-            cr2 = cr * rnd.uniform(.7, .85); clumps.append((q1 + Vector((0, 0, cr2 * .2)), cr2))
+            cr2 = cr * rnd.uniform(.8, .95); clumps.append((q1 + Vector((0, 0, cr2 * .2)), cr2))
     top = tp[-1]                                                            # crown: 2-3 clumps around the top
-    for k in range(rnd.randint(4, 6)):
-        a = rnd.uniform(0, 6.28); o = Vector((math.cos(a), math.sin(a), 0)) * rnd.uniform(.6, 1.9)
-        clumps.append((top + o + Vector((0, 0, rnd.uniform(.3, .9))), rnd.uniform(*clump_r) * .9))
+    for k in range(rnd.randint(6, 8)):
+        a = rnd.uniform(0, 6.28); o = Vector((math.cos(a), math.sin(a), 0)) * rnd.uniform(.8, 2.4)
+        clumps.append((top + o + Vector((0, 0, rnd.uniform(.0, 1.2))), rnd.uniform(*clump_r)))
     zlo = min(c.z - r for c, r in clumps); zhi = max(c.z + r for c, r in clumps)
     # bark -> Mesh (smooth), wrapped UVs
     bark = Mesh(); bm.verts.ensure_lookup_table(); vid = {v: bark.vert(v.co, (0, 1, .5, 1)) for v in bm.verts}
