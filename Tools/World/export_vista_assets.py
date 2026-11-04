@@ -465,8 +465,7 @@ def hero_ramp(t):
             k = (t - a) / (b - a); return tuple(ca[c] + (cb[c] - ca[c]) * k for c in range(3)) + (1,)
     return HERO_RAMP[-1][1] + (1,)
 
-BUSH_R, BUSH_DENSITY, BUSH_LEAF = 1.7, 40.0, 1.15     # hero foliage bushes: radius (m), cards per m^2 of r^2, card size (m)
-def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.55, twig_step=.28):
+def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.9, twig_step=.24):
     """Video-style tree (reference/USER_REFS.md), R02c: leaves GROW FROM THE BRANCHES.
     Trunk -> 11 spiral branches (most fork) + a crown of short top branches -> twigs along the outer part of every branch
     (alternating sides, angled outward and a little up; long near the inner end, short toward the tip, plus a terminal
@@ -530,50 +529,64 @@ def hero_tree(name, seed, H=12.0, n_branch=11, leaf=1.55, twig_step=.28):
             if acc + l >= s: return a.lerp(b, (s - acc) / max(l, 1e-4)), (b - a).normalized()
             acc += l
         return pts[-1], (pts[-1] - pts[-2]).normalized()
-    # R02d foliage: every branch carries a CHAIN OF ROUNDED LEAF BUSHES growing out along it (big near the middle, smaller
-    # toward the tip, overlapping). Each bush = smaller leaf cards lying tangent on a ball (like leaves covering a round
-    # shrub) + a dark core; leaves lean the way the branch grows; per-vertex colour/normal from the bush ball.
-    bushes = []; crnd = random.Random(seed * 101)
+    # twigs + cards (one list for all LODs; per-card seeds)
+    twigs = Mesh(); cards = []; crnd = random.Random(seed * 101)
     for bi, (pts, rb, sc) in enumerate(branches):
         blen = sum((b - a).length for a, b in zip(pts, pts[1:]))
-        nb = 3 if sc > .8 else 2
-        for j in range(nb):
-            f = .5 + .5 * j / max(1, nb - 1) if nb > 1 else 1.0          # 50% .. 100% along the branch
-            q, T = along(pts, blen * f)
-            r = BUSH_R * max(sc, .7) * (1.15 - .4 * f) * crnd.uniform(.88, 1.12)
-            side = T.cross(UP); side = side.normalized() if side.length > 1e-3 else Vector((1, 0, 0))
-            c = q + UP * r * .35 + side * crnd.uniform(-.3, .3) * r + T * r * .15 * (j == nb - 1)
-            bushes.append((c, r, T))
-    cards = []
-    for bi, (c, r, T) in enumerate(bushes):
+        s_start = blen * .18
+        # the branch's spray volume (for rounded shading): ellipsoid around its leafy outer part
+        p_mid, T_mid = along(pts, (s_start + blen) * .5)
+        vol_c = p_mid + T_mid * blen * .12 + UP * .35
+        vol_r = Vector((max(1.4, (blen - s_start) * .65 + 1.0), max(1.4, (blen - s_start) * .65 + 1.0), 1.25))
         tint = crnd.uniform(-.06, .06)
-        n = int(BUSH_DENSITY * r * r)
-        for k in range(n):
-            # even cover of the ball (fibonacci sphere) + jitter
-            zz = 1 - 2 * (k + .5) / n; rr_ = math.sqrt(max(0.0, 1 - zz * zz)); ph = k * 2.39996 + bi
-            u = (Vector((math.cos(ph) * rr_, math.sin(ph) * rr_, zz)) + Vector((crnd.gauss(0, .12), crnd.gauss(0, .12), crnd.gauss(0, .12)))).normalized()
-            key, cs = crnd.random(), crnd.randrange(1 << 30)
-            sz = BUSH_LEAF * crnd.uniform(.85, 1.15); jit = crnd.uniform(.9, 1.05)
-            if u.z < -.55 and crnd.random() < .5: continue                 # fewer underneath
-            p = c + Vector((u.x, u.y, u.z * .88)) * r * jit
-            if any((p - c2).length < r2 * .82 for c2, r2, _ in bushes if c2 is not c): continue   # buried in a neighbour
-            tip = (T - u * T.dot(u)); tip = tip.normalized() if tip.length > 1e-3 else u.orthogonal().normalized()
-            tip = (tip + Vector((crnd.gauss(0, .35), crnd.gauss(0, .35), crnd.gauss(0, .2)))).normalized()   # leaves lean with the branch
-            facing = (u + Vector((crnd.gauss(0, .12), crnd.gauss(0, .12), .08))).normalized()
-            cards.append((key, cs, p, facing, tip, sz, c, r, tint))
+        twig_list = []
+        s = s_start; side = 1
+        while s < blen:
+            q, T = along(pts, s)
+            f = (s - s_start) / max(blen - s_start, .1)                     # 0 inner .. 1 tip
+            sv = T.cross(UP); sv = sv.normalized() if sv.length > 1e-3 else Vector((1, 0, 0))
+            for tier, lift in ((0, crnd.uniform(.08, .28)), (1, crnd.uniform(.45, .7)), (-1, crnd.uniform(-.32, -.12))):
+                if tier != 0 and crnd.random() < .02: continue           # all three tiers: full sprays
+                dirv = (T * crnd.uniform(.45, .65) + sv * side * crnd.uniform(.7, .95) + UP * lift).normalized()
+                tl = (2.3 - 1.2 * f) * max(sc, .8) * crnd.uniform(.85, 1.15)
+                twig_list.append((q + UP * tier * .12, dirv, tl))
+            side = -side; s += twig_step * crnd.uniform(.8, 1.2)
+        qe, Te = along(pts, blen)                                           # terminal twig: the spray's tip
+        sv_ = Te.cross(UP); sv_ = sv_.normalized() if sv_.length > 1e-3 else Vector((1, 0, 0))
+        for a_ in (-.5, 0, .5):                                             # terminal fan: the spray's tip
+            twig_list.append((qe, (Te + UP * .3 + sv_ * a_).normalized(), 1.7 * max(sc, .8)))
+        for q, dirv, tl in twig_list:
+            e = q + dirv * tl
+            if tl > 1.0: R1['tube'](_TB, _TC, q, e, .03, .01, 3)          # visible twigs only (short ones hide in the leaves)
+            n_c = max(3, int(tl / .2))
+            for j in range(n_c):
+                tt = .15 + .87 * j / max(1, n_c - 1)                          # cards from 30% of the twig to its tip
+                droop = -UP * .16 * tt * tt
+                cpos = q + dirv * tl * tt + droop * tl
+                tip = (dirv + droop * 1.6 + Vector((crnd.uniform(-.15, .15), crnd.uniform(-.15, .15), 0))).normalized()
+                perp = dirv.cross(UP); perp = perp.normalized() if perp.length > 1e-3 else Vector((1, 0, 0))
+                facing = (UP * .75 + perp * crnd.uniform(-.45, .45) - dirv * .12).normalized()   # mostly face-up, rolled a little
+                sz = leaf * (1.05 - .3 * tt) * crnd.uniform(.85, 1.1)
+                key, cs = crnd.random(), crnd.randrange(1 << 30)
+                cards.append((key, cs, cpos, facing, tip, sz, vol_c, vol_r, tint))
+    # twig geometry -> its own Mesh (bark material): only the closest LOD draws twigs
+    twig_mesh = Mesh(); _flush_twigs(twig_mesh)
     lods = []
     for lod in range(3):
         M = Mesh(); M.v, M.c, M.n, M.f, M.uv, M.m = list(bark.v), list(bark.c), list(bark.n), list(bark.f), list(bark.uv), list(bark.m)
-        for bi, (c, r, T) in enumerate(bushes):                            # dark core: no see-through inside a bush
-            blob(M, c, r * .6, lambda p, u: .12 + .14 * max(0, u.z), .5, 2 if lod < 2 else 1, .85, bi * 1.3)
-        for key, cs, p, facing, tip, sz, cc, cr_, tn in cards:
+        if lod == 0:
+            off = len(M.v); M.v += twig_mesh.v; M.c += twig_mesh.c; M.n += twig_mesh.n
+            M.f += [tuple(i + off for i in f) for f in twig_mesh.f]; M.uv += twig_mesh.uv; M.m += twig_mesh.m
+        for key, cs, p, facing, tip, sz, vc, vr, tn in cards:
             if key > LOD_KEEP[lod]: continue
-            def vcol(q, cc=cc, cr_=cr_, tn=tn):                            # colour from the corner's place on its bush ball
-                n_ = (q - cc) / max(cr_, .1); d = n_.normalized() if n_.length > 1e-4 else UP
-                return hero_ramp(.5 + .47 * d.z + .14 * (min(1.15, n_.length) - .85) + tn)
-            def vnrm(q, cc=cc):
-                d = q - cc; return (d.normalized() * .9 + UP * .1).normalized() if d.length > 1e-4 else UP
-            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], vcol, vnrm, fold_deg=(6, 14), tip_dir=tip)
+            def vcol(q, vc=vc, vr=vr, tn=tn):                              # colour from the corner's place on the spray volume
+                n = Vector(((q.x - vc.x) / vr.x, (q.y - vc.y) / vr.y, (q.z - vc.z) / vr.z))
+                d = n.normalized() if n.length > 1e-4 else UP
+                return hero_ramp(.52 + .46 * d.z + .12 * (min(1.2, n.length) - .7) + tn)
+            def vnrm(q, vc=vc, vr=vr):                                    # normal out of the spray volume
+                n = Vector(((q.x - vc.x) / vr.x ** 2, (q.y - vc.y) / vr.y ** 2, (q.z - vc.z) / vr.z ** 2))
+                return (n.normalized() * .85 + UP * .15).normalized() if n.length > 1e-6 else UP
+            bunch_card(M, random.Random(cs), p, facing, sz * LOD_GROW[lod], vcol, vnrm, fold_deg=(18, 32), tip_dir=tip)
         ob = M.build(name if lod == 0 else f'{name}_LOD{lod}', ('Bark', 'Dapple', 'Fill'), (True, True, True))
         lods.append(ob)
     hull = trunk_hull(name, Vector((0, 0, -.3)), trunk_at(H * .45), r0 * 1.1)

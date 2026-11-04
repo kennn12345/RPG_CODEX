@@ -1,6 +1,6 @@
 # Asset restyle progress
 
-Last update: 2026-11-04T03:37:19.713Z
+Last update: 2026-11-04T03:42:08.514Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -38,7 +38,9 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   31.5k/13k/8k tris -> 12 (user: "clumps like round bushes, sprays look flat stacked"): each branch carries a chain
   of 2-3 rounded leaf bushes (BUSH_R 1.7 m, big mid-branch -> small at the tip); cards tangent on a fibonacci sphere,
   leaning along the branch, per-vertex ball shading, dark core 0.6 r; 15.3k/11.8k/6.6k tris.
-  Sheet: review/Unreal_Hero01_iter12_Bushes.png. Waiting for user.
+  Sheet: review/Unreal_Hero01_iter12_Bushes.png -> user: "before looked better" -> 13: REVERTED to the iter-11 branch
+  sprays (export_vista_assets.py from 67da4b5) + fuller: leaf 1.9, twig_step .24, all tiers, cards every 0.2 m of twig;
+  42k/17k/10k tris (optimise once approved). Sheet: review/Unreal_Hero01_iter13_FullerSprays.png. Waiting for user.
 
 ## Status
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
