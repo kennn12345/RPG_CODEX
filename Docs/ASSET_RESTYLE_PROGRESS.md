@@ -92,7 +92,16 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
 - L_AssetReview section 15: AS_TreeCheck_<Before|After>_<34|Side|Up> (Tree I alone, identical cameras).
 - Sheets: review/Unreal_TreeI_Clumps_BeforeAfter.png (= approved iter-1 look), Unreal_TreeI_Clumps_iter2.png (rejected),
   Unreal_FabTrees_RoundClumps_BeforeAfter.png (all trees). Before shots: Saved/Screenshots/Assets_before_canopy.
-- Still not placed in L_WorldVista. FPS not measured. Unreal sometimes segfaults on quit after build_asset_review (level
+- PLACED in L_WorldVista (user: "add them into the games current test map ... in places trees are already ... into the
+  ground, not on top of rocks ... randomize"): Tools/World/place_fab_trees.py replaces the Trees_Round/Tall/Wide scatters
+  (78 spots, saved to World_R01/exports/vista_tree_spots.json) with FabTree_NN actors (folder FabTrees): balanced random
+  deck of the 11 trees, random yaw, scale .85-1.1; clear of rocks/pebbles/cliffs/solid details/props/path/water/camera
+  feet (moves 2-8 m, else skipped); z = lowest of 5 terrain traces - 35 cm. Result: 72 placed, 24 moved, 6 skipped
+  (water edge 3, cliffs 2, big rock 1). Ancient hero tree + far forests unchanged. Restore old trees: git checkout the map
+  from before this commit. Effects actors (Motes_/DriftLeaves_) must not count as obstacles (first run skipped 23).
+  Sheet: review/Unreal_WorldVista_FabTrees_BeforeAfter.png; before shots Saved/Screenshots/World_before_fabtrees.
+  Moved trees: the tree-foot details (ferns, moss...) still sit at the OLD spots - re-run place_vista_details.py if wanted.
+- FPS not measured. Unreal sometimes segfaults on quit after build_asset_review (level
   is saved first - harmless).
 
 ## Earlier pause (2026-11-03, user taking a break)
