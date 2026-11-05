@@ -59,6 +59,7 @@ def dir_light(label, index):
     return a
 sun = dir_light('Sun', 0); moon = dir_light('Moon', 1)
 setp(sun.get_component_by_class(unreal.DirectionalLightComponent), (('enable_light_shaft_bloom', True), ('bloom_scale', 0.35)), 'sun')
+setp(sun.get_component_by_class(unreal.DirectionalLightComponent), (('forward_shading_priority', 1),), 'sun')   # no "competing lights" warning
 atm = spawn(unreal.SkyAtmosphere, (0, 0, 0), label='SkyAtmosphere')
 setp(atm.get_component_by_class(unreal.SkyAtmosphereComponent), (('aerial_perspective_start_depth', 100.0), ('mie_scattering_scale', 0.006)), 'atmosphere')
 clouds = spawn(unreal.VolumetricCloud, (0, 0, 0), label='Clouds')

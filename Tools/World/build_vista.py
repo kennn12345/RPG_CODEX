@@ -69,6 +69,9 @@ def dir_light(label, index, shadows=True):
     return a
 sun = dir_light('Sun', 0); moon = dir_light('Moon', 1)
 setp(sun.get_component_by_class(unreal.DirectionalLightComponent), (('enable_light_shaft_bloom', True), ('bloom_scale', 0.35)), 'sun')
+# Sun wins forward shading (water, translucency, volumetric fog): with Sun and Moon both at priority 0 Unreal warns
+# "multiple directional lights are competing" (user 2026-11-05)
+setp(sun.get_component_by_class(unreal.DirectionalLightComponent), (('forward_shading_priority', 1),), 'sun')
 atm = spawn(unreal.SkyAtmosphere, (0, 0, 0), label='SkyAtmosphere')
 # aerial perspective starts beyond the sky dome (30 km): it would otherwise filter the dome's blue to black; height fog does the haze
 setp(atm.get_component_by_class(unreal.SkyAtmosphereComponent), (('aerial_perspective_start_depth', 100.0), ('mie_scattering_scale', 0.006)), 'atmosphere')
