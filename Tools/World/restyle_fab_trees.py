@@ -77,7 +77,7 @@ def canopy_copy(src_path, name, mi):
         if os.path.exists(f) and SMES.import_lod(m, i, f) != i: unreal.log_warning(f'FABSTYLE {name} LOD{i} import failed')
     try: m.set_editor_property('auto_compute_lod_screen_size', False)
     except Exception: pass
-    try: SMES.set_lod_screen_sizes(m, [1.0, 0.2, 0.06][:m.get_num_lods()])   # full leaves further out (user 2026-11-05)
+    try: SMES.set_lod_screen_sizes(m, [1.0, 0.15, 0.05][:m.get_num_lods()])   # full leaves ~2x as far (user 2026-11-05, flying)
     except Exception as ex: unreal.log_warning(f'FABSTYLE {name} LOD screen sizes not set: {ex}')
     for i, s in enumerate(m.static_materials):
         m.set_material(i, mi if 'leaves' in str(s.material_slot_name).lower() else bark)
