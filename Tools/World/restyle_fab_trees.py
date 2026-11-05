@@ -62,7 +62,7 @@ def canopy_copy(src_path, name, mi):
     src = unreal.load_asset(src_path)
     bark = next((s.material_interface for s in src.static_materials if not is_leaf(str(s.material_slot_name), s.material_interface)), None)
     path = f'{OUT}/{name}'
-    if EAL.does_asset_exist(path): EAL.delete_asset(path)
+    # re-import IN PLACE (no delete): L_WorldVista's FabTree_* / Tree_Hero actors keep pointing at the same asset
     it = unreal.AssetImportTask(); it.filename = f'{CANOPY}/{name}.fbx'; it.destination_path = OUT; it.destination_name = name
     it.automated = True; it.replace_existing = True; it.save = True
     ui = unreal.FbxImportUI(); ui.import_mesh = True; ui.import_materials = False; ui.import_textures = False; ui.import_as_skeletal = False
@@ -83,6 +83,13 @@ def canopy_copy(src_path, name, mi):
         m.set_material(i, mi if 'leaves' in str(s.material_slot_name).lower() else bark)
     EAL.save_loaded_asset(m)
     return m
+
+# crossfade between tree LODs instead of a hard snap (user 2026-11-05): the Mayu pack leaf master had it off
+_leaf_master = unreal.load_asset('/Game/StylizedTreesByMayu/01_Trees/00_Base/Material/M_StylizedTree')
+if _leaf_master and not _leaf_master.get_editor_property('dithered_lod_transition'):
+    _leaf_master.set_editor_property('dithered_lod_transition', True)
+    MEL.recompile_material(_leaf_master); EAL.save_loaded_asset(_leaf_master)
+    unreal.log('FABSTYLE M_StylizedTree: dithered LOD transition ON')
 
 mi_lux = leaf_mi('MI_Fab_OurLeaves_Lux', 1600.0)
 mi_jab = leaf_mi('MI_Fab_OurLeaves_Jabami', 1600.0)

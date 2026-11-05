@@ -33,7 +33,10 @@ _src = _src[:_src.index('# -----------------------------------------------------
 V = {'__name__': 'vista_assets_defs'}
 exec(compile(_src, 'export_vista_assets', 'exec'), V)
 Mesh, bunch_card, hero_ramp, trunk_hull = V['Mesh'], V['bunch_card'], V['hero_ramp'], V['trunk_hull']
-LOD_KEEP, LOD_GROW, UP = V['LOD_KEEP'], V['LOD_GROW'], Vector((0, 0, 1))
+UP = Vector((0, 0, 1))
+# LOD1/2 keep 70% / 30% of the LOD0 cards, grown 15% / 50% (user 2026-11-05: leaves "shifting placement" at the LOD
+# switch - with half the cards 30% bigger the swap read as leaves jumping; the leaf material also crossfades now)
+LOD_KEEP, LOD_GROW = (1.0, .7, .3), (1.0, 1.15, 1.5)
 
 TARGET = {c: 15.0 + 5.0 * ((i * 0.618) % 1.0) for i, c in enumerate('ABCDEFGHIJ')}   # same 15-20 m as restyle_fab_trees.py
 JOBS = [(c, f'{SRC_FBX}/SM_Lux_Tree_{c}.fbx', f'SM_Lux_Tree_{c}', TARGET[c]) for c in 'ABCDEFGHIJ'] + \
