@@ -1,6 +1,6 @@
-# Asset restyle progress
+﻿# Asset restyle progress
 
-Last update: 2026-11-04T05:12:54.278Z
+Last update: 2026-11-05T17:42:32.845Z
 Branch: asset-restyle (from world-vista cfff82f). Local commits only, never pushed.
 Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset pipeline" section).
 
@@ -77,6 +77,23 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   Review: AS_FabOurs_* + grove -> review/Unreal_FabTrees_OurLeaves_15-20m.png. Not placed in L_WorldVista yet.
 - StyleHex Forest Sample: creator forbids AI use - never script / modify it (user may place by hand).
 
+## Scheduled run 2026-11-05: rock pink cast (from "Next iteration") - DONE
+- Cause: Stone_R02 albedo is warm beige (avg sRGB 154/140/119) and the 17.3 h vista (lilac sky ambient + haze) lifts red
+  ~1.8x more than green on shaded faces -> vista rock measured 139/90/82 (mauve). stone_graph Tint 0.74/.67/.58 ->
+  neutral .66/.66/.55 (127/87/76, not enough) -> .54/.66/.56 (116/88/78: warm taupe-grey). Same graph = cliffs too.
+  Daylight (16.00) rocks now read khaki-grey instead of orange. Sky/water/layout untouched.
+- New builder "stone" (M_Rock_Stone + MI_Rock_Stone_Moss + M_Vista_Rock only, no rock re-import).
+- BUG FIXED: in b_materials a comment had swallowed m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss();
+  m_mushroom(); m_wood_cut() - "materials" silently skipped those 8 since the hero-leaf edit. NOT rebuilt this run
+  (only "stone"); the next "materials" run will rebuild them from current code.
+- Sheet: review/Unreal_Rocks_PinkCastFix_BeforeAfter.png; before shots Saved/Screenshots/{World,Assets}_before_stoneR03.
+- The remaining pink in the vista is the bare terrain slopes (M_Vista_Terrain rock-slope colour), not rocks - left for the user.
+- Cliff ivy (thicker mats, stepped slab breaks) NOT done: the cliff meshes + ivy come from Blender (export_vista_assets.py),
+  and the user's later rule is "make assets in Unreal, not Blender"; scattering ivy pieces would edit L_WorldVista.
+  Needs the user's direction.
+- Left alone: an uncommitted edit to Tools/World/place_fab_trees.py (trees kept off ruins / sky pieces) that predates this
+  run - not this job's change, not staged.
+
 ## Where we paused (2026-11-04): Fab trees rebuilt as rounded clumps
 - User: "full, rounded clumps instead of flat meshes stacked". Cause (wireframe): the pack canopies are a few hundred big
   single flat quads (Tree I: 900, each ~1/6 of the tree height = ~3 m at 15-20 m); our edge-to-edge leaf-spray mask makes
@@ -111,6 +128,8 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
 - Nothing new is placed in L_WorldVista; hero tree, Mayu, Lux and Jabami assets all live only in L_AssetReview.
 
 ## Status
+STATUS: ALL_DONE (2026-11-05 scheduled run): queue 0-10 done, rock pink cast fixed; everything left (cliff ivy, terrain
+slope colour, Fab tree follow-ups) waits on the user's decisions, so the scheduled resume has nothing autonomous left.
 First full restyle pass is DONE and in Unreal (round 2 of refinements, user request 2026-11-03: "more texture, same
 quality everywhere, add moss and small details from the video"). The user closed-editor blocker is gone (the user said
 "close unreal and continue", 16:47; it closed cleanly). Not ALL_DONE: see "Next iteration" - the user reviews first.
@@ -145,7 +164,7 @@ Raw shots: Saved/Screenshots/Assets (AS_*_16.00 / _17.30), Saved/Screenshots/Wor
 
 ## Next iteration (if the user asks / scheduled run)
 - Cliffs: ivy still lighter than the video's thick mats; slabs could use more stepped breaks.
-- Rocks at 17.3 h in the vista pick up a pink cast from the sunset sky (albedo is neutral-warm now).
+- DONE 2026-11-05: Rocks at 17.3 h in the vista pick up a pink cast from the sunset sky (see "Scheduled run 2026-11-05").
 - DONE (user OK 2026-11-03 "Yes, place them"): Tools/World/place_vista_details.py adds Detail_* scatters to L_WorldVista
   (path tufts/stones/bushes, tree-foot ferns/moss/mushrooms/clover/leaves/branches/logs/stumps, rock moss, shore reeds,
   wildflower drifts); re-runnable, nothing else in the map touched. Sheet: review/Unreal_R02_WorldVista_Details.png.

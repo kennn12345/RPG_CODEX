@@ -655,7 +655,8 @@ def b_materials():
     m_grass('M_Vista_GrassTall', (40, 86, 12), (146, 172, 22), 18.0, 0.8)
     m_grass('M_Vista_Wheat', (150, 112, 30), (232, 180, 36), 16.0, 0.9, ear=(246, 196, 58))
     instance('MI_Vista_Daisies', m_flowers(), {'Petal': lin((250, 246, 232)), 'PetalBase': (0.8, 0.8, 0.75), 'Centre': lin((240, 176, 24))})
-    m_canopy(); m_leaf(); m_leaf('M_Vista_LeafDapple', 'T_Leaf_Dapple_Atlas_BaseColor', 1.3, 1.05, 0.03)   # hero: keep the clump-ball normals; m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
+    m_canopy(); m_leaf(); m_leaf('M_Vista_LeafDapple', 'T_Leaf_Dapple_Atlas_BaseColor', 1.3, 1.05, 0.03)   # hero: keep the clump-ball normals
+    m_bark(); m_rock(); m_motes(); m_drift_leaf(); m_mist(); m_moss(); m_mushroom(); m_wood_cut()
     flowers = M('M_Vista_Poppies')
     instance('MI_Vista_Bellflowers', flowers, {'Petal': lin((186, 130, 236)), 'PetalBase': (0.55, 0.5, 0.65), 'Centre': lin((90, 60, 130))})
     instance('MI_Vista_BlueFlowers', flowers, {'Petal': lin((120, 165, 255)), 'PetalBase': (0.75, 0.8, 0.9), 'Centre': lin((250, 226, 96))})
@@ -813,7 +814,10 @@ return lerp(c, MossC * lerp(0.8, 1.15, w.n(WP.xy / 25.0)), mossMask * Moss);
         else: link(node(m, unreal.MaterialExpressionConstant3Vector, -1100, i * 200 + 100, constant=unreal.LinearColor(0, 0, 1, 1)), '', c, 'N' + nm)
     link(wp, '', c, 'WP'); link(node(m, unreal.MaterialExpressionVertexNormalWS, -900, 700), '', c, 'N')
     link(node(m, unreal.MaterialExpressionVertexColor, -900, 800), '', c, 'VC')
-    feed(m, c, {'Tint': ('vector', (0.74, 0.67, 0.58)), 'Relief': ('scalar', 1.6), 'MossC': ('vector', lin((92, 132, 26))), 'Moss': ('scalar', moss)}, x=-700)
+    # Tint: green-leaning (was 0.74, 0.67, 0.58): Stone_R02 is warm beige and the golden-hour vista (17.3 h, lilac sky
+    # ambient + haze) multiplies red ~1.8x more than green on shaded faces -> mauve-pink rocks. Neutral (0.66, 0.66, 0.55)
+    # only moved the vista rock from 139/90/82 to 127/87/76; this tint cancels most of the scene's red gain.
+    feed(m, c, {'Tint': ('vector', (0.54, 0.66, 0.56)), 'Relief': ('scalar', 1.6), 'MossC': ('vector', lin((92, 132, 26))), 'Moss': ('scalar', moss)}, x=-700)
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
     MEL.connect_material_property(c, 'Nrm', unreal.MaterialProperty.MP_NORMAL)
     MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.88), '', unreal.MaterialProperty.MP_ROUGHNESS)
@@ -852,6 +856,10 @@ def b_rocks():
         if not mesh: continue
         set_all(mesh, mossy if info.get('material') == 'M_Rock_Stone_Moss' else stone)
         nanite(mesh)
+
+def b_stone():
+    """stone materials only (M_Rock_Stone + moss instance, cliff M_Vista_Rock), no rock re-import."""
+    m_rock_stone(); m_rock()
 
 def b_textures():
     """painted textures from the Blender libraries (in place: re-import into the same texture asset).
@@ -947,7 +955,7 @@ def b_review():
         set_all(sw, M('M_Vista_Terrain')); nanite(sw)
 
 BUILDERS = {'textures': b_textures, 'materials': b_materials, 'review': b_review, 'ground': b_ground, 'grass': b_grass, 'flowers': b_flowers, 'trees_round': b_trees_round,
-            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'details': b_details, 'rocks': b_rocks, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
+            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'details': b_details, 'rocks': b_rocks, 'stone': b_stone, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
 ORDER = list(BUILDERS)                       # materials first: the mesh builders assign them
 
 def requested():
