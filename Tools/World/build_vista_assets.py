@@ -181,8 +181,23 @@ def feed(m, c, inputs, x=-900):
         if isinstance(v, tuple) and len(v) > 2: out = v[2]
         link(e, out, c, n_); y += 90
 WORLD_NORMAL = set()                              # materials whose Normal output is world space
+def distance_fade(m):
+    """instances SHRINK into their pivot over the scatter's fade band (ISM start..end cull distance, PerInstanceFadeAmount
+    1 -> 0) instead of popping at the cull distance (user 2026-11-05). Added to the existing World Position Offset (wind /
+    sway). Non-instanced meshes read a fade amount of 1 -> no change. Works on opaque and masked materials alike."""
+    old = MEL.get_material_property_input_node(m, unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    old_out = MEL.get_material_property_input_node_output_name(m, unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET) if old else ''
+    s = custom(m, 'return (OP - WP) * (1.0 - saturate(Fade));', ['WP', 'OP', 'Fade'], F3, (), -400, 900)
+    feed(m, s, {'WP': ('node', unreal.MaterialExpressionWorldPosition), 'OP': ('node', unreal.MaterialExpressionObjectPositionWS),
+                'Fade': ('node', unreal.MaterialExpressionPerInstanceFadeAmount)}, x=-700)
+    if old:
+        add = custom(m, 'return A + B;', ['A', 'B'], F3, (), -200, 800)
+        link(old, old_out or '', add, 'A'); link(s, '', add, 'B'); s = add
+    MEL.connect_material_property(s, '', unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
 def finish(m, dither=False):
     # scattered meshes are instanced (ARPGScatter / foliage); without this usage flag they render with the default grey material
+    if dither: distance_fade(m)                                        # foliage / ground cover: fade out, no pop
     m.set_editor_property('used_with_instanced_static_meshes', True)
     m.set_editor_property('used_with_nanite', True)                    # terrain / far hills / rocks are Nanite
     if dither: m.set_editor_property('dithered_lod_transition', True)  # smooth LOD switches on trees / foliage
