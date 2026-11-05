@@ -135,6 +135,100 @@ bool FRPGWorldShots::RunTest(const FString&) { RunShots(this, TEXT("/Game/RPG/Ma
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGSkyShots, "Visual.SkyShots", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FRPGSkyShots::RunTest(const FString&) { RunShots(this, TEXT("/Game/RPG/Maps/L_WorldVista"), TEXT("SkyShot"), TEXT("Sky"), {6.3f, 12.f, 17.6f, 19.f, 0.f}); return true; }
 
+// Flicker measurement (user 2026-11-05: grass flicker in some areas): Visual.FlickerShots takes RPG_FLICKER_FRAMES (default 6)
+// photos in a row from each "WorldShot" camera whose label starts with RPG_FLICKER_CAMS (default all), 6 rendered frames
+// apart, into Saved/Screenshots/Flicker/<RPG_FLICKER_RUN>/<camera>_<n>.png. RPG_FLICKER_FREEZE=1 freezes game time first
+// (wind, water, sky stop): whatever still changes between the photos is rendering noise. Compare runs with
+// Tools/World/flicker_report.ps1; set console variables per run with -ExecCmds="r.X 0,Automation RunTests Visual.FlickerShots".
+namespace
+{
+	class FRPGFlickerCommand : public IAutomationLatentCommand
+	{
+	public:
+		explicit FRPGFlickerCommand(FAutomationTestBase* InTest) : Test(InTest)
+		{
+			Prefix = FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_FLICKER_CAMS"));
+			Run = FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_FLICKER_RUN"));
+			if (Run.IsEmpty()) Run = TEXT("base");
+			bFreeze = FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_FLICKER_FREEZE")) == TEXT("1");
+			const int32 N = FCString::Atoi(*FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_FLICKER_FRAMES")));
+			Frames = N > 0 ? N : 6;
+		}
+
+		virtual bool Update() override
+		{
+			UWorld* World = GEditor ? GEditor->PlayWorld : nullptr;
+			APlayerController* Controller = World ? UGameplayStatics::GetPlayerController(World, 0) : nullptr;
+			if (!Controller) { if (++Wait > 900) { Test->AddError(TEXT("FLICKER: no play world")); return true; } return false; }
+			if (GShaderCompilingManager && GShaderCompilingManager->IsCompiling()) return false;
+			if (Cameras.IsEmpty())
+			{
+				// RPG_FLICKER_SPOT = "x y z pitch yaw" (from BugIt's BugItGo line): one extra camera exactly where the user saw it
+				TArray<FString> Spot;
+				FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_FLICKER_SPOT")).ParseIntoArrayWS(Spot);
+				if (Spot.Num() >= 5)
+				{
+					ACameraActor* C = World->SpawnActor<ACameraActor>(FVector(FCString::Atod(*Spot[0]), FCString::Atod(*Spot[1]), FCString::Atod(*Spot[2])), FRotator(FCString::Atof(*Spot[3]), FCString::Atof(*Spot[4]), 0.f));
+					if (C) { C->SetActorLabel(TEXT("Spot")); Cameras.Add(C); }
+				}
+				else
+					for (TActorIterator<ACameraActor> It(World); It; ++It)
+						if (It->ActorHasTag(TEXT("WorldShot")) && (Prefix.IsEmpty() || It->GetActorNameOrLabel().StartsWith(Prefix))) Cameras.Add(*It);
+				if (Cameras.IsEmpty()) { Test->AddError(TEXT("FLICKER: no cameras")); return true; }
+				if (APawn* Player = Controller->GetPawn()) { Player->SetActorHiddenInGame(true); Player->SetActorEnableCollision(false); }
+				for (TActorIterator<ARPGSkyCycle> It(World); It; ++It) It->bAnimate = false;
+			}
+			if (Cam >= Cameras.Num()) { UGameplayStatics::SetGlobalTimeDilation(World, 1.f); return true; }
+			if (Shot < 0)                                // aim, then let lighting + exposure settle (counted in rendered frames)
+			{
+				if (NextFrame == 0)
+				{
+					UGameplayStatics::SetGlobalTimeDilation(World, 1.f);
+					Controller->SetViewTarget(Cameras[Cam].Get());
+					NextFrame = GFrameCounter + 150;
+					return false;
+				}
+				if (GFrameCounter < NextFrame) return false;
+				if (bFreeze) UGameplayStatics::SetGlobalTimeDilation(World, 0.0001f);
+				Shot = 0; NextFrame = GFrameCounter + 30;
+				return false;
+			}
+			if (GFrameCounter < NextFrame || FScreenshotRequest::IsScreenshotRequested()) return false;
+			if (Shot >= Frames) { ++Cam; Shot = -1; NextFrame = 0; return false; }
+			const FString Dir = FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("Flicker") / Run;
+			FScreenshotRequest::RequestScreenshot(Dir / FString::Printf(TEXT("%s_%d.png"), *Cameras[Cam]->GetActorNameOrLabel(), Shot), false, false);
+			++Shot; NextFrame = GFrameCounter + 6;
+			return false;
+		}
+
+	private:
+		FAutomationTestBase* Test;
+		FString Prefix, Run;
+		bool bFreeze = false;
+		int32 Frames = 6, Cam = 0, Shot = -1, Wait = 0;
+		uint64 NextFrame = 0;
+		TArray<TWeakObjectPtr<ACameraActor>> Cameras;
+	};
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGFlickerShots, "Visual.FlickerShots", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+bool FRPGFlickerShots::RunTest(const FString&)
+{
+	FAutomationEditorCommonUtils::LoadMap(TEXT("/Game/RPG/Maps/L_WorldVista"));
+	ULevelEditorPlaySettings* Play = NewObject<ULevelEditorPlaySettings>();
+	Play->NewWindowWidth = 1280; Play->NewWindowHeight = 720; Play->NewWindowPosition = FIntPoint(0, 0); Play->CenterNewWindow = false;
+	Play->LastExecutedPlayModeType = PlayMode_InEditorFloating;
+	FRequestPlaySessionParams Session;
+	Session.WorldType = EPlaySessionWorldType::PlayInEditor;
+	Session.EditorPlaySettings = Play;
+	GEditor->RequestPlaySession(Session);
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.f));
+	ADD_LATENT_AUTOMATION_COMMAND(FRPGFlickerCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+	return true;
+}
+
 // Asset restyle review stage: "AssetShot" cameras in L_AssetReview (golden hour, neutral ground) -> Saved/Screenshots/Assets/.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRPGAssetShots, "Visual.AssetShots", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FRPGAssetShots::RunTest(const FString&)
