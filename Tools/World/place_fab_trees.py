@@ -75,14 +75,21 @@ def seg_d(px, py, a, b):
 # terrain traces: a just-loaded level has no physics yet -> trace a fresh temporary copy of the terrain
 terrain = next(a for a in actors if a.get_actor_label() == 'Terrain')
 probe = eas.spawn_actor_from_object(terrain.static_mesh_component.static_mesh, terrain.get_actor_location(), terrain.get_actor_rotation())
-def ground(x, y):
+OTHERS = [a for a in actors if a != terrain]                  # some loaded actors DO answer traces (ruins, sky pieces):
+def _trace(x, y, ignore):                                     # the first run put trees on the ruins and up in the sky
     hit = unreal.SystemLibrary.line_trace_single(world, unreal.Vector(x, y, 30000), unreal.Vector(x, y, -30000),
-                                                 unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [], unreal.DrawDebugTrace.NONE, True)
+                                                 unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, ignore, unreal.DrawDebugTrace.NONE, True)
     t = hit.to_tuple() if hit else None
     if not t or not t[0]: return None
     for v in t:
         if isinstance(v, unreal.Vector) and abs(v.z) < 29999: return v.z
     return None
+def ground(x, y): return _trace(x, y, OTHERS)                 # the terrain copy (probe) only
+def covered(x, y, gz):
+    """something standing on the ground here (ruin wall, prop): the first hit of an unfiltered trace sits 0.3-25 m above
+    the terrain (higher hits = sky / cloud pieces, not in the way of a trunk)."""
+    z = _trace(x, y, [])
+    return z is not None and gz + 30 < z < gz + 2500
 
 placed = []                                                   # (x, y, z)
 def ok(x, y):
@@ -94,6 +101,7 @@ def ok(x, y):
     zs = [ground(x, y)] + [ground(x + math.cos(a) * 120, y + math.sin(a) * 120) for a in (0, 1.57, 3.14, 4.71)]
     if any(z is None for z in zs): return None, 'no ground'
     if max(zs) - min(zs) > STEEP: return None, 'steep'
+    if any(covered(x + dx, y + dy, zs[0]) for dx, dy in ((0, 0), (150, 0), (-150, 0), (0, 150), (0, -150))): return None, 'standing on an asset'
     return min(zs) - SINK, ''
 
 rnd = random.Random(20261104)
