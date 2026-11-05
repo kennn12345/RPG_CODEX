@@ -106,6 +106,20 @@ for src, name, mi, tgt in jobs:
     EAL.save_loaded_asset(m)
     unreal.log(f'FABSTYLE {name} x{f:.2f} -> {m.get_bounds().box_extent.z * 2 / 100:.1f} m tall, lods={m.get_num_lods()}, '
                f'hulls={unreal.EditorStaticMeshLibrary.get_convex_collision_count(m)}, our leaves on {swapped}')
+# our ancient hero tree with the same rebuilt clump foliage + leaves (user 2026-11-05), swapped into the vista's Tree_Hero
+ANC_SRC = '/Game/RPG/Environment/World/Meshes/SM_Tree_Ancient'
+if (not ONLY or 'Ancient' in ONLY) and os.path.exists(f'{CANOPY}/SM_Tree_Ancient_Clumps.fbx') and EAL.does_asset_exist(ANC_SRC):
+    m = canopy_copy(ANC_SRC, 'SM_Tree_Ancient_Clumps', mi_lux)
+    unreal.log(f'FABSTYLE SM_Tree_Ancient_Clumps -> {m.get_bounds().box_extent.z * 2 / 100:.1f} m, lods={m.get_num_lods()}, '
+               f'hulls={unreal.EditorStaticMeshLibrary.get_convex_collision_count(m)}')
+    les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem); eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    les.load_level('/Game/RPG/Maps/L_WorldVista')
+    hero = next((a for a in eas.get_all_level_actors() if a.get_actor_label() == 'Tree_Hero'), None)
+    if hero:
+        hero.static_mesh_component.set_static_mesh(m); les.save_current_level()
+        unreal.log('FABSTYLE Tree_Hero in L_WorldVista now uses SM_Tree_Ancient_Clumps (same place, rotation, 0.75 scale)')
+    else: unreal.log_warning('FABSTYLE Tree_Hero not found in L_WorldVista')
+
 # foliage-check reference (L_AssetReview section 15): Tree I the OLD way (pack leaf quads + our leaves) next to the rebuilt one
 if not ONLY or 'I' in ONLY:
     m, f = scaled_copy(f'{LUX}/S_Tree_I', 'SM_Lux_Tree_I_Before', TARGET['I'])

@@ -37,7 +37,11 @@ LOD_KEEP, LOD_GROW, UP = V['LOD_KEEP'], V['LOD_GROW'], Vector((0, 0, 1))
 
 TARGET = {c: 15.0 + 5.0 * ((i * 0.618) % 1.0) for i, c in enumerate('ABCDEFGHIJ')}   # same 15-20 m as restyle_fab_trees.py
 JOBS = [(c, f'{SRC_FBX}/SM_Lux_Tree_{c}.fbx', f'SM_Lux_Tree_{c}', TARGET[c]) for c in 'ABCDEFGHIJ'] + \
-       [('Jabami', JABAMI_FBX, 'SM_Jabami_Tree_Ours', 17.5)]
+       [('Jabami', JABAMI_FBX, 'SM_Jabami_Tree_Ours', 17.5),
+        # our own ancient hero tree (Trees_R02, 25 m, vista places it at 0.75): same leaves as the Fab trees (user 2026-11-05);
+        # H None = keep its size; its solid 'Fill' crown blobs are dropped with the leaf cards; its own 10 UCX hulls are kept
+        ('Ancient', OUTS + '/Trees_R02/exports/SM_Tree_Ancient.fbx', 'SM_Tree_Ancient_Clumps', None)]
+BUDGET = {'Ancient': 1.3}    # leaf budget multiplier (bigger crown)
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 LEAF_TRIS = 13000            # LOD0 foliage budget per tree (hero tree: ~12k leaf tris)
 CARD = (1.2, 1.9)            # card size range, m (pack quads ~3 m)
@@ -62,7 +66,8 @@ def bark_mesh(ob, s, M):
     cn = me.corner_normals if hasattr(me, 'corner_normals') else None
     n = 0
     for p in me.polygons:
-        if is_leaf(me.materials[p.material_index] if me.materials else None): continue
+        m_ = me.materials[p.material_index] if me.materials else None
+        if is_leaf(m_) or (m_ is not None and 'fill' in m_.name.lower()): continue   # leaf cards + solid canopy fill blobs
         idx, uvs = [], []
         for li in p.loop_indices:
             vi = me.loops[li].vertex_index
@@ -121,8 +126,16 @@ def fib(n, i):
 def grow(key, fbx, name, H):
     obs = load(fbx)
     if not obs: print('CANOPY_PROBLEM no mesh in', fbx); return
+    ucx = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name.upper().startswith('UCX')] if key == 'Ancient' else []
+    for li in ((1, 2) if len(obs) == 1 else ()):                       # LODs in separate files (our Blender trees)
+        lf = fbx[:-4] + f'_LOD{li}.fbx'
+        if not os.path.exists(lf): break
+        before = set(bpy.context.scene.objects); bpy.ops.import_scene.fbx(filepath=lf)
+        obs += [o for o in bpy.context.scene.objects if o not in before and o.type == 'MESH' and not o.name.upper().startswith('UCX')][:1]
     lod0 = obs[0]
-    pts = world_pts(lod0); z0 = min(p.z for p in pts); s = H / (max(p.z for p in pts) - z0)
+    pts = world_pts(lod0); z0 = min(p.z for p in pts)
+    if H is None: H = max(p.z for p in pts) - z0
+    s = H / (max(p.z for p in pts) - z0)
     isl = [(c * s, d * s) for c, d in leaf_islands(lod0)]
     if not isl: print('CANOPY_PROBLEM no leaf faces', name); return
     anchors = [c for c, _ in isl]; med_d = sorted(d for _, d in isl)[len(isl) // 2]
@@ -138,7 +151,7 @@ def grow(key, fbx, name, H):
     kd.balance()
     # sprays per clump by surface area (budget: LEAF_TRIS / ~19 tris per spray)
     area = [r.x * r.y + r.y * r.z + r.x * r.z for _, r in clumps]
-    n_total = LEAF_TRIS / 19.0
+    n_total = LEAF_TRIS * BUDGET.get(key, 1.0) / 19.0
     cards = []
     for ci, ((c, r), a) in enumerate(zip(clumps, area)):
         ns = max(24, int(n_total * a / sum(area)))
@@ -183,7 +196,8 @@ def grow(key, fbx, name, H):
     for lod in range(3):
         if lod == 0: M = M0
         else:
-            M = Mesh(); src = obs[1] if len(obs) > 1 and any(not is_leaf(m) for m in obs[1].data.materials) else lod0
+            src = next((obs[i] for i in (lod, 1) if i < len(obs) and any(not is_leaf(m) for m in obs[i].data.materials)), lod0)
+            M = Mesh()
             bark_mesh(src, s, M)
         for key_, cs, p, facing, tipd, sz, ci in cards:
             if key_ > LOD_KEEP[lod]: continue
@@ -196,8 +210,12 @@ def grow(key, fbx, name, H):
     bc = sum(low, Vector()) / max(1, len(low)) if low else Vector((0, 0, z0 * s))
     tc = sum(mid, Vector()) / max(1, len(mid))
     rr = max(.15, sum(math.hypot(p.x - bc.x, p.y - bc.y) for p in low) / max(1, len(low)))
-    hull = trunk_hull(name, Vector((bc.x, bc.y, z0 * s)), Vector((tc.x, tc.y, tc.z)), rr)
-    for o, fn, ext in ((lods[0], name, [hull]), (lods[1], f'{name}_LOD1', []), (lods[2], f'{name}_LOD2', [])):
+    if ucx:                                                            # keep the tree's own collision hulls
+        for i, o in enumerate(ucx): o.name = f'UCX_{name}_{i:02d}'
+        hulls = ucx
+    else:
+        hulls = [trunk_hull(name, Vector((bc.x, bc.y, z0 * s)), Vector((tc.x, tc.y, tc.z)), rr)]
+    for o, fn, ext in ((lods[0], name, hulls), (lods[1], f'{name}_LOD1', []), (lods[2], f'{name}_LOD2', [])):
         bpy.ops.object.select_all(action='DESELECT')
         for x in [o] + ext: x.select_set(True)
         bpy.context.view_layer.objects.active = o

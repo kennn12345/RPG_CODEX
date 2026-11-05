@@ -118,6 +118,17 @@ Brief: Docs/ASSET_RESTYLE_BRIEF.md. Handoff: Docs/WORLD_VISTA_HANDOFF.md ("Asset
   from before this commit. Effects actors (Motes_/DriftLeaves_) must not count as obstacles (first run skipped 23).
   Sheet: review/Unreal_WorldVista_FabTrees_BeforeAfter.png; before shots Saved/Screenshots/World_before_fabtrees.
   Moved trees: the tree-foot details (ferns, moss...) still sit at the OLD spots - re-run place_vista_details.py if wanted.
+  USER: leave the tree-foot details as they are for now (edit later).
+- Ground fix (user 2026-11-05: "trees floating in the sky"): some ground traces hit actors above the terrain (sky pieces,
+  the stone ruins). place_fab_trees.py now takes the height from the terrain copy only (all other actors ignored) and a
+  spot where an unfiltered trace hits something 0.3-25 m above the terrain counts as blocked. 72 placed, 31 moved, 6
+  skipped. Sheet: review/Unreal_WorldVista_FabTrees_Grounded.png.
+- Ancient hero tree (user: "same leaves as the others"): grow_fab_canopies.py job 'Ancient' -> SM_Tree_Ancient_Clumps
+  (/Game/FabPacks/Restyled): its bark + own 10 UCX hulls kept, its leaf cards AND solid 'Fill' blobs replaced by the
+  rounded clumps (leaf budget x1.3), bark LODs from its own _LOD1/_LOD2 files; 60k/42k/37k tris (the old tree's far-LOD
+  bark is heavy). restyle_fab_trees.py (RPG_FAB_TREES=Ancient) imports it and points L_WorldVista's Tree_Hero at it (same
+  place, rotation, 0.75 scale); the original SM_Tree_Ancient asset is untouched. Sheet:
+  review/Unreal_AncientTree_Leaves_BeforeAfter.png.
 - FPS not measured. Unreal sometimes segfaults on quit after build_asset_review (level
   is saved first - harmless).
 
