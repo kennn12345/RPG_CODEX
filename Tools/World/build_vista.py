@@ -68,7 +68,7 @@ def dir_light(label, index, shadows=True):
              ('light_source_angle', 1.5), ('cast_cloud_shadows', True)), label)
     return a
 sun = dir_light('Sun', 0); moon = dir_light('Moon', 1)
-setp(sun.get_component_by_class(unreal.DirectionalLightComponent), (('enable_light_shaft_bloom', True), ('bloom_scale', 0.35)), 'sun')
+setp(sun.get_component_by_class(unreal.DirectionalLightComponent), (('enable_light_shaft_bloom', False), ('bloom_scale', 0.35)), 'sun')   # on, the big sun disc behind the hills made a pale cone and washed out the low-sun sky
 # Sun wins forward shading (water, translucency, volumetric fog): with Sun and Moon both at priority 0 Unreal warns
 # "multiple directional lights are competing" (user 2026-11-05)
 setp(sun.get_component_by_class(unreal.DirectionalLightComponent), (('forward_shading_priority', 1),), 'sun')
