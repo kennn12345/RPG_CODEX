@@ -166,6 +166,15 @@ Raw shots: Saved/Screenshots/Assets (AS_*_16.00 / _17.30), Saved/Screenshots/Wor
 | 9 | Cliffs + ivy (stone graph, thicker ivy) | done in Unreal |
 | 10 | Effects (round additive motes, masked drift leaves, mist 0.3) | materials done (not separately reviewed) |
 
+## Tree leaf palette - 2026-11-05 Codex follow-up
+
+- User requested darker green leaves without the yellow tint or night glow.
+- Saved `Content/RPG/Environment/World/Materials/MI_Hero_MayuLeaves.uasset`: sRGB Color 1 `(40,76,58)`, Color 2 `(66,122,76)`, Tip Color 3 `(103,155,98)`. Previous colours were `(56,96,84)`, `(108,160,46)`, `(192,218,84)`.
+- Set `Emissive Intensity` from `0.12` to `0.0`; the constant emission was keeping foliage bright after sunset. Leaves now respond to the existing scene lighting.
+- Placed Fab Lux/Jabami leaf instances inherit this shared material; verified both inherited colours and zero emission. Pack master, meshes, map, sky, and lighting were not edited. Distant vista canopy and ground vegetation use separate materials and retain their palettes.
+- Updated `Tools/World/build_vista_assets.py` palette source and added `leaf_palette` for material-only reapplication. Full hero builds also preserve the palette and zero emission.
+- Verified saved material in a fresh PIE session at 12:00, 17:18, and midnight, with matched sunset/night before-after captures. User aesthetic review pending.
+
 ## Commits
 - 84f52c4 Split world asset build from layout; add R02 restyle sources and review stage
 - 33d54cb Restyle rocks, ground, cliffs and small effects toward the reference palette

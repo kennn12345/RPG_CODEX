@@ -403,6 +403,23 @@ def soft_normal(m, up):
     feed(m, c, {'N': ('node', unreal.MaterialExpressionVertexNormalWS), 'Up': ('scalar', up)}, x=-700)
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_NORMAL)
 
+def stable_grass_ambient(m, base):
+    """Keep direct lighting/shadows, but replace noisy Lumen bounce on thin grass with a smooth captured-sky fill.
+    The sky cubemap includes the current skylight colour/intensity, so this follows the existing day/night cycle.
+    This deliberately trades local indirect colour bleeding/self-occlusion on grass for temporal stability.
+    No sky, light, mesh, wind, or map settings are changed."""
+    ao = node(m, unreal.MaterialExpressionConstant, -300, 1100, r=0.0)
+    MEL.connect_material_property(ao, '', unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
+    sky = node(m, unreal.MaterialExpressionSkyLightEnvMapSample, -600, 1300)
+    direction = node(m, unreal.MaterialExpressionConstant3Vector, -900, 1300,
+                     constant=unreal.LinearColor(0, 0, 1, 1))
+    roughness = node(m, unreal.MaterialExpressionConstant, -900, 1450, r=1.0)
+    link(direction, '', sky, 'Direction'); link(roughness, '', sky, 'Roughness')
+    gain = scalar(m, 'StableSkyAmbientGain', 0.4, -600, 1500)
+    fill = custom(m, 'return C * Sky * Gain;', ['C', 'Sky', 'Gain'], F3, (), -200, 1300)
+    link(base, '', fill, 'C'); link(sky, '', fill, 'Sky'); link(gain, '', fill, 'Gain')
+    MEL.connect_material_property(fill, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
 def m_grass(name, root, tip, strength, sss, ear=None):
     """R02 grass / tall grass / wheat: root->tip ramp (video: deep green roots, saturated yellow-green tips, no blue),
     big soft colour patches (yellower drifts, deeper green dips), backlit glow, up-facing soft normals, wind.
@@ -433,6 +450,8 @@ return c;
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
     MEL.connect_material_property(c, 'Sss', unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
     MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.8), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    if name in ('M_Vista_Grass', 'M_Vista_GrassTall'):
+        stable_grass_ambient(m, c)
     soft_normal(m, 0.65)
     wind_wpo(m, strength)
     return finish(m, dither=True)
@@ -662,12 +681,16 @@ return lerp(c, BarkC, smoothstep(0.85, 0.98, r));
     return finish(m)
 
 # ================================================================== builders (one group of assets each)
+def b_grass_lighting():
+    """Grass material graphs only; no mesh import, foliage rebuild, map, water, or sky edits."""
+    m_grass('M_Vista_Grass', (40, 88, 10), (152, 178, 18), 12.0, 0.8)
+    m_grass('M_Vista_GrassTall', (40, 86, 12), (146, 172, 22), 18.0, 0.8)
+
 def b_materials():
     """all world materials (in place)."""
     m_terrain()
     # R02 palette (World_R01/reference/PALETTE.md): lit meadow tips ~167,173,3, shade 108,138,4 - albedo slightly above
-    m_grass('M_Vista_Grass', (40, 88, 10), (152, 178, 18), 12.0, 0.8)
-    m_grass('M_Vista_GrassTall', (40, 86, 12), (146, 172, 22), 18.0, 0.8)
+    b_grass_lighting()
     m_grass('M_Vista_Wheat', (150, 112, 30), (232, 180, 36), 16.0, 0.9, ear=(246, 196, 58))
     instance('MI_Vista_Daisies', m_flowers(), {'Petal': lin((250, 246, 232)), 'PetalBase': (0.8, 0.8, 0.75), 'Centre': lin((240, 176, 24))})
     m_canopy(); m_leaf(); m_leaf('M_Vista_LeafDapple', 'T_Leaf_Dapple_Atlas_BaseColor', 1.3, 1.05, 0.03)   # hero: keep the clump-ball normals
@@ -733,9 +756,19 @@ def b_trees_round():
     foliage_type(far, 1, (1.0, 1.8), shadow=False)
 
 MAYU = '/Game/StylizedTreesByMayu/01_Trees'
+TREE_LEAF_COLOURS = {'Color 1': (40, 76, 58), 'Color 2': (66, 122, 76), 'Tip Color 3': (103, 155, 98)}
+
+def b_leaf_palette():
+    """Update the shared leaf instance only; placed Fab/ancient trees inherit these colours. No mesh/map rebuild."""
+    mi = M('MI_Hero_MayuLeaves')
+    if not mi: problem('MI_Hero_MayuLeaves missing'); return
+    for name, rgb in TREE_LEAF_COLOURS.items():
+        MEL.set_material_instance_vector_parameter_value(mi, name, unreal.LinearColor(*lin(rgb), 1))
+    MEL.set_material_instance_scalar_parameter_value(mi, 'Emissive Intensity', 0.0)
+    save(mi)
 def mayu_leaf_mi():
     """hero leaves on the Fab pack's stylized leaf material (Mayu's Stylized Trees, Standard License): white leaf-spray
-    mask + material colouring (height gradient Color 1 -> Color 2, tip colour, fresnel rim, soft emissive, wind), tuned
+    mask + material colouring (height gradient Color 1 -> Color 2, tip colour, fresnel rim, wind; emission disabled), tuned
     to the video palette. The pack's master needs the instancing / LOD-dither usage flags for our foliage."""
     master = load(f'{MAYU}/00_Base/Material/M_StylizedTree')
     if not master: problem('Mayu pack missing (/Game/StylizedTreesByMayu)'); return None
@@ -746,14 +779,14 @@ def mayu_leaf_mi():
         except Exception: pass
     if changed: MEL.recompile_material(master); save(master)
     mi = instance('MI_Hero_MayuLeaves', master,
-                  vectors={'Color 1': lin((56, 96, 84)), 'Color 2': lin((108, 160, 46)), 'Tip Color 3': lin((192, 218, 84))},   # lighter blue-green shade (video)
-                  scalars={'Height': 1450.0, 'SmoothStep Min': 0.2, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.12,
+                  vectors={name: lin(rgb) for name, rgb in TREE_LEAF_COLOURS.items()},  # darker green, without yellow tips
+                  scalars={'Height': 1450.0, 'SmoothStep Min': 0.2, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.0,
                            'Texture Size': 1.0, 'BillBoard Inflate': 0.0, 'Billboard Sscale': 1.0})
     tx = tex('T_Hero_LeafSpray_2x2_Mask') or load(f'{MAYU}/Variation/Texture/T_Leaf_Billboard_Texture_3')
     if tx: MEL.set_material_instance_texture_parameter_value(mi, 'Leaf Texture', tx); save(mi)
     # review only: the pack's elm with green video-palette leaves (its own MI_Elm is autumn red)
-    elm = instance('MI_Pack_ElmGreen', master, vectors={'Color 1': lin((40, 78, 52)), 'Color 2': lin((108, 160, 46)), 'Tip Color 3': lin((192, 218, 84))},
-                   scalars={'Height': 780.0, 'SmoothStep Min': 0.2, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.12})
+    elm = instance('MI_Pack_ElmGreen', master, vectors={name: lin(rgb) for name, rgb in TREE_LEAF_COLOURS.items()},
+                   scalars={'Height': 780.0, 'SmoothStep Min': 0.2, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.0})
     et = load(f'{MAYU}/Elm/Texture/T_elm_leaf')
     if et:
         MEL.set_material_instance_texture_parameter_value(elm, 'Leaf Texture', et)
@@ -969,8 +1002,8 @@ def b_review():
     if sw:
         set_all(sw, M('M_Vista_Terrain')); nanite(sw)
 
-BUILDERS = {'textures': b_textures, 'materials': b_materials, 'review': b_review, 'ground': b_ground, 'grass': b_grass, 'flowers': b_flowers, 'trees_round': b_trees_round,
-            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'details': b_details, 'rocks': b_rocks, 'stone': b_stone, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
+BUILDERS = {'textures': b_textures, 'materials': b_materials, 'review': b_review, 'ground': b_ground, 'grass': b_grass, 'grass_lighting': b_grass_lighting, 'flowers': b_flowers, 'trees_round': b_trees_round,
+            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'leaf_palette': b_leaf_palette, 'details': b_details, 'rocks': b_rocks, 'stone': b_stone, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
 ORDER = list(BUILDERS)                       # materials first: the mesh builders assign them
 
 def requested():

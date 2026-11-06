@@ -1,5 +1,9 @@
 # Handoff for Codex: world trees, view distances, grass flicker
 
+> 2026-11-05 Codex follow-up: grass-material lighting stabilization and TSR adjustment implemented locally; user confirmed the flicker fixed. See [GRASS_FLICKER_CODEX.md](GRASS_FLICKER_CODEX.md) for changes, measured limits, and rollback. The historical investigation below is retained.
+>
+> Tree leaf follow-up: shared `MI_Hero_MayuLeaves` now uses darker green colours and zero emissive intensity, inherited by the placed Lux/Jabami trees and ancient tree. Verified in PIE at noon, sunset, and night; user aesthetic review pending. See the leaf palette entry in [ASSET_RESTYLE_PROGRESS.md](ASSET_RESTYLE_PROGRESS.md). `build_vista_assets.py leaf_palette` reapplies just this material change without rebuilding the world.
+
 Written 2026-11-05 by Claude. Covers everything since `f705cb4` on the local branch `asset-restyle` (HEAD `a8c11c2` before
 this doc). Never pushed. Background: `Docs/ASSET_RESTYLE_PROGRESS.md`, `Docs/WORLD_VISTA_HANDOFF.md`, `Docs/CREDITS.md`.
 
