@@ -10,13 +10,19 @@ Writes MERGED_DIR/<name>_bark.blend. Leaves, position, origin and collision are 
 import bpy, bmesh, heapq, math, os, sys, numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.kdtree import KDTree
 OUTS = 'C:/Users/cedar/Documents/Codex/2026-11-02/ok/outputs'
 FBX_DIR, MERGED_DIR = f'{OUTS}/FabPacks/_canopy_fbx', f'{OUTS}/FabPacks/_bark_merged'
 VOXEL, COLLAR_REACH, COLLAR_PASSES = .03, .2, 60   # m, m from a joint, smoothing passes there
-TRIS, TILE, BAND = 9000, 2.5, .35                  # target triangles; texture repeat, m; slice length for finding limbs, m
+TRIS, TILE, BAND = 9000, 2.5, .22                  # target triangles; texture repeat, m; slice length for finding limbs, m
+SLICE_BLEND = 120                                  # smoothing passes that hide the steps between slices
 TRIS_LOD1, TRIS_LOD2 = 4000, 1500                  # bark triangles of the lower-detail versions
 BARK_SLOT = 0; MIN_PART = 150                      # vertices; smaller voxel-skin parts are twig fragments
 MIN_SLICE = 12                                     # vertices; smaller limb slices are specks
+PIECE_REACH, COLLAR_BLEND, TRUNK_ZONE = .6, 120, 3.0  # m to look for a nearest piece; smoothing passes across joints; m of trunk measured
+CREASE_ZONE, CREASE_FROM, CREASE_FULL, CREASE_PASSES = 6.0, 2.4, 6.0, 80   # m of trunk; bend rate rad/m where softening starts, is full (surface noise ~1.3: at .6 lumps, at 5 misses pinches); passes
+KNOT_GRID = 32
+LOW_DETAIL_FACES, TAUBIN_PASSES = 0, 40            # bark faces under which a pack tree gets its outline rounded (0 = off, being tested on Lux E); smoothing cycles
 
 def adjacency(n, edges):
     a = edges.reshape(-1); count = np.bincount(a, minlength=n).astype(np.float32); return count
@@ -29,6 +35,21 @@ def smooth(co, edges, weight, passes):
     return co
 def get_co(me): c = np.empty(len(me.vertices) * 3, np.float32); me.vertices.foreach_get('co', c); return c.reshape(-1, 3)
 def get_edges(me): e = np.empty(len(me.edges) * 2, np.int32); me.edges.foreach_get('vertices', e); return e.reshape(-1, 2)
+
+SURFACE = {}
+def remember_surface(ob):
+    """the dense skin's smooth surface directions, before reducing"""
+    me = ob.data; n = len(me.vertices); nor = np.empty(n * 3, np.float32); me.vertices.foreach_get('normal', nor)
+    nor = smooth(nor.reshape(-1, 3), get_edges(me), np.full(n, .6, np.float32), 8); nor /= np.linalg.norm(nor, axis=1, keepdims=True) + 1e-6
+    kd = KDTree(n)
+    for i, v in enumerate(me.vertices): kd.insert(v.co, i)
+    kd.balance(); SURFACE['kd'], SURFACE['nor'] = kd, nor
+def dense_normals(ob):
+    """reduced meshes shade like the dense skin. With their own normals, long flat triangles catch the sun as pale shards"""
+    me = ob.data; out = []
+    for v in me.vertices:
+        hits = SURFACE['kd'].find_n(v.co, 4); a = sum(SURFACE['nor'][h[1]] for h in hits); a = a / (np.linalg.norm(a) + 1e-6); out.append(tuple(float(x) for x in a))
+    me.normals_split_custom_set_from_vertices(out)
 
 def merged_bark(name):
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -81,26 +102,49 @@ def merged_bark(name):
     bmesh.ops.delete(bm2, geom=drop, context='VERTS'); bm2.to_mesh(ob.data); bm2.free()
     me = ob.data; print(f'MERGE voxel skin: {len(me.polygons)} faces, kept {kept} parts, dropped {len(drop)} fragment vertices')
     # 2 collars: a vertex near two or more original pieces is at a joint
-    co = get_co(me); edges = get_edges(me); near = np.zeros(len(co), np.float32); joint = np.zeros(len(co), np.float32)
+    co = get_co(me); edges = get_edges(me); joint = np.zeros(len(co), np.float32); piece = np.zeros(len(co), np.int32)
     for i, c in enumerate(co):
-        ds = sorted(d for d in ((t.find_nearest(Vector(c), COLLAR_REACH)[3]) for t in trees) if d is not None)
-        if len(ds) >= 2: joint[i] = 1 - min(1.0, ds[1] / COLLAR_REACH)
+        ds = sorted((d, k) for k, d in ((k, t.find_nearest(Vector(c), PIECE_REACH)[3]) for k, t in enumerate(trees)) if d is not None)
+        if ds: piece[i] = ds[0][1]
+        if len(ds) >= 2 and ds[1][0] < COLLAR_REACH: joint[i] = 1 - ds[1][0] / COLLAR_REACH
     w = np.clip(joint * 1.6, 0, 1) ** .7
     w = smooth(w[:, None].repeat(3, 1), edges, np.full(len(co), .6, np.float32), 4)[:, 0]    # soft edge between collar and bark
     print(f'MERGE collar vertices {int((w > .1).sum())} of {len(co)}')
     co = smooth(co, edges, np.full(len(co), .5, np.float32), 2)                               # voxel steps everywhere
     co = smooth(co, edges, w * .6, COLLAR_PASSES)
     me.vertices.foreach_set('co', co.ravel()); me.update()
+    # creases: on the trunk, where the surface bends sharply going UP (a straight trunk's normals do not change with height, so this
+    # finds pinches, not roundness). Softened here; the map goes to make_bark_textures.py so knots avoid these places
+    nor = np.empty(len(co) * 3, np.float32); me.vertices.foreach_get('normal', nor); nor = nor.reshape(-1, 3)
+    nor = smooth(nor, edges, np.full(len(co), .6, np.float32), 20); nor /= np.linalg.norm(nor, axis=1, keepdims=True) + 1e-6
+    de = co[edges[:, 1]] - co[edges[:, 0]]; le = np.linalg.norm(de, axis=1) + 1e-6; up = np.abs(de[:, 2]) / le > .7
+    rate = np.linalg.norm(nor[edges[:, 1]] - nor[edges[:, 0]], axis=1) / le * up; bend = np.zeros(len(co), np.float32)
+    np.maximum.at(bend, edges[:, 0], rate); np.maximum.at(bend, edges[:, 1], rate)
+    zone = np.clip((co[:, 2].min() + CREASE_ZONE - co[:, 2]) / 1.0, 0, 1)
+    crease = np.clip((bend - CREASE_FROM) / (CREASE_FULL - CREASE_FROM), 0, 1).astype(np.float32) * zone
+    crease = np.clip(smooth(crease[:, None].repeat(3, 1), edges, np.full(len(co), .6, np.float32), 12)[:, 0] * 3, 0, 1)
+    print(f'MERGE crease vertices {int((crease > .3).sum())} of {len(co)}, bend p50 {np.median(bend):.2f} p99 {np.percentile(bend, 99):.2f} rad/m')
+    co = smooth(co, edges, crease * .6, CREASE_PASSES)
+    faces = sum(len(f) for f in pieces); low_detail = faces < LOW_DETAIL_FACES
+    if low_detail:   # a low-detail pack tree keeps its straight segments and corners: Taubin smoothing rounds them without shrinking limbs
+        for _ in range(TAUBIN_PASSES):
+            co = smooth(co, edges, np.full(len(co), .5, np.float32), 1); co = smooth(co, edges, np.full(len(co), -.53, np.float32), 1)
+        print(f'MERGE low-detail tree ({faces} faces): outline rounded')
+    me.vertices.foreach_set('co', co.ravel()); me.update()
     # 3 grain UVs, on the dense skin: a reduced trunk has too few points for an accurate angle and its errors bend the ridges
-    grain_uv(ob)
+    grain_uv(ob, piece, w, crease, COLLAR_BLEND)
+    remember_surface(ob)
     # 4 reduce, which carries the UVs along
     me = ob.data; d = ob.modifiers.new('d', 'DECIMATE'); d.ratio = min(1.0, TRIS / max(1, len(me.polygons)))
     bpy.ops.object.modifier_apply(modifier='d')
     for p in ob.data.polygons: p.use_smooth = True
+    dense_normals(ob)
     print(f'MERGE reduced: {len(ob.data.polygons)} triangles, {len(ob.data.vertices)} vertices')
     return src, ob
 
-def grain_uv(ob):
+def grain_uv(ob, piece, collar, crease, collar_blend):
+    """piece = the original bark piece nearest each vertex: slices never span two limbs (a slice around both has its centre between
+    them and bends the grain into chevrons). collar = where the mapping blends across a joint, so that split leaves no seam."""
     me = ob.data; bm = bmesh.new(); bm.from_mesh(me); bmesh.ops.triangulate(bm, faces=bm.faces); bm.to_mesh(me); bm.free()
     co = get_co(me); edges = get_edges(me); n = len(co)
     nb = [[] for _ in range(n)]
@@ -128,7 +172,7 @@ def grain_uv(ob):
         while st:
             v = st.pop()
             for o, _ in nb[v]:
-                if comp[o] < 0 and band[o] == band[v]: comp[o] = ncomp; st.append(o)
+                if comp[o] < 0 and band[o] == band[v] and piece[o] == piece[v]: comp[o] = ncomp; st.append(o)
         ncomp += 1
     # stray specks: a few vertices can land in a slice but not touch the rest of it; on their own they get a wild centre and
     # angle, which shows as a jagged notch. They join whichever neighbouring slice they touch most
@@ -163,23 +207,32 @@ def grain_uv(ob):
         if np.linalg.norm(e1) < .1: e1 = np.cross(ax, (0, 0, 1.0))
         e1 /= np.linalg.norm(e1); frame[c] = e1; axes[c] = ax
         centre[idx] = C; girth[idx] = 2 * math.pi * np.linalg.norm(P - C, axis=1).mean()
-    centre = smooth(centre, edges, np.full(n, .6, np.float32), 12)
+    centre = smooth(centre, edges, np.full(n, .6, np.float32), SLICE_BLEND)
     theta = np.zeros(n, np.float32)
     for c in first:
         idx = np.nonzero(comp == c)[0]; Q = co[idx] - centre[idx]; e1 = frame[c]; e2 = np.cross(axes[c], e1)
         theta[idx] = np.arctan2(Q @ e2, Q @ e1)
     z = np.stack([np.cos(theta), np.sin(theta), np.zeros(n, np.float32)], 1).astype(np.float32)   # blends the slices' small differences
-    z = smooth(z, edges, np.full(n, .5, np.float32), 4); theta = np.arctan2(z[:, 1], z[:, 0])
+    z = smooth(z, edges, np.full(n, .5, np.float32), SLICE_BLEND)   # a slice is ~10 edges long: too few passes leave steps ("chevrons")
+    z /= np.linalg.norm(z, axis=1, keepdims=True) + 1e-6
+    z /= np.linalg.norm(z, axis=1, keepdims=True) + 1e-6
+    z = smooth(z, edges, np.clip(collar * 3, 0, 1).astype(np.float32) * .6, collar_blend); theta = np.arctan2(z[:, 1], z[:, 0])
     girth = smooth(girth[:, None].repeat(3, 1), edges, np.full(n, .7, np.float32), 40)[:, 0]
     # one texture repeat around the trunk's base (the texture tiles, so no wrap seam there); make_bark_textures.py paints its ridges
     # across = TILE / this, so ridges keep their real width. Limbs scale with their girth, easing from the whole-number wrap
-    tile_v = float(np.median(girth[co[:, 2] < co[:, 2].min() + 1.0]))
+    tile_v = float(np.median(girth[co[:, 2] < co[:, 2].min() + TRUNK_ZONE]))   # the typical trunk: some flare well above their base
     g = girth / tile_v; s = np.clip((g - .35) / .4, 0, 1); s = s * s * (3 - 2 * s)
     repeats = np.where(g >= .75, np.maximum(1, np.round(g)), g + (1 - g) * s)
     print(f'MERGE trunk girth {tile_v:.2f} m: recipe across = {TILE / tile_v:.2f}')
+    open(f'{MERGED_DIR}/{ob.name.replace("_bark", "")}.across', 'w').write(f'{TILE / tile_v:.2f}')   # make_bark_textures.py reads this
     for lo, hi in ((0, 1), (1, 2), (2, 3), (3, 5), (5, 8), (8, 12)):
         m = (co[:, 2] >= lo) & (co[:, 2] < hi)
         if m.any(): print(f'MERGE height {lo}-{hi} m: girth {np.percentile(girth[m], 10):.2f}-{np.percentile(girth[m], 90):.2f} m, repeats {np.percentile(repeats[m], 10):.2f}-{np.percentile(repeats[m], 90):.2f}')
+    # where the creases fall in the texture (U, V tile), for make_bark_textures.py
+    hot = crease > .3; grid = np.zeros((KNOT_GRID, KNOT_GRID), np.int8)
+    gu = ((dist[hot] / TILE) % 1 * KNOT_GRID).astype(int) % KNOT_GRID; gv = ((theta[hot] / (2 * math.pi) * repeats[hot]) % 1 * KNOT_GRID).astype(int) % KNOT_GRID
+    grid[gv, gu] = 1
+    open(f'{MERGED_DIR}/{ob.name.replace("_bark", "")}.creases', 'w').write('\n'.join(''.join(str(c) for c in row) for row in grid))
     uvl = me.uv_layers.new(name='UVMap'); seams = 0
     for p in me.polygons:
         vs = list(p.vertices); t = theta[vs].copy()
@@ -211,7 +264,7 @@ def export_lods(name, ob):
         bm = bmesh.new(); bm.from_mesh(bark.data); bmesh.ops.triangulate(bm, faces=bm.faces); bm.to_mesh(bark.data); bm.free()
         bark.data.materials.clear(); bark.data.materials.append(lm.materials[BARK_SLOT])
         for p in bark.data.polygons: p.material_index = 0; p.use_smooth = True
-        bark.data.update(); vn = [tuple(v.normal) for v in bark.data.vertices]; bark.data.normals_split_custom_set_from_vertices(vn)
+        bark.data.update(); dense_normals(bark)
         tb = len(bark.data.polygons)
         bpy.ops.object.select_all(action='DESELECT'); bark.select_set(True); leaf.select_set(True); bpy.context.view_layer.objects.active = leaf
         bpy.ops.object.join()

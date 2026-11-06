@@ -4,8 +4,9 @@ Look chosen by the user for Lux A: deep brown, vertical ridges, hand-painted; th
 only a very slight tone shift, but each has its own ridge pattern and a knot or two.
 Writes Bark_<tree>_<1-3>_{BaseColor,Normal,Height}.png to World_R02/textures/Bark. All tile in both directions. The pack trunks'
 UVs repeat about every 2.5 m with U along the trunk, so the grain runs along U (image x)."""
-import bpy, os, sys, math, numpy as np
-OUT = 'C:/Users/cedar/Documents/Codex/2026-11-02/ok/outputs/World_R02/textures/Bark'
+import bpy, os, sys, math, zlib, numpy as np
+OUTS = 'C:/Users/cedar/Documents/Codex/2026-11-02/ok/outputs'
+OUT = f'{OUTS}/World_R02/textures/Bark'
 N = 1024
 RECIPES = {
     'Lux_A': {'palette': ((46, 32, 24), (102, 74, 54), (154, 120, 88)), 'across': 1.33,   # across: merge_fab_bark.py prints it; darker paint reads as black under a thick canopy
@@ -14,6 +15,30 @@ RECIPES = {
                         {'seed': 211, 'gain': .96, 'warm': 1.02, 'knots': ((.70, .24, .85), (.18, .78, .7))},
                         {'seed': 307, 'gain': 1.04, 'warm': .98, 'knots': ((.55, .50, 1.15),)})},
 }
+def same_look(tree):
+    """user 2026-11-05: every tree except the ancient tree has Lux A's colour and bark style; only patterns and knots differ.
+    'across' comes from the file merge_fab_bark.py writes for this tree, so merge first."""
+    name = 'SM_Jabami_Tree_Ours' if tree == 'Jabami' else f'SM_{tree.replace("Lux_", "Lux_Tree_")}'
+    across = float(open(f'{OUTS}/FabPacks/_bark_merged/{name}.across').read())
+    base = zlib.crc32(tree.encode()) % 100000; r = np.random.RandomState(base); barks = []
+    start = r.uniform(0, 1)
+    # no knots on a crease of this tree's trunk (merge_fab_bark.py writes the map): one landing on a bend looks broken
+    cp = f'{OUTS}/FabPacks/_bark_merged/{name}.creases'; grid = [l.strip() for l in open(cp)] if os.path.exists(cp) else []
+    def on_crease(u, v):
+        if not grid: return False
+        n = len(grid)
+        return any(grid[(int(v * n) + j) % n][(int(u * n) + i) % n] == '1' for j in (-1, 0, 1) for i in (-1, 0, 1))
+    for k, (s, gain, warm) in enumerate(((base, 1.00, 1.00), (base + 110, .96, 1.02), (base + 206, 1.04, .98))):
+        # knots spread around the trunk (v), differently on each bark, so no two barks show one in the same place
+        knots = []
+        for j in range(r.randint(1, 3)):
+            u, v = r.uniform(.1, .9), (start + .33 * k + .47 * j) % 1
+            for _ in range(40):
+                if not on_crease(u, v): break
+                u, v = r.uniform(.1, .9), (v + r.uniform(-.06, .06)) % 1
+            knots.append((round(u, 2), round(v, 2), round(r.uniform(.75, 1.15), 2)))
+        barks.append({'seed': s, 'gain': gain, 'warm': warm, 'knots': tuple(knots)})
+    return {'palette': RECIPES['Lux_A']['palette'], 'across': across, 'barks': tuple(barks)}
 Y, X = np.mgrid[0:N, 0:N].astype(np.float32)
 def noise(along, across, seed):
     """tiling noise; along = feature length in px along the grain (image x), across = across it"""
@@ -67,8 +92,10 @@ def normal(h, strength=5.0):
 os.makedirs(OUT, exist_ok=True)
 args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else list(RECIPES)
 for tree in args:
-    for i, b in enumerate(RECIPES[tree]['barks'], 1):
-        rgb, h = bark(RECIPES[tree], b)
+    recipe = RECIPES.get(tree) or same_look(tree)
+    print(f'BARK {tree} across {recipe["across"]} knots {[b["knots"] for b in recipe["barks"]]}')
+    for i, b in enumerate(recipe['barks'], 1):
+        rgb, h = bark(recipe, b)
         save(f'Bark_{tree}_{i}_BaseColor', rgb); save(f'Bark_{tree}_{i}_Normal', normal(h)); save(f'Bark_{tree}_{i}_Height', h)
         print(f'BARK {tree} {i} mean sRGB {[int(v * 255) for v in rgb.reshape(-1, 3).mean(0)]}')
 print('BARK_DONE')

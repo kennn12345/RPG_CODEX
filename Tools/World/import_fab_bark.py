@@ -1,5 +1,5 @@
 """Unreal: a Fab tree's merged bark and its 3 bark variations (user 2026-11-05; Tools/World/make_bark_textures.py, merge_fab_bark.py).
-  RPG_BARK_TREES=A UnrealEditor.exe RPG_CODEX.uproject -ExecutePythonScript=".../Tools/World/import_fab_bark.py" -unattended -RenderOffscreen
+  RPG_BARK_TREES=A (a Lux letter, or Jabami) UnrealEditor.exe RPG_CODEX.uproject -ExecutePythonScript=".../Tools/World/import_fab_bark.py" -unattended -RenderOffscreen
 - textures -> /Game/RPG/Environment/Textures/Bark; M_Fab_Bark (lit, no emissive, dithered LOD) + MI_Bark_<tree>_1..3
 - re-imports /Game/FabPacks/Restyled/SM_Lux_Tree_<c> IN PLACE, so L_WorldVista's copies keep their position, rotation and scale
 - each placed copy gets one of its model's 3 barks, evenly (per-actor material override, saved in the map)
@@ -21,6 +21,9 @@ def problem(s):
     global problems; problems += 1; unreal.log_warning('FABBARK_PROBLEM ' + s)
 def save(a):
     if not EAL.save_loaded_asset(a, only_if_is_dirty=False): problem('save failed ' + a.get_path_name())
+
+def mesh_of(c): return 'SM_Jabami_Tree_Ours' if c == 'Jabami' else f'SM_Lux_Tree_{c}'
+def bark_of(c): return 'Jabami' if c == 'Jabami' else f'Lux_{c}'
 
 def copies(mesh_name):
     out = []
@@ -83,25 +86,25 @@ les.load_level('/Game/RPG/Maps/L_WorldVista')
 if os.environ.get('RPG_BARK_SPOTS_ONLY') == '1':
     d = (math.cos(math.radians(-40)), math.sin(math.radians(-40))); spots = []
     for c in TREES:
-        for lab, a, comp in copies(f'SM_Lux_Tree_{c}')[:3]:
+        for lab, a, comp in copies(mesh_of(c))[:3]:
             l = a.get_actor_location(); spots.append(f'{l.x + d[0] * 380:.0f} {l.y + d[1] * 380:.0f} {l.z + 170:.0f} 8 140')
             unreal.log(f'FABBARK spot {lab} {spots[-1]}')
     open(SPOTS, 'w').write(';'.join(spots)); unreal.log('FABBARK_DONE spots'); unreal.SystemLibrary.quit_editor(); raise SystemExit
 master = None; barks = {}
 for c in TREES:
-    tree = f'Lux_{c}'; barks[c] = []
+    tree = bark_of(c); barks[c] = []
     for i in (1, 2, 3):
         col = texture(f'Bark_{tree}_{i}_BaseColor', False); nor = texture(f'Bark_{tree}_{i}_Normal', True)
         master = master or bark_master(col, nor)
         mi = child(f'MI_Bark_{tree}_{i}', MATS, master)
         MEL.set_material_instance_texture_parameter_value(mi, 'Bark', col); MEL.set_material_instance_texture_parameter_value(mi, 'Bark Normal', nor)
         MEL.update_material_instance(mi); save(mi); barks[c].append(mi)
-    m, leaf = reimport(f'SM_Lux_Tree_{c}')
+    m, leaf = reimport(mesh_of(c))
     for i, s in enumerate(m.static_materials):
         m.set_material(i, leaf if 'leaves' in str(s.material_slot_name).lower() else barks[c][0])
     save(m)
-    unreal.log(f'FABBARK SM_Lux_Tree_{c}: lods={m.get_num_lods()}, hulls={unreal.EditorStaticMeshLibrary.get_convex_collision_count(m)}, slots={[(str(s.material_slot_name), s.material_interface.get_name()) for s in m.static_materials]}, tris={[SMES.get_number_of_triangles(m, l) if hasattr(SMES, "get_number_of_triangles") else "?" for l in range(m.get_num_lods())]}')
-    for k, (lab, a, comp) in enumerate(copies(f'SM_Lux_Tree_{c}')):
+    unreal.log(f'FABBARK {mesh_of(c)}: lods={m.get_num_lods()}, hulls={unreal.EditorStaticMeshLibrary.get_convex_collision_count(m)}, slots={[(str(s.material_slot_name), s.material_interface.get_name()) for s in m.static_materials]}, tris={[SMES.get_number_of_triangles(m, l) if hasattr(SMES, "get_number_of_triangles") else "?" for l in range(m.get_num_lods())]}')
+    for k, (lab, a, comp) in enumerate(copies(mesh_of(c))):
         a.modify(); l0 = a.get_actor_location()
         for i, s in enumerate(m.static_materials):                     # every bark slot, so no LOD can show another bark
             if 'bark' in str(s.material_slot_name).lower(): comp.set_material(i, barks[c][k % 3])
