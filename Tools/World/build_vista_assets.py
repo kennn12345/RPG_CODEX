@@ -876,7 +876,7 @@ def b_details():
         mesh = world_asset(n, {'Bark': M('M_Vista_Bark'), 'Wood': M('M_Vista_WoodCut')}, (), min_hulls=1)
         if mesh: foliage_type(mesh, 0.3, (0.8, 1.2), shadow=True, cull=15000, collision=True, align=True, sink=6)
 
-def stone_graph(m, moss=0.0):
+def stone_graph(m, moss=0.0, alb=None, nrm=None, detail=None, tint=(0.54, 0.66, 0.56), moss_tex=None, moss_rgb=(92, 132, 26)):
     """R02 painted stone (rock library + cliffs): Stone_R02 albedo (big painted patches, a few long cracks, strata, chips)
     projected on the three world axes, x Tint, x vertex colour R edge light / G height / B chunk value (Rocks_R02, cliffs
     R02); relief from Stone_R02_Normal on the same three axes (world-space normal, UDN blend); moss on up-facing tops."""
@@ -894,9 +894,22 @@ Nrm = normalize(float3(nx.z, nx.x, nx.y) * bw.x + float3(ny.x, ny.z, ny.y) * bw.
 Nrm = normalize(lerp(Nrm, N, mossMask * Moss * 0.7));                         // moss is soft
 return lerp(c, MossC * lerp(0.8, 1.15, w.n(WP.xy / 25.0)), mossMask * Moss);
 '''
-    c = custom(m, code, ['TexXY', 'TexXZ', 'TexYZ', 'NXY', 'NXZ', 'NYZ', 'WP', 'N', 'VC', 'Tint', 'Relief', 'MossC', 'Moss'], F3, (('Nrm', F3),), -300, 0)
+    ins = ['TexXY', 'TexXZ', 'TexYZ', 'NXY', 'NXZ', 'NYZ', 'WP', 'N', 'VC', 'Tint', 'Relief', 'MossC', 'Moss']
+    if detail:                                      # optional fine layer: (value texture, normal texture, tile cm, value amount, relief)
+        code = code.replace('float3 c = Tex * Tint;', 'float DetV = DvXY.r * bw.z + DvXZ.r * bw.y + DvYZ.r * bw.x;\nfloat3 c = Tex * Tint * lerp(1.0, DetV * 2.0, DetailAmt);   // value averages 0.5: colour stays')
+        code = code.replace('float3 nz = float3(tz.xy', 'tz.xy += DnXY.xy * DetailRelief; ty.xy += DnXZ.xy * DetailRelief; tx.xy += DnYZ.xy * DetailRelief;\nfloat3 nz = float3(tz.xy')
+        ins += ['DvXY', 'DvXZ', 'DvYZ', 'DnXY', 'DnXZ', 'DnYZ', 'DetailAmt', 'DetailRelief']
+    if moss_tex:                                    # carpet moss: (value texture, normal texture, tile cm, value amount, relief, thickness cm, bump cm). Smooth edge, faint contact shadow
+        old_mask = 'float mossMask = saturate((N.z - 0.45) / 0.3) * smoothstep(0.38, 0.62, w.fbm(WP.xy / 70.0) * 0.7 + 0.3 * VC.g);'
+        # BroadUp = vertex colour alpha, the broad surface faces up (Tools/World/weather_rock.py): no moss on tiny upward chips on steep faces
+        code = code.replace(old_mask, 'float mossRaw = saturate((N.z - 0.45) / 0.3) * smoothstep(0.38, 0.62, w.fbm(WP.xy / 70.0) * 0.7 + 0.3 * VC.g) * BroadUp + (MossV.r - 0.5) * 0.08;\n'
+                            'float mossMask = smoothstep(0.32, 0.46, mossRaw);\nc *= 1.0 - 0.16 * Moss * smoothstep(0.2, 0.34, mossRaw) * (1.0 - mossMask);')
+        code = code.replace('Nrm = normalize(lerp(Nrm, N, mossMask * Moss * 0.7));', 'float3 mossN = normalize(float3(N.xy + MossN.xy * MossRelief, N.z));\nNrm = normalize(lerp(Nrm, mossN, mossMask * Moss));')
+        code = code.replace('return lerp(c, MossC * lerp(0.8, 1.15, w.n(WP.xy / 25.0)), mossMask * Moss);', 'return lerp(c, MossC * lerp(0.94, 1.06, w.n(WP.xy / 25.0)) * lerp(1.0, MossV.r * 2.0, MossAmt), mossMask * Moss);')
+        ins += ['MossV', 'MossN', 'MossAmt', 'MossRelief', 'BroadUp']
+    c = custom(m, code, ins, F3, (('Nrm', F3),), -300, 0)
     wp = node(m, unreal.MaterialExpressionWorldPosition, -1700, 0)
-    alb = tex('T_Stone_R02_BaseColor') or tex('T_Stone_Painted_BaseColor'); nrm = tex('T_Stone_R02_Normal')
+    alb = alb or tex('T_Stone_R02_BaseColor') or tex('T_Stone_Painted_BaseColor'); nrm = nrm or tex('T_Stone_R02_Normal')
     for i, (r_, g_, b_, nm) in enumerate(((True, True, False, 'XY'), (True, False, True, 'XZ'), (False, True, True, 'YZ'))):
         mk = node(m, unreal.MaterialExpressionComponentMask, -1500, i * 200, r=r_, g=g_, b=b_, a=False); link(wp, '', mk, '')
         dv = node(m, unreal.MaterialExpressionDivide, -1350, i * 200, const_b=190.0); link(mk, '', dv, 'A')
@@ -905,12 +918,39 @@ return lerp(c, MossC * lerp(0.8, 1.15, w.n(WP.xy / 25.0)), mossMask * Moss);
             tn = node(m, unreal.MaterialExpressionTextureSample, -1100, i * 200 + 100, texture=nrm, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
             link(dv, '', tn, 'UVs'); link(tn, 'RGB', c, 'N' + nm)
         else: link(node(m, unreal.MaterialExpressionConstant3Vector, -1100, i * 200 + 100, constant=unreal.LinearColor(0, 0, 1, 1)), '', c, 'N' + nm)
+        if detail:
+            dd = node(m, unreal.MaterialExpressionDivide, -1350, i * 200 + 1000, const_b=detail[2]); link(mk, '', dd, 'A')
+            sv = node(m, unreal.MaterialExpressionTextureSample, -1100, i * 200 + 1000, texture=detail[0], sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+            link(dd, '', sv, 'UVs'); link(sv, 'RGB', c, 'Dv' + nm)
+            sd = node(m, unreal.MaterialExpressionTextureSample, -1100, i * 200 + 1100, texture=detail[1], sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+            link(dd, '', sd, 'UVs'); link(sd, 'RGB', c, 'Dn' + nm)
+    if detail:
+        feed(m, c, {'DetailAmt': ('scalar', detail[3]), 'DetailRelief': ('scalar', detail[4])}, x=-1000)
+    if moss_tex:                                    # moss lies on near-flat tops, so one top-down projection is enough
+        mk = node(m, unreal.MaterialExpressionComponentMask, -1500, 1800, r=True, g=True, b=False, a=False); link(wp, '', mk, '')
+        dd = node(m, unreal.MaterialExpressionDivide, -1350, 1800, const_b=moss_tex[2]); link(mk, '', dd, 'A')
+        sv = node(m, unreal.MaterialExpressionTextureSample, -1100, 1800, texture=moss_tex[0], sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+        link(dd, '', sv, 'UVs'); link(sv, 'RGB', c, 'MossV')
+        sd = node(m, unreal.MaterialExpressionTextureSample, -1100, 1900, texture=moss_tex[1], sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+        link(dd, '', sd, 'UVs'); link(sd, 'RGB', c, 'MossN')
+        broad_up = node(m, unreal.MaterialExpressionVertexColor, -900, 2000); link(broad_up, 'A', c, 'BroadUp')
+        feed(m, c, {'MossAmt': ('scalar', moss_tex[3]), 'MossRelief': ('scalar', moss_tex[4])}, x=-1000)
+        # real thickness: moss placement depends on world position, so it can't be baked into the mesh; the same formula pushes the surface out here
+        lift = custom(m, HELP + r'''
+float raw = saturate((N.z - 0.45) / 0.3) * smoothstep(0.38, 0.62, w.fbm(WP.xy / 70.0) * 0.7 + 0.3 * VC.g) * BroadUp;
+return N * smoothstep(0.3, 0.46, raw) * (Thick + (w.fbm(WP.xy / 14.0) - 0.5) * Bump);
+''', ['WP', 'N', 'VC', 'Thick', 'Bump', 'BroadUp'], F3, (), -300, 500)
+        link(wp, '', lift, 'WP'); link(node(m, unreal.MaterialExpressionVertexNormalWS, -600, 500), '', lift, 'N')
+        link(node(m, unreal.MaterialExpressionVertexColor, -600, 600), '', lift, 'VC')
+        link(broad_up, 'A', lift, 'BroadUp')
+        feed(m, lift, {'Thick': ('scalar', moss_tex[5]), 'Bump': ('scalar', moss_tex[6])}, x=-600)
+        MEL.connect_material_property(lift, '', unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     link(wp, '', c, 'WP'); link(node(m, unreal.MaterialExpressionVertexNormalWS, -900, 700), '', c, 'N')
     link(node(m, unreal.MaterialExpressionVertexColor, -900, 800), '', c, 'VC')
     # Tint: green-leaning (was 0.74, 0.67, 0.58): Stone_R02 is warm beige and the golden-hour vista (17.3 h, lilac sky
     # ambient + haze) multiplies red ~1.8x more than green on shaded faces -> mauve-pink rocks. Neutral (0.66, 0.66, 0.55)
     # only moved the vista rock from 139/90/82 to 127/87/76; this tint cancels most of the scene's red gain.
-    feed(m, c, {'Tint': ('vector', (0.54, 0.66, 0.56)), 'Relief': ('scalar', 1.6), 'MossC': ('vector', lin((92, 132, 26))), 'Moss': ('scalar', moss)}, x=-700)
+    feed(m, c, {'Tint': ('vector', tint), 'Relief': ('scalar', 1.6), 'MossC': ('vector', lin(moss_rgb)), 'Moss': ('scalar', moss)}, x=-700)
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_BASE_COLOR)
     MEL.connect_material_property(c, 'Nrm', unreal.MaterialProperty.MP_NORMAL)
     MEL.connect_material_property(node(m, unreal.MaterialExpressionConstant, -300, 250, r=0.88), '', unreal.MaterialProperty.MP_ROUGHNESS)
@@ -927,12 +967,27 @@ def m_rock_stone():
         m = unreal.load_asset(path); MEL.delete_all_material_expressions(m)
     else:
         m = TOOLS.create_asset('M_Rock_Stone', f'{ROCKLIB}/Materials', unreal.Material, unreal.MaterialFactoryNew())
-    stone_graph(m)
-    finish(m)
     mpath = f'{ROCKLIB}/Materials/MI_Rock_Stone_Moss'
     mi = unreal.load_asset(mpath) if EAL.does_asset_exist(mpath) else \
         TOOLS.create_asset('MI_Rock_Stone_Moss', f'{ROCKLIB}/Materials', unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
-    MEL.set_material_instance_parent(mi, m); MEL.set_material_instance_scalar_parameter_value(mi, 'Moss', 1.0); save(mi)
+    if tex('T_Stone_R03_BaseColor'):      # the approved recipe, Docs/ROCK_RECIPE.md; plain rocks don't pay for the moss layer or its raised surface
+        stone = {'alb': tex('T_Stone_R03_BaseColor'), 'nrm': tex('T_Stone_R03_Normal'), 'tint': (0.47, 0.57, 0.68),
+                 'detail': (tex('T_Stone_R03_Detail_Value'), tex('T_Stone_R03_Detail_Normal'), 120.0, 1.0, 0.45)}
+        stone_graph(m, **stone)
+        finish(m)
+        mossy_path = f'{ROCKLIB}/Materials/M_Rock_Stone_Moss'
+        if EAL.does_asset_exist(mossy_path):
+            mossy = unreal.load_asset(mossy_path); MEL.delete_all_material_expressions(mossy)
+        else:
+            mossy = TOOLS.create_asset('M_Rock_Stone_Moss', f'{ROCKLIB}/Materials', unreal.Material, unreal.MaterialFactoryNew())
+        stone_graph(mossy, moss=1.0, moss_rgb=(68, 98, 22), moss_tex=(tex('T_Stone_R03_Moss_Value'), tex('T_Stone_R03_Moss_Normal'), 80.0, 1.0, 0.45, 3.0, 2.0), **stone)
+        finish(mossy)
+        MEL.set_material_instance_parent(mi, mossy)
+    else:
+        stone_graph(m)
+        finish(m)
+        MEL.set_material_instance_parent(mi, m)
+    MEL.set_material_instance_scalar_parameter_value(mi, 'Moss', 1.0); save(mi)
     return m, mi
 
 def b_rocks():
@@ -953,6 +1008,38 @@ def b_rocks():
 def b_stone():
     """stone materials only (M_Rock_Stone + moss instance, cliff M_Vista_Rock), no rock re-import."""
     m_rock_stone(); m_rock()
+
+def b_stone_r03():
+    """the approved rock look (Docs/ROCK_RECIPE.md): imports the R03 textures and rebuilds the rock materials. Cliffs and terrain stay on R02."""
+    src = os.path.abspath(os.path.join(unreal.Paths.project_saved_dir(), 'StoneTest'))
+    for name, png, kind in (('T_Stone_R03_BaseColor', 'Stone_NoBands_BaseColor', 'c'), ('T_Stone_R03_Normal', 'Stone_NoBands_Normal', 'n'),
+                            ('T_Stone_R03_Detail_Value', 'Stone_Detail_Value', 'data'), ('T_Stone_R03_Detail_Normal', 'Stone_Detail_Normal', 'n'),
+                            ('T_Stone_R03_Moss_Value', 'Moss_Carpet_Value', 'data'), ('T_Stone_R03_Moss_Normal', 'Moss_Carpet_Normal', 'n')):
+        import_texture(name, f'{src}/{png}.png', kind)
+    m_rock_stone()
+
+def b_rock_test():
+    """Trial look for one test rock: its own material, only used by the rock preview, so the rock library stays as it is.
+    Approved: bands and cracks removed from the textures (Tools/World/destripe_stone_texture.py); fine detail layer
+    (Tools/World/make_stone_detail.py), 1.2 m tile; about 10% darker with a bit more blue, staying near light grey because
+    these rocks need to match the cliffs later; carpet-like raised moss with smooth edges (Tools/World/make_moss_texture.py)."""
+    src = os.path.abspath(os.path.join(unreal.Paths.project_saved_dir(), 'StoneTest'))
+    import_texture('T_StoneTest_NoBands_BaseColor', f'{src}/Stone_NoBands_BaseColor.png', 'c')
+    import_texture('T_StoneTest_NoBands_Normal', f'{src}/Stone_NoBands_Normal.png', 'n')
+    import_texture('T_StoneTest_Detail_Value', f'{src}/Stone_Detail_Value.png', 'data')
+    import_texture('T_StoneTest_Detail_Normal', f'{src}/Stone_Detail_Normal.png', 'n')
+    import_texture('T_StoneTest_Moss_Value', f'{src}/Moss_Carpet_Value.png', 'data')
+    import_texture('T_StoneTest_Moss_Normal', f'{src}/Moss_Carpet_Normal.png', 'n')
+    path = f'{ROCKLIB}/Test/M_RockTest'
+    if EAL.does_asset_exist(path):
+        m = unreal.load_asset(path); MEL.delete_all_material_expressions(m)
+    else:
+        m = TOOLS.create_asset('M_RockTest', f'{ROCKLIB}/Test', unreal.Material, unreal.MaterialFactoryNew())
+    stone_graph(m, moss=1.0, alb=tex('T_StoneTest_NoBands_BaseColor'), nrm=tex('T_StoneTest_NoBands_Normal'),
+                detail=(tex('T_StoneTest_Detail_Value'), tex('T_StoneTest_Detail_Normal'), 120.0, 1.0, 0.45),
+                tint=(0.47, 0.57, 0.68),
+                moss_tex=(tex('T_StoneTest_Moss_Value'), tex('T_StoneTest_Moss_Normal'), 80.0, 1.0, 0.45, 3.0, 2.0), moss_rgb=(68, 98, 22))
+    finish(m)
 
 def b_textures():
     """painted textures from the Blender libraries (in place: re-import into the same texture asset).
@@ -1055,8 +1142,8 @@ def b_review():
         set_all(sw, M('M_Vista_Terrain')); nanite(sw)
 
 BUILDERS = {'textures': b_textures, 'materials': b_materials, 'review': b_review, 'ground': b_ground, 'grass': b_grass, 'grass_lighting': b_grass_lighting, 'flowers': b_flowers, 'trees_round': b_trees_round,
-            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'leaf_palette': b_leaf_palette, 'leaf_detail': b_leaf_detail, 'details': b_details, 'rocks': b_rocks, 'stone': b_stone, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
-ORDER = list(BUILDERS)                       # materials first: the mesh builders assign them
+            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'leaf_palette': b_leaf_palette, 'leaf_detail': b_leaf_detail, 'details': b_details, 'rocks': b_rocks, 'stone': b_stone, 'stone_r03': b_stone_r03, 'rock_test': b_rock_test, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
+ORDER = [n for n in BUILDERS if n not in ('rock_test', 'stone_r03')]   # materials first: the mesh builders assign them; these two only run by name
 
 def requested():
     raw = ' '.join(sys.argv[1:]) or os.environ.get('RPG_VISTA_ASSETS', '') or 'all'
