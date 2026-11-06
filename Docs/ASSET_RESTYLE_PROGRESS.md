@@ -183,6 +183,15 @@ Raw shots: Saved/Screenshots/Assets (AS_*_16.00 / _17.30), Saved/Screenshots/Wor
 - Not checked: FPS, shots of the ancient tree. Open for the user: stems look orange in direct sun (`Stem Color`); sunlit leaves are pale at noon, before this change too.
 - `Visual.FlickerShots` also takes `RPG_FLICKER_HOUR` and several `;`-separated `RPG_FLICKER_SPOT`s, handy for close shots of a tree at a chosen time.
 
+## Bark rounds - started 2026-11-05
+- User plan: 3 bark variations per tree model, each placed copy uses one, one review round per model: Lux A to J, then Jabami. Ancient tree left out. A variation = same colour with a very slight tone shift, its own ridge pattern, a knot or two.
+- Round 1 Lux A done, user: "Good, commit it". Look: deep brown, vertical ridges, hand-painted. Copies split 3/2/2 across the barks.
+- Per model: add a recipe to `make_bark_textures.py`; `merge_fab_bark.py -- SM_Lux_Tree_X` (prints `across`, copy it into the recipe; writes `_bark_merged` FBX + LODs); `make_bark_textures.py -- Lux_X`; `RPG_BARK_TREES=X` runs `import_fab_bark.py` (Unreal closed). It imports in place: position, leaves and collision stay.
+- Why merge: the pack's bark is separate tubes (Lux A: 25) with UV jumps that cut crisp ridges. Merged = voxel union, collars smoothed where pieces meet, grain UV (U along the surface from the base, V around the limb). Thin twigs may go; user accepted that because leaves hide them.
+- Traps: UVs must be computed BEFORE reducing or the ridges kink; tiny stray limb slices must be merged or they cause notches; each LOD import needs material names Bark/Leaves or extra slots appear (Lux A still has 4 unused ones); per-actor bark goes on every bark slot.
+- All Lux trunks use `MI_Fab_Trunk_NoGlow` until their round: the pack's `MM_Atlas` has an always-on emissive that made trunks brighter at midnight than noon. Pack materials are not edited. Meshes in `/Game/FabPacks/Restyled` are git-ignored: `_bark_merged` and these tools rebuild them.
+- Not checked: FPS (Lux A 15k -> 21.3k / 12.8k / 5k tris by LOD, bark 9k / 4k / 1.5k; measure before repeating across 11 models). Open: shaded trunks are very dark (idea: sky-following fill in `M_Fab_Bark`, check midnight); `M_Jabami_Bark` has no texture, checkerboard until its round.
+
 ## Commits
 - 84f52c4 Split world asset build from layout; add R02 restyle sources and review stage
 - 33d54cb Restyle rocks, ground, cliffs and small effects toward the reference palette
