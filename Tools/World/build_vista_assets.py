@@ -757,6 +757,7 @@ def b_trees_round():
 
 MAYU = '/Game/StylizedTreesByMayu/01_Trees'
 TREE_LEAF_COLOURS = {'Color 1': (40, 76, 58), 'Color 2': (66, 122, 76), 'Tip Color 3': (103, 155, 98)}
+LEAF_TONE_SPREAD, LEAF_VEIN_DARKEN, LEAF_STEM_COLOUR = 0.7, 0.52, (96, 68, 44)   # palette x .65-1.35, veins x .48
 
 def b_leaf_palette():
     """Update the shared leaf instance only; placed Fab/ancient trees inherit these colours. No mesh/map rebuild."""
@@ -766,6 +767,50 @@ def b_leaf_palette():
         MEL.set_material_instance_vector_parameter_value(mi, name, unreal.LinearColor(*lin(rgb), 1))
     MEL.set_material_instance_scalar_parameter_value(mi, 'Emissive Intensity', 0.0)
     save(mi)
+
+def m_hero_leaves():
+    """Project copy of the pack's leaf master with T_Hero_LeafSpray_2x2_Detail (Tools/World/make_leaf_detail.py) on top of
+    its colours: per-leaf tones and dark veins only SCALE the palette, so a new palette keeps them; stems stay Stem Color.
+    The pack's own master is not edited. Opacity, wind and normals are the pack's."""
+    path = f'{MATS}/M_Hero_Leaves'
+    if not EAL.does_asset_exist(path):
+        if not EAL.duplicate_asset(f'{MAYU}/00_Base/Material/M_StylizedTree', path):
+            problem('M_Hero_Leaves: could not copy the pack master'); return None
+    m = unreal.load_asset(path)
+    base = MEL.get_material_property_input_node(m, unreal.MaterialProperty.MP_BASE_COLOR)
+    if base is None: problem('M_Hero_Leaves: no base colour input'); return None
+    if not isinstance(base, unreal.MaterialExpressionCustom):        # a second run keeps the graph
+        fill = custom(m, 'float3 c = Base * (1 + (D.r - 0.5) * Spread) * (1 - D.b * Vein); return lerp(c, Stem, D.g);',
+                      ['Base', 'D', 'Spread', 'Vein', 'Stem'], F3, (), base.get_editor_property('material_expression_editor_x') + 300,
+                      base.get_editor_property('material_expression_editor_y') + 300)
+        d = node(m, unreal.MaterialExpressionTextureSampleParameter2D, fill.get_editor_property('material_expression_editor_x') - 500,
+                 fill.get_editor_property('material_expression_editor_y'), parameter_name='Leaf Detail', texture=tex('T_Hero_LeafSpray_2x2_Detail'),
+                 sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+        link(base, '', fill, 'Base'); link(d, 'RGB', fill, 'D')
+        link(scalar(m, 'Tone Spread', LEAF_TONE_SPREAD, -900, 900), '', fill, 'Spread')
+        link(scalar(m, 'Vein Darken', LEAF_VEIN_DARKEN, -900, 1050), '', fill, 'Vein')
+        link(vector(m, 'Stem Color', lin(LEAF_STEM_COLOUR), -900, 1200), '', fill, 'Stem')
+        MEL.connect_material_property(fill, '', unreal.MaterialProperty.MP_BASE_COLOR)
+        MEL.recompile_material(m); save(m)
+    return m
+
+def b_leaf_detail():
+    """Stems, veins and tones on the shared leaf instance; placed Fab/ancient trees inherit them. No mesh/map rebuild."""
+    import_texture('T_Hero_LeafSpray_2x2_Detail', f'{SRC}/World_R02/textures/Hero_LeafSpray_2x2_Detail.png', 'data')
+    m = m_hero_leaves(); mi = M('MI_Hero_MayuLeaves')
+    if not m or not mi: problem('leaf_detail: M_Hero_Leaves or MI_Hero_MayuLeaves missing'); return
+    # children loaded first and refreshed with the parent: saving draws a thumbnail, and an instance still holding data from
+    # its old parent trips an engine assertion (UniformExpressionCache) that crashes the editor
+    kids = [load(p) for p in ('/Game/FabPacks/Restyled/MI_Fab_OurLeaves_Lux', '/Game/FabPacks/Restyled/MI_Fab_OurLeaves_Jabami')]
+    if not all(kids): problem('leaf_detail: a child leaf instance is missing'); return
+    MEL.set_material_instance_parent(mi, m)
+    MEL.update_material_instance(mi)
+    for c in kids: MEL.update_material_instance(c)
+    save(mi)
+    for c in kids: save(c)
+    parents = [c.get_editor_property('parent').get_name() for c in kids]
+    unreal.log(f'LEAF_DETAIL parent={mi.get_editor_property("parent").get_name()} children={parents}')
+
 def mayu_leaf_mi():
     """hero leaves on the Fab pack's stylized leaf material (Mayu's Stylized Trees, Standard License): white leaf-spray
     mask + material colouring (height gradient Color 1 -> Color 2, tip colour, fresnel rim, wind; emission disabled), tuned
@@ -778,7 +823,7 @@ def mayu_leaf_mi():
             if not master.get_editor_property(k): master.set_editor_property(k, True); changed = True
         except Exception: pass
     if changed: MEL.recompile_material(master); save(master)
-    mi = instance('MI_Hero_MayuLeaves', master,
+    mi = instance('MI_Hero_MayuLeaves', m_hero_leaves() or master,
                   vectors={name: lin(rgb) for name, rgb in TREE_LEAF_COLOURS.items()},  # darker green, without yellow tips
                   scalars={'Height': 1450.0, 'SmoothStep Min': 0.2, 'Fresnel ExponentIn': 3.0, 'Emissive Intensity': 0.0,
                            'Texture Size': 1.0, 'BillBoard Inflate': 0.0, 'Billboard Sscale': 1.0})
@@ -924,20 +969,27 @@ def b_textures():
                             ('T_Petal_R02_BaseColor', f'{W2}/Petal_R02_BaseColor.png', 'c'),
                             ('T_GroundGrass_R02_BaseColor', f'{W2}/GroundGrass_R02_BaseColor.png', 'c'),
                             ('T_GroundDirt_R02_BaseColor', f'{W2}/GroundDirt_R02_BaseColor.png', 'c'),
-                            ('T_GroundDirt_R02_Normal', f'{W2}/GroundDirt_R02_Normal.png', 'n')):
-        if not os.path.exists(png): problem(f'{name}: missing {png}'); continue
-        t = unreal.AssetImportTask(); t.filename = png; t.destination_path = TEXTURES; t.destination_name = name
-        t.automated = True; t.replace_existing = True; t.save = True
-        TOOLS.import_asset_tasks([t])
-        tx = tex(name)
-        if not tx: problem(f'{name}: import failed'); continue
-        if kind == 'n':
-            tx.set_editor_property('compression_settings', unreal.TextureCompressionSettings.TC_NORMALMAP); tx.set_editor_property('srgb', False)
-        else:
-            tx.set_editor_property('srgb', True)
-        if kind == 'leaf':
-            tx.set_editor_property('mip_gen_settings', unreal.TextureMipGenSettings.TMGS_SHARPEN4)   # leaf edges stay crisp at distance
-        save(tx); unreal.log(f'TEXTURE {name}')
+                            ('T_GroundDirt_R02_Normal', f'{W2}/GroundDirt_R02_Normal.png', 'n'),
+                            ('T_Hero_LeafSpray_2x2_Detail', f'{W2}/Hero_LeafSpray_2x2_Detail.png', 'data')):
+        import_texture(name, png, kind)
+
+def import_texture(name, png, kind):
+    """kind: 'c' colour (sRGB), 'n' normal map, 'leaf' colour with sharpened mips, 'data' linear channels (BC7)."""
+    if not os.path.exists(png): problem(f'{name}: missing {png}'); return
+    t = unreal.AssetImportTask(); t.filename = png; t.destination_path = TEXTURES; t.destination_name = name
+    t.automated = True; t.replace_existing = True; t.save = True
+    TOOLS.import_asset_tasks([t])
+    tx = tex(name)
+    if not tx: problem(f'{name}: import failed'); return
+    if kind == 'n':
+        tx.set_editor_property('compression_settings', unreal.TextureCompressionSettings.TC_NORMALMAP); tx.set_editor_property('srgb', False)
+    elif kind == 'data':
+        tx.set_editor_property('compression_settings', unreal.TextureCompressionSettings.TC_BC7); tx.set_editor_property('srgb', False)
+    else:
+        tx.set_editor_property('srgb', True)
+    if kind == 'leaf':
+        tx.set_editor_property('mip_gen_settings', unreal.TextureMipGenSettings.TMGS_SHARPEN4)   # leaf edges stay crisp at distance
+    save(tx); unreal.log(f'TEXTURE {name}')
 
 def tree_asset(name, fbx_dir, density, scale, lod_screens=(1.0, 0.3, 0.1), shadow=True):
     """Blender tree (Trees_R02) with its hand-made LODs + collision hulls; materials by slot (Bark/Leaves/Fill)."""
@@ -1003,7 +1055,7 @@ def b_review():
         set_all(sw, M('M_Vista_Terrain')); nanite(sw)
 
 BUILDERS = {'textures': b_textures, 'materials': b_materials, 'review': b_review, 'ground': b_ground, 'grass': b_grass, 'grass_lighting': b_grass_lighting, 'flowers': b_flowers, 'trees_round': b_trees_round,
-            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'leaf_palette': b_leaf_palette, 'details': b_details, 'rocks': b_rocks, 'stone': b_stone, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
+            'tree_ancient': b_tree_ancient, 'trees_forest': b_trees_forest, 'hero': b_hero, 'leaf_palette': b_leaf_palette, 'leaf_detail': b_leaf_detail, 'details': b_details, 'rocks': b_rocks, 'stone': b_stone, 'cliffs': b_cliffs, 'effects': b_effects, 'frozen': b_frozen}
 ORDER = list(BUILDERS)                       # materials first: the mesh builders assign them
 
 def requested():

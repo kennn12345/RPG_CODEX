@@ -163,20 +163,30 @@ namespace
 			if (GShaderCompilingManager && GShaderCompilingManager->IsCompiling()) return false;
 			if (Cameras.IsEmpty())
 			{
-				// RPG_FLICKER_SPOT = "x y z pitch yaw" (from BugIt's BugItGo line): one extra camera exactly where the user saw it
-				TArray<FString> Spot;
-				FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_FLICKER_SPOT")).ParseIntoArrayWS(Spot);
-				if (Spot.Num() >= 5)
-				{
-					ACameraActor* C = World->SpawnActor<ACameraActor>(FVector(FCString::Atod(*Spot[0]), FCString::Atod(*Spot[1]), FCString::Atod(*Spot[2])), FRotator(FCString::Atof(*Spot[3]), FCString::Atof(*Spot[4]), 0.f));
-					if (C) { C->SetActorLabel(TEXT("Spot")); Cameras.Add(C); }
-				}
-				else
-					for (TActorIterator<ACameraActor> It(World); It; ++It)
-						if (It->ActorHasTag(TEXT("WorldShot")) && (Prefix.IsEmpty() || It->GetActorNameOrLabel().StartsWith(Prefix))) Cameras.Add(*It);
-				if (Cameras.IsEmpty()) { Test->AddError(TEXT("FLICKER: no cameras")); return true; }
-				if (APawn* Player = Controller->GetPawn()) { Player->SetActorHiddenInGame(true); Player->SetActorEnableCollision(false); }
-				for (TActorIterator<ARPGSkyCycle> It(World); It; ++It) It->bAnimate = false;
+				// RPG_FLICKER_SPOT = "x y z pitch yaw" (from BugIt's BugItGo line): an extra camera exactly where the user saw it;
+					// several spots separated by ';' are labelled Spot, Spot1, Spot2...
+					TArray<FString> Spots;
+					FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_FLICKER_SPOT")).ParseIntoArray(Spots, TEXT(";"));
+					for (const FString& Text : Spots)
+					{
+						TArray<FString> Spot;
+						Text.ParseIntoArrayWS(Spot);
+						if (Spot.Num() < 5) continue;
+						ACameraActor* C = World->SpawnActor<ACameraActor>(FVector(FCString::Atod(*Spot[0]), FCString::Atod(*Spot[1]), FCString::Atod(*Spot[2])), FRotator(FCString::Atof(*Spot[3]), FCString::Atof(*Spot[4]), 0.f));
+						if (C) { C->SetActorLabel(Cameras.IsEmpty() ? FString(TEXT("Spot")) : FString::Printf(TEXT("Spot%d"), Cameras.Num())); Cameras.Add(C); }
+					}
+					if (Cameras.IsEmpty())
+						for (TActorIterator<ACameraActor> It(World); It; ++It)
+							if (It->ActorHasTag(TEXT("WorldShot")) && (Prefix.IsEmpty() || It->GetActorNameOrLabel().StartsWith(Prefix))) Cameras.Add(*It);
+					if (Cameras.IsEmpty()) { Test->AddError(TEXT("FLICKER: no cameras")); return true; }
+					if (APawn* Player = Controller->GetPawn()) { Player->SetActorHiddenInGame(true); Player->SetActorEnableCollision(false); }
+					// RPG_FLICKER_HOUR = time of day for the shots (default: as saved in the map)
+					const FString HourText = FPlatformMisc::GetEnvironmentVariable(TEXT("RPG_FLICKER_HOUR"));
+					for (TActorIterator<ARPGSkyCycle> It(World); It; ++It)
+					{
+						It->bAnimate = false;
+						if (!HourText.IsEmpty()) It->SetTimeOfDay(FCString::Atof(*HourText));
+					}
 			}
 			if (Cam >= Cameras.Num()) { UGameplayStatics::SetGlobalTimeDilation(World, 1.f); return true; }
 			if (Shot < 0)                                // aim, then let lighting + exposure settle (counted in rendered frames)

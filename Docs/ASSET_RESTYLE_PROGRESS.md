@@ -175,6 +175,14 @@ Raw shots: Saved/Screenshots/Assets (AS_*_16.00 / _17.30), Saved/Screenshots/Wor
 - Updated `Tools/World/build_vista_assets.py` palette source and added `leaf_palette` for material-only reapplication. Full hero builds also preserve the palette and zero emission.
 - Verified saved material in a fresh PIE session at 12:00, 17:18, and midnight, with matched sunset/night before-after captures. User aesthetic review pending.
 
+## Leaf detail: stems, veins, tones - 2026-11-05
+- User: brown stems, dark curved veins, and per-leaf tones that follow the colour if the palette changes. In-game verdict: "looks much better".
+- `Tools/World/make_leaf_detail.py` (Blender) reads the leaf mask and writes `Hero_LeafSpray_2x2_Detail.png`: R tone, G stems, B veins. Imported as `T_Hero_LeafSpray_2x2_Detail` (BC7, linear).
+- `M_Hero_Leaves` = project copy of the Mayu master; `Base x (1 + (tone - .5) x Tone Spread) x (1 - veins x Vein Darken)`, then `Stem Color` where the stems are. Pack master untouched. `MI_Hero_MayuLeaves` is parented to it, and the Fab child instances inherit it.
+- Reapply: `RPG_VISTA_ASSETS=leaf_detail` runs `build_vista_assets.py` (no mesh or map rebuild). Trap: repointing an instance needs its children loaded first and `update_material_instance` on them, or saving crashes the editor (UniformExpressionCache assertion).
+- Not checked: FPS, shots of the ancient tree. Open for the user: stems look orange in direct sun (`Stem Color`); sunlit leaves are pale at noon, before this change too.
+- `Visual.FlickerShots` also takes `RPG_FLICKER_HOUR` and several `;`-separated `RPG_FLICKER_SPOT`s, handy for close shots of a tree at a chosen time.
+
 ## Commits
 - 84f52c4 Split world asset build from layout; add R02 restyle sources and review stage
 - 33d54cb Restyle rocks, ground, cliffs and small effects toward the reference palette
