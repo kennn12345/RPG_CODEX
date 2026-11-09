@@ -888,6 +888,10 @@ def b_details():
         mesh = world_asset(n, {'Bark': M('M_Vista_Bark'), 'Wood': M('M_Vista_WoodCut')}, (), min_hulls=1)
         if mesh: foliage_type(mesh, 0.3, (0.8, 1.2), shadow=True, cull=15000, collision=True, align=True, sink=6)
 
+MOSS_LIFT = r'''
+float raw = saturate((BroadUp - 0.45) / 0.3) * smoothstep(0.38, 0.62, w.fbm(WP.xy / 70.0) * 0.7 + 0.3 * VC.g) * BroadUp;
+return float3(0, 0, 1) * smoothstep(0.3, 0.46, raw) * (Thick + (w.fbm(WP.xy / 14.0) - 0.5) * Bump);
+'''
 def stone_graph(m, moss=0.0, alb=None, nrm=None, detail=None, tint=(0.54, 0.66, 0.56), moss_tex=None, moss_rgb=(92, 132, 26)):
     """R02 painted stone (rock library + cliffs): Stone_R02 albedo (big painted patches, a few long cracks, strata, chips)
     projected on the three world axes, x Tint, x vertex colour R edge light / G height / B chunk value (Rocks_R02, cliffs
@@ -947,11 +951,11 @@ return lerp(c, MossC * lerp(0.8, 1.15, w.n(WP.xy / 25.0)), mossMask * Moss);
         link(dd, '', sd, 'UVs'); link(sd, 'RGB', c, 'MossN')
         broad_up = node(m, unreal.MaterialExpressionVertexColor, -900, 2000); link(broad_up, 'A', c, 'BroadUp')
         feed(m, c, {'MossAmt': ('scalar', moss_tex[3]), 'MossRelief': ('scalar', moss_tex[4])}, x=-1000)
-        # real thickness: moss placement depends on world position, so it can't be baked into the mesh; the same formula pushes the surface out here
-        lift = custom(m, HELP + r'''
-float raw = saturate((N.z - 0.45) / 0.3) * smoothstep(0.38, 0.62, w.fbm(WP.xy / 70.0) * 0.7 + 0.3 * VC.g) * BroadUp;
-return N * smoothstep(0.3, 0.46, raw) * (Thick + (w.fbm(WP.xy / 14.0) - 0.5) * Bump);
-''', ['WP', 'N', 'VC', 'Thick', 'Bump', 'BroadUp'], F3, (), -300, 500)
+        # real thickness: moss placement depends on world position, so it can't be baked into the mesh; the same formula pushes the surface out here.
+        # The push must be identical for every copy of a vertex: at sharp corners one position has several normals (split
+        # normals), and pushing each copy along its own N / gating on its own N.z tore 3 cm see-through cracks along the
+        # corners (2026-11-09). So: straight up, amount from per-vertex data only (BroadUp = vertex colour A, VC, world position).
+        lift = custom(m, HELP + MOSS_LIFT, ['WP', 'N', 'VC', 'Thick', 'Bump', 'BroadUp'], F3, (), -300, 500)
         link(wp, '', lift, 'WP'); link(node(m, unreal.MaterialExpressionVertexNormalWS, -600, 500), '', lift, 'N')
         link(node(m, unreal.MaterialExpressionVertexColor, -600, 600), '', lift, 'VC')
         link(broad_up, 'A', lift, 'BroadUp')
