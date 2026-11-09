@@ -154,17 +154,34 @@ void ARPGSkyCycle::Apply()
 	if(CloudMaterial)
 	{
         const float P=Weather.Puffs,B=Weather.Billows,K=Weather.Broken,L=Weather.Layers,S=Weather.Shelf;
-        CloudMaterial->SetScalarParameterValue(TEXT("Layout_CloudGlobalScale"),P*40+B*55+K*24+L*30+S*20);
-        const float Coverage=P*(-.3f)+B*(-.22f)+K*.1f+L*.8f+S*1.05f;
+        CloudMaterial->SetScalarParameterValue(TEXT("Layout_CloudGlobalScale"),P*40+B*90+K*24+L*60+S*20);
+        const float Coverage=P*0.f+B*(-.05f)+K*.1f+L*1.5f+S*1.05f;
         CloudMaterial->SetScalarParameterValue(TEXT("Cloud_GlobalCoverage"),FMath::Lerp(-.7f,Coverage,FMath::Clamp(Weather.Clouds/.35f,0.f,1.f)));
-        CloudMaterial->SetScalarParameterValue(TEXT("Cloud_GlobalDensity"),P*.05f+B*.065f+K*.028f+L*.07f+S*.1f);
+        CloudMaterial->SetScalarParameterValue(TEXT("Cloud_GlobalDensity"),P*.3f+B*.3f+K*.028f+L*.2f+S*.1f);
         CloudMaterial->SetScalarParameterValue(TEXT("StormClouds"),0);
         CloudMaterial->SetVectorParameterValue(TEXT("Layout_CloudType"),FLinearColor(P+B+K*.8f+L*.25f+S*.3f,P*.04f+B*.02f+K*.35f+L*.8f+S*.25f,K*.1f+L*.05f,B*.18f+K*.1f+L+S*1.7f));
         CloudMaterial->SetVectorParameterValue(TEXT("Noise_Strength"),FLinearColor(.85f-P*.2f-B*.15f,.15f-P*.03f-B*.03f,.08f-P*.04f-B*.04f,2.2f-P*.6f-B*.5f));
-        CloudMaterial->SetVectorParameterValue(TEXT("Cloud_AlbedoColor"),FLinearColor::LerpUsingHSV(FLinearColor(.98f,.99f,1.f,.45f),FLinearColor(.55f,.59f,.65f,.7f),FMath::Clamp(L*.3f+S,0.f,1.f)));
+        CloudMaterial->SetVectorParameterValue(TEXT("Cloud_AlbedoColor"),FLinearColor::LerpUsingHSV(FLinearColor(.68f,.8f,1.f,.45f),FLinearColor(.55f,.59f,.65f,.7f),FMath::Clamp(L*.3f+S,0.f,1.f)));
         // Position is integrated in Tick; changing wind never jumps Time*velocity.
         CloudMaterial->SetVectorParameterValue(TEXT("Layout_WindControls"),FLinearColor(0,0,0,0));
-        if(CloudVolume){CloudVolume->SetLayerBottomAltitude(P*1.1f+B*1.1f+K*1.1f+L*.9f+S*.7f);CloudVolume->SetLayerHeight(P*3+B*6+K*2.8f+L*2.2f+S*4.2f);}
+        if(CloudVolume){CloudVolume->SetLayerBottomAltitude(P*1.1f+B*1.1f+K*1.1f+L*.9f+S*.7f);CloudVolume->SetLayerHeight(P*2+B*6+K*2.8f+L*2.2f+S*4.2f);}
+        for(const auto& O:CloudScalarOverrides)
+        {
+            if(O.Key==TEXT("LayerBottomKm")){if(CloudVolume)CloudVolume->SetLayerBottomAltitude(O.Value);}
+            else if(O.Key==TEXT("LayerHeightKm")){if(CloudVolume)CloudVolume->SetLayerHeight(O.Value);}
+            else if(O.Key==TEXT("ViewSampleScale")){if(CloudVolume)CloudVolume->SetViewSampleCountScale(O.Value);}
+            else if(O.Key==TEXT("SkyBottomOcclusion")){if(CloudVolume)CloudVolume->SetSkyLightCloudBottomOcclusion(O.Value);}
+            else if(O.Key==TEXT("SunCloudScatter"))
+            {
+                if(Sun)if(auto* Light=Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
+                {Light->CloudScatteredLuminanceScale=FLinearColor(O.Value,O.Value,O.Value);Light->MarkRenderStateDirty();}
+            }
+            else CloudMaterial->SetScalarParameterValue(O.Key,O.Value);
+        }
+        for(const auto& O:CloudVectorOverrides)CloudMaterial->SetVectorParameterValue(O.Key,O.Value);
+        for(const auto& O:CloudTextureOverrides)
+            if(UTexture* Tex=LoadObject<UTexture>(nullptr,*O.Value))CloudMaterial->SetTextureParameterValue(O.Key,Tex);
+            else UE_LOG(LogTemp,Warning,TEXT("CloudLook texture override not found: %s"),*O.Value);
 	}
 
 	if (Sun)

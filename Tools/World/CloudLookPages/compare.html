@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Look Compare</title>
+<style>
+:root{--bg:#f4f2ee;--fg:#1d1d1f;--muted:#6b6b70;--card:#fff;--line:#dedad3;--accent:#2f6fb0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181a;--fg:#ececec;--muted:#9a9aa0;--card:#202124;--line:#33353a;--accent:#7fb2e5}}
+:root[data-theme="dark"]{--bg:#17181a;--fg:#ececec;--muted:#9a9aa0;--card:#202124;--line:#33353a;--accent:#7fb2e5}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1500px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}
+.lede{color:var(--muted);margin:0 0 28px}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin:0 0 24px}
+h2{font-size:19px;margin:0 0 2px}
+.what{color:var(--muted);margin:0 0 14px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+figure{margin:0}
+figure img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:8px;display:block;background:var(--line)}
+figcaption{font-size:13px;color:var(--muted);margin-top:4px}
+.ours figcaption{color:var(--accent);font-weight:600}
+a{color:var(--accent)}
+.label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:10px 0 6px}
+</style>
+</head>
+<body>
+<main>
+<h1>Our clouds vs real clouds, noon</h1>
+<p class="lede">Top row: our game at 12:00, looking toward the horizon and then 38° up from the Overlook. Bottom row: real photos of the cloud type each style is meant to be (Wikimedia Commons, freely licensed — click a caption for the source and author).</p>
+<div id="sections"></div>
+</main>
+<script>
+const C = n => "https://commons.wikimedia.org/wiki/Special:FilePath/" + n + "?width=1200";
+const P = n => "https://commons.wikimedia.org/wiki/File:" + n;
+const styles = [
+ ["1_clear","Clear","Cloudless or near-cloudless blue sky.",
+  ["Cloudless_blue_sky.JPG","Clear_blue_sky_over_Loch_Gairloch.JPG","Blue_sky_with_wisps_of_cloud_on_a_clear_summer_morning.jpg"]],
+ ["2_puffs","Puffs (fair-weather cumulus)","Small, flat-bottomed, separated cotton-ball clouds on blue sky.",
+  ["Cumulus_humilis_clouds.jpg","Cumulus_clouds_in_fair_weather.jpeg","Cumulus_clouds_panorama.jpg"]],
+ ["3_billows","Tall billows (towering cumulus)","Tall cauliflower-topped cumulus, taller than wide, bright tops and grey flat bases.",
+  ["Cumulus_congestus_cloud.jpg","Cumulus19_-_NOAA.jpg","Cumulus_congestus.jpg"]],
+ ["4_broken","Broken (stratocumulus)","Lumpy grey-white sheet with gaps of blue between clumps.",
+  ["Stratocumulus.jpg","Stratocumulus_undulatus.jpg","Stratocumulus_stratiformis_undulatus_perlucidus.jpg"]],
+ ["5_overcast","Overcast (stratus / nimbostratus)","Sky fully covered by a grey layer, flat soft light, no sun disc.",
+  ["Overcast_Sky.jpg","High_Stratus_nebulosus.jpg","2014_Nimbostratus.jpg"]],
+ ["6_storm_deck","Storm deck (shelf cloud / cumulonimbus)","Dark, low, heavy storm base, often a shelf edge with lighter sky behind.",
+  ["Shelf_cloud.jpg","Thunderstorm_with_lead_gust_front_-_NOAA.jpg","Shelfcloud.jpg"]],
+];
+const root = document.getElementById("sections");
+for (const [key, title, what, refs] of styles) {
+  const s = document.createElement("section");
+  s.innerHTML = `<h2>${title}</h2><p class="what">${what}</p>
+  <div class="label">Ours</div>
+  <div class="row ours">
+    <figure><img src="Noon/${key}_horizon.png" alt="Our ${title} toward horizon"><figcaption>Ours — horizon</figcaption></figure>
+    <figure><img src="Noon/${key}_up.png" alt="Our ${title} looking up"><figcaption>Ours — looking up</figcaption></figure>
+  </div>
+  <div class="label">Real</div>
+  <div class="row">${refs.map(r=>`<figure><img loading="lazy" src="${C(r)}" alt="${r}"><figcaption><a href="${P(r)}" target="_blank" rel="noopener">${decodeURIComponent(r).replace(/_/g," ")}</a></figcaption></figure>`).join("")}</div>`;
+  root.appendChild(s);
+}
+</script>
+</body>
+</html>

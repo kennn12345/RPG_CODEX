@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Edit Review</title>
+<style>
+:root{--bg:#f4f2ee;--fg:#1d1d1f;--muted:#6b6b70;--card:#fff;--line:#dedad3;--accent:#2f6fb0;--new:#2e8b57}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181a;--fg:#ececec;--muted:#9a9aa0;--card:#202124;--line:#33353a;--accent:#7fb2e5;--new:#6fcf97}}
+:root[data-theme="dark"]{--bg:#17181a;--fg:#ececec;--muted:#9a9aa0;--card:#202124;--line:#33353a;--accent:#7fb2e5;--new:#6fcf97}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1500px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:22px;margin:0 0 4px}
+.lede{color:var(--muted);margin:0 0 20px}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px}
+h2{font-size:15px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+h2.after{color:var(--new)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+figure{margin:0}
+img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:8px;display:block;background:var(--line)}
+figcaption{font-size:13px;color:var(--muted);margin-top:4px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+<h1 id="title"></h1>
+<p class="lede" id="lede"></p>
+<section><h2>Before</h2><div class="row" id="before"></div></section>
+<section><h2 class="after">After</h2><div class="row" id="after"></div></section>
+<section><h2>Real</h2><div class="row" id="real"></div></section>
+</main>
+<script>
+const q = new URLSearchParams(location.search);
+const style = q.get("style"), after = q.get("after"), before = q.get("before") || "Noon";
+const refs = (q.get("refs") || "").split("|").filter(Boolean);
+document.getElementById("title").textContent = q.get("title") || style;
+document.getElementById("lede").textContent = q.get("change") || "";
+const fig = (src, cap) => `<figure><img src="${src}" alt="${cap}"><figcaption>${cap}</figcaption></figure>`;
+document.getElementById("before").innerHTML = ["horizon","up"].map(v => fig(`${before}/${style}_${v}.png`, v === "up" ? "Looking up" : "Horizon")).join("");
+document.getElementById("after").innerHTML = ["horizon","up"].map(v => fig(`${after}/${style}_${v}.png`, v === "up" ? "Looking up" : "Horizon")).join("");
+document.getElementById("real").innerHTML = refs.map(r => `<figure><img src="https://commons.wikimedia.org/wiki/Special:FilePath/${r}?width=1200" alt="${r}"><figcaption><a href="https://commons.wikimedia.org/wiki/File:${r}" target="_blank" rel="noopener">${r.replace(/_/g," ")}</a></figcaption></figure>`).join("");
+</script>
+</body>
+</html>

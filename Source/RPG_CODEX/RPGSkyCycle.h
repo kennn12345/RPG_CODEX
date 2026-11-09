@@ -39,6 +39,11 @@ public:
 	UFUNCTION(BlueprintPure,Category="Weather") FRPGWeatherState GetWeatherState() const;
 	UFUNCTION(BlueprintCallable,Category="Sky|Preview") void RefreshSky() { Apply(); }
 	FVector GetCloudWindOffset()const{return CloudWindOffset;}
+	/** Look-development overrides applied after the weather-driven cloud values (empty in normal play).
+	 *  Scalar names LayerBottomKm / LayerHeightKm / ViewSampleScale drive the cloud component. */
+	TMap<FName,float> CloudScalarOverrides;
+	TMap<FName,FLinearColor> CloudVectorOverrides;
+	TMap<FName,FString> CloudTextureOverrides;
 	virtual void BeginPlay() override;
 
 	virtual void OnConstruction(const FTransform& Transform) override;

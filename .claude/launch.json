@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cloud-look",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["Tools/World/serve_cloud_look.js"],
+      "port": 8765
+    }
+  ]
+}
