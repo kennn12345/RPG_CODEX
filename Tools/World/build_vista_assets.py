@@ -628,6 +628,18 @@ return lerp(DayC, NightC, Night);
     link(df, '', c, 'Fade')
     MEL.connect_material_property(c, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     MEL.connect_material_property(c, 'Op', unreal.MaterialProperty.MP_OPACITY)
+    lighting = unreal.load_asset('/Game/RPG/Environment/Weather/MPC_WeatherLighting')
+    if lighting:
+        light = node(m, unreal.MaterialExpressionCollectionParameter, 0, 400)
+        light.set_editor_property('collection', lighting); light.set_editor_property('parameter_name', 'WaterLight')
+        lit = node(m, unreal.MaterialExpressionMultiply, 300, 0)
+        lit.set_editor_property('desc', 'Weather-lit lake mist')
+        link(c, '', lit, 'A'); link(light, '', lit, 'B')
+        MEL.connect_material_property(lit, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        opacity = node(m, unreal.MaterialExpressionMultiply, 300, 200)
+        opacity.set_editor_property('desc', 'Weather-lit mist opacity')
+        link(c, 'Op', opacity, 'A'); link(light, '', opacity, 'B')
+        MEL.connect_material_property(opacity, '', unreal.MaterialProperty.MP_OPACITY)
     MEL.recompile_material(m); save(m); return m
 
 def m_moss():

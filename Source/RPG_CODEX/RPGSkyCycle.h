@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "RPGWeatherSubsystem.h"
 #include "RPGSkyCycle.generated.h"
 
 class ADirectionalLight;
@@ -9,6 +10,11 @@ class AExponentialHeightFog;
 class APostProcessVolume;
 class ASkyLight;
 class UMaterialParameterCollection;
+class URPGWeatherEffectsComponent;
+class UMaterialInstanceDynamic;
+class UVolumetricCloudComponent;
+class URPGGroundFogComponent;
+class URPGRainSurfaceComponent;
 
 // One continuous day/night cycle (approved sky concept: large sun and moon, stars + Milky Way at night, gradual
 // morning / noon / sunset / night). Moves the real Sun and Moon directional lights (both lighting the sky atmosphere:
@@ -22,6 +28,18 @@ class RPG_CODEX_API ARPGSkyCycle : public AActor
 
 public:
 	ARPGSkyCycle();
+	UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Weather") TObjectPtr<URPGWeatherEffectsComponent> WeatherEffects;
+	UPROPERTY(VisibleAnywhere,Category="Weather") TObjectPtr<URPGGroundFogComponent> GroundFog;
+	UPROPERTY(VisibleAnywhere,Category="Weather") TObjectPtr<URPGRainSurfaceComponent> RainSurfaces;
+	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="Sky|Preview",meta=(ClampMin="1",ClampMax="30")) int32 PreviewDayOfMonth=30;
+	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="Sky|Preview") ERPGWeatherType PreviewWeather=ERPGWeatherType::Clear;
+	UFUNCTION(BlueprintPure,Category="Sky") float GetMoonPhase() const;
+	UFUNCTION(BlueprintPure,Category="Sky") float GetMoonIllumination() const;
+	UFUNCTION(BlueprintPure,Category="Sky") FVector GetMoonDirection() const;
+	UFUNCTION(BlueprintPure,Category="Weather") FRPGWeatherState GetWeatherState() const;
+	UFUNCTION(BlueprintCallable,Category="Sky|Preview") void RefreshSky() { Apply(); }
+	FVector GetCloudWindOffset()const{return CloudWindOffset;}
+	virtual void BeginPlay() override;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -33,9 +51,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sky")
 	bool bAnimate = true;
 
-	// Real minutes for one full 24 h cycle.
+	// Full cycle duration. During play the shared calendar supplies this value.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sky", meta = (ClampMin = "0.1"))
-	float DayLengthMinutes = 24.f;
+	float DayLengthMinutes = 120.f;
 
 	// Compass direction (world yaw) where the sun rises; it sets opposite.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sky")
@@ -81,6 +99,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sky|Light")
 	float MoonIntensity = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky|Light") float MoonLightScale=.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sky|Light")
 	FLinearColor MoonColor = FLinearColor(0.55f, 0.66f, 1.f);
@@ -110,6 +129,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Sky")
 	void SetTimeOfDay(float Hours);
 
+	// Calendar receiver; unlike SetTimeOfDay, does not write back into the clock.
+	void ApplyCalendarTime(float Hours);
+
 	// Unit vector toward the sun at the current time (the moon is opposite).
 	UFUNCTION(BlueprintPure, Category = "Sky")
 	FVector GetSunDirection() const;
@@ -120,4 +142,12 @@ public:
 
 private:
 	void Apply();
+	FVector CloudWindOffset=FVector::ZeroVector;
+	double CalendarSeconds() const;
+	bool bCachedFog=false;
+	float BaseFogDensity=.007f,BaseFogFalloff=.1f,BaseFogStart=2500,BaseFogMaxOpacity=.8f;
+	float BaseVolumeDistance=10000,BaseVolumeStart=0,BaseVolumeFade=0;
+	UPROPERTY(Transient) TObjectPtr<UMaterialParameterCollection> WaterLighting;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> CloudMaterial;
+	UPROPERTY(Transient) TObjectPtr<UVolumetricCloudComponent> CloudVolume;
 };

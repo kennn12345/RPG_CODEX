@@ -66,6 +66,9 @@ void ARPGStylizedRiver::Rebuild()
 		Piece->UpdateMesh();
 		Piece->RegisterComponent();
 		AddInstanceComponent(Piece);
+		// AddInstanceComponent changes this to Instance. Keep generated pieces
+		// identifiable so construction reruns replace them instead of duplicating.
+		Piece->CreationMethod = EComponentCreationMethod::UserConstructionScript;
 
 		if (!bCreateWaterZones) continue;
 		// Water zone for this piece: top at the water surface, current along the river.
@@ -82,5 +85,6 @@ void ARPGStylizedRiver::Rebuild()
 		Zone->SetRelativeLocationAndRotation(0.5f * (P0 + P1) - FVector(0.f, 0.f, 0.5f * ZoneDepth), FRotator(0.f, Along.Rotation().Yaw, 0.f));
 		Zone->RegisterComponent();
 		AddInstanceComponent(Zone);
+		Zone->CreationMethod = EComponentCreationMethod::UserConstructionScript;
 	}
 }

@@ -150,7 +150,7 @@ if (ShoreWaves > 0.0) {
 float cf = CrestFoam * smoothstep(0.56, 0.66, Crest + (fn - 0.5) * 0.3) * smoothstep(0.10, 0.19, cl.x);
 float white = max(max(foam, sw), max(cf, streak * 0.95));
 Opacity = lerp(lerp(ShallowOpacity, DeepOpacity, smoothstep(0.0, 0.9, d)), 1.0, white);
-Emiss = white * float3(0.06, 0.07, 0.08);
+Emiss = float3(0,0,0); // Foam receives actual scene light; no constant night glow.
 float e = 0.12; float2 q = p * 1.4;
 float n0 = w.fbm(q), nx = w.fbm(q + float2(e, 0)), ny = w.fbm(q + float2(0, e));
 float3 det = float3((n0 - nx) * NormalStrength, (n0 - ny) * NormalStrength, 1.0);
@@ -244,10 +244,20 @@ def build_water_material():
     MEL.connect_material_property(c, 'Emiss', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     MEL.connect_material_property(c, 'Nrm', unreal.MaterialProperty.MP_NORMAL)
     MEL.connect_material_property(c, 'Rough', unreal.MaterialProperty.MP_ROUGHNESS)
-    spec = node(m, unreal.MaterialExpressionConstant, -300, 400, r=0.6); MEL.connect_material_property(spec, '', unreal.MaterialProperty.MP_SPECULAR)
+    lighting = unreal.load_asset('/Game/RPG/Environment/Weather/MPC_WeatherLighting')
+    if lighting:
+        light = node(m, unreal.MaterialExpressionCollectionParameter, -700, 400)
+        light.set_editor_property('collection', lighting)
+        light.set_editor_property('parameter_name', 'WaterLight')
+        spec = node(m, unreal.MaterialExpressionMultiply, -300, 400, const_b=0.6)
+        link(light, '', spec, 'A')
+    else:
+        spec = node(m, unreal.MaterialExpressionConstant, -300, 400, r=0.6)
+    MEL.connect_material_property(spec, '', unreal.MaterialProperty.MP_SPECULAR)
     out = node(m, unreal.MaterialExpressionSingleLayerWaterMaterialOutput, 400, 200)
     sc = vector(m, 'Scattering', (0.02, 0.07, 0.07), 0, 300); ab = vector(m, 'Absorption', (0.35, 0.06, 0.05), 0, 420)
-    link(sc, '', out, 'Scattering Coefficients'); link(ab, '', out, 'Absorption Coefficients')
+    # Preserve the accepted default volume coefficients. The original friendly-name
+    # connections did not bind these custom-output pins; do not change the water palette here.
     MEL.recompile_material(m); EAL.save_loaded_asset(m)
     insts = {}
     for name, params in INSTANCES.items():
@@ -274,26 +284,35 @@ INSTANCES = {
 
 # ------------------------------------------------------------------ underwater post-process + caustic decal
 UNDERWATER_CODE = HELP + r'''
+float3 litFogColor = FogColor * (.025 + .975 * SunLight);
 float f = 1.0 - exp(-Dep / FogDist);
-float3 c = lerp(Col * Tint, FogColor, saturate(f));
+float3 c = lerp(Col * Tint, litFogColor, saturate(f));
 float x = UV.x * 7.0 + UV.y * 1.8;                                            // slanted light rays from the surface
 float r = w.n(float2(x, T * 0.15)) * w.n(float2(x * 0.5 + 3.0, T * 0.1));
 r = smoothstep(0.22, 0.6, r) * pow(saturate(1.0 - UV.y), 1.5) * RayStrength;
-return c + FogColor * 2.2 * r * (1.0 - 0.5 * f);
+return c + litFogColor * 2.2 * r * SunLight * (1.0 - 0.5 * f);
 '''
 CAUSTIC_CODE = HELP + r'''
 float below = saturate((SurfaceZ - WP.z) / 10.0);
 float dep = max(SurfaceZ - WP.z, 0.0);
 float2 a = w.cell(WP.xy / 38.0 + float2(T * 0.05, 0), T * 0.9), b = w.cell(WP.xy / 29.0 - float2(0, T * 0.04) + 11.3, T * 0.7);
 float lines = (1.0 - smoothstep(0.0, 0.035, a.y)) * 0.6 + (1.0 - smoothstep(0.0, 0.03, b.y)) * 0.4;
-return saturate(lines * below * saturate(1.0 - dep / 300.0) * Strength);
+return saturate(lines * below * saturate(1.0 - dep / 300.0) * Strength) * SunLight;
 '''
 
 def build_underwater_materials():
+    def sunlight(mat, custom_node):
+        collection=unreal.load_asset('/Game/RPG/Environment/Weather/MPC_WeatherLighting')
+        if collection:
+            value=node(mat,unreal.MaterialExpressionCollectionParameter,-850,800,collection=collection,parameter_name='DirectSunlight')
+        else:
+            value=node(mat,unreal.MaterialExpressionConstant,-850,800,r=1.0) # standalone fixed-day water test
+        link(value,'',custom_node,'SunLight')
     F3, F1 = unreal.CustomMaterialOutputType.CMOT_FLOAT3, unreal.CustomMaterialOutputType.CMOT_FLOAT1
     pp = new_material('M_UnderwaterPP', WATER)
     pp.set_editor_property('material_domain', unreal.MaterialDomain.MD_POST_PROCESS)
-    c = custom(pp, UNDERWATER_CODE, ['Col', 'Dep', 'UV', 'T', 'FogColor', 'FogDist', 'Tint', 'RayStrength'], F3, [], 0, 0)
+    c = custom(pp, UNDERWATER_CODE, ['Col', 'Dep', 'UV', 'T', 'FogColor', 'FogDist', 'Tint', 'RayStrength', 'SunLight'], F3, [], 0, 0)
+    sunlight(pp,c)
     st = node(pp, unreal.MaterialExpressionSceneTexture, -600, -200, scene_texture_id=unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0)
     sd = node(pp, unreal.MaterialExpressionSceneTexture, -600, -60, scene_texture_id=unreal.SceneTextureId.PPI_SCENE_DEPTH)
     mk = node(pp, unreal.MaterialExpressionComponentMask, -400, -60, r=True, g=False, b=False, a=False); link(sd, 'Color', mk, '')
@@ -310,7 +329,8 @@ def build_underwater_materials():
     dm = new_material('M_WaterCaustics', WATER)
     dm.set_editor_property('material_domain', unreal.MaterialDomain.MD_DEFERRED_DECAL)
     dm.set_editor_property('blend_mode', unreal.BlendMode.BLEND_TRANSLUCENT)
-    c2 = custom(dm, CAUSTIC_CODE, ['WP', 'T', 'SurfaceZ', 'Strength'], F1, [], 0, 0)
+    c2 = custom(dm, CAUSTIC_CODE, ['WP', 'T', 'SurfaceZ', 'Strength', 'SunLight'], F1, [], 0, 0)
+    sunlight(dm,c2)
     link(node(dm, unreal.MaterialExpressionWorldPosition, -600, 0), '', c2, 'WP')
     link(node(dm, unreal.MaterialExpressionTime, -600, 100), '', c2, 'T')
     link(scalar(dm, 'SurfaceZ', 0.0, -600, 200), '', c2, 'SurfaceZ')

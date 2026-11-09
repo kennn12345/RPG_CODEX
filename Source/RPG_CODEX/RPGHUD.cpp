@@ -2,6 +2,8 @@
 
 #include "RPGCombatAimComponent.h"
 #include "RPGCombatStateComponent.h"
+#include "RPGWaitSubsystem.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/Canvas.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
@@ -9,6 +11,16 @@
 namespace
 {
 	TAutoConsoleVariable<int32> CVarReticle(TEXT("rpg.Reticle"), 1, TEXT("Combat reticle at the screen centre: 0 = off, 1 = on."));
+}
+
+void ARPGHUD::PostRender()
+{
+	const auto* PC=GetOwningPlayerController();
+	const auto* LP=PC?PC->GetLocalPlayer():nullptr;
+	const auto* Menu=LP?LP->GetSubsystem<URPGWaitSubsystem>():nullptr;
+	// AHUD's foreground debug canvas is painted above Slate, even when bShowHUD is false.
+	if(Menu && Menu->IsWeatherTestMenuOpen())DebugTextList.Reset();
+	Super::PostRender();
 }
 
 void ARPGHUD::DrawHUD()

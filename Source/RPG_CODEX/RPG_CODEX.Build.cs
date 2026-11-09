@@ -24,9 +24,10 @@ public class RPG_CODEX : ModuleRules
 			"AIModule",
 			"NavigationSystem"
 		});
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 		if (Target.bBuildEditor)
 		{
-			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "AnimGraph", "AnimGraphRuntime", "AssetTools", "MessageLog", "PoseSearch" });
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "AnimGraph", "AnimGraphRuntime", "AssetTools", "MessageLog", "PoseSearch", "Landscape", "Foliage" });
 		}
 	}
 }

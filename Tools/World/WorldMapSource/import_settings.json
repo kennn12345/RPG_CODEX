@@ -1,0 +1,67 @@
+{
+  "target_engine": "Unreal Engine 5.8.3 (not editor-tested)",
+  "status": "v1 approximate hand-digitized shoreline; land/water blockout only",
+  "extent_m": [
+    14000.0,
+    9000.0
+  ],
+  "heightmap_vertices": [
+    4033,
+    2521
+  ],
+  "section_size_quads": 63,
+  "sections_per_component": [
+    2,
+    2
+  ],
+  "components": [
+    32,
+    20
+  ],
+  "landscape_scale_cm": [
+    347.22222222222223,
+    357.14285714285717,
+    100
+  ],
+  "landscape_location_cm": [
+    -700000,
+    -450000,
+    0
+  ],
+  "sea_level_world_z_cm": 0,
+  "height_decode_m": "(uint16 - 32768) / 128",
+  "axes": "Image left to right = Unreal +X; image top to bottom = Unreal +Y. North = -Y. Origin is center.",
+  "area_method": "Raster sample count x sample cell area; approximate coast tracing. Mainland includes continental continuation outside dashed gameplay boundary.",
+  "measured_land_areas_km2": {
+    "Mainland": 51.322,
+    "Volcanic Isles": 10.376,
+    "Frostrock Island": 6.978,
+    "Greenharbor island": 0.901,
+    "Saltleaf island": 0.416,
+    "Marsh islet": 0.14,
+    "Gulf north island": 0.135,
+    "Gulf northeast islet": 0.062,
+    "Gulf northern islet": 0.03,
+    "Gulf east islet": 0.039,
+    "Gulf southeast islet": 0.099,
+    "Gulf southwest islet": 0.055,
+    "Southern coastal islet west": 0.036,
+    "Southern coastal islet middle": 0.124,
+    "Southern coastal islet east": 0.1,
+    "Southern island 1": 0.364,
+    "Southern island 2": 0.089,
+    "Southern island 3": 0.141,
+    "Southern island 4": 0.159,
+    "Southern island 5": 0.098,
+    "Snowy coastal islet": 0.155,
+    "Snowy small islet": 0.025
+  },
+  "limitations": [
+    "Not a final elevation model: rolling land capped at 60m; seabed approaches -60m.",
+    "Mountains, volcano, glacier, riverbeds and settlement grading are not yet modeled.",
+    "Lake is carved to sea datum for this blockout; raise to a planned freshwater elevation in next pass.",
+    "Water masks do not create Unreal Water actors; add water separately.",
+    "Small rocky decorations omitted; coastlines are approximate digitizations, not pixel-exact.",
+    "Import orientation and location must be checked before merging with an existing level."
+  ]
+}

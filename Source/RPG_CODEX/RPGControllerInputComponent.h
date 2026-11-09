@@ -142,7 +142,8 @@ private:
 	void OnCameraButtonReleased();
 	void OnCameraAdjust(const FInputActionValue& Value); // Right Stick while D-Pad Right is held
 	void OnWaitPressed();				// D-Pad Down
-	void OnJournalPressed();			// View
+	void OnWeatherTestPressed();
+    void OnJournalPressed();			// View
 	void OnMainMenuPressed();			// Menu
 
 	// ---------------- Helpers ----------------
@@ -201,7 +202,8 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DrawSheatheAction;		// D-Pad Left
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CameraButtonAction;		// D-Pad Right
 	UPROPERTY(Transient) TObjectPtr<UInputAction> WaitAction;				// D-Pad Down
-	UPROPERTY(Transient) TObjectPtr<UInputAction> JournalAction;			// View
+	UPROPERTY(Transient) TObjectPtr<UInputAction> WeatherTestAction;
+    UPROPERTY(Transient) TObjectPtr<UInputAction> JournalAction;			// View
 	UPROPERTY(Transient) TObjectPtr<UInputAction> MainMenuAction;			// Menu
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CameraAdjustAction;		// Right Stick (adjust mode only)
 

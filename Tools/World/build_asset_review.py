@@ -88,7 +88,7 @@ dsm.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
 dome.set_actor_scale3d(unreal.Vector(*(3.0e6 / max(dome_mesh.get_bounds().box_extent.x, 1.0),) * 3))
 cyc = spawn(unreal.RPGSkyCycle, (0, 0, 0), label='SkyCycle')
 for k, v in (('sun', sun), ('moon', moon), ('sky_light', sky), ('fog', fog), ('grade', pp), ('time_of_day', 17.3), ('animate', False),
-             ('sunrise_yaw', 140.0), ('day_length_minutes', 24.0), ('moon_intensity', 0.25), ('exposure_bias_night', -2.5), ('sky_light_day', 0.9), ('sun_intensity', 9.0),
+             ('sunrise_yaw', 140.0), ('day_length_minutes', 120.0), ('moon_intensity', 0.25), ('exposure_bias_night', -2.5), ('sky_light_day', 0.9), ('sun_intensity', 9.0),
              ('sun_color_low', unreal.LinearColor(1.0, 0.55, 0.28, 1)), ('haze_low', unreal.LinearColor(0.48, 0.32, 0.24, 1)), ('sky_light_night', 1.0)):
     try: cyc.set_editor_property(k, v)
     except Exception as ex: unreal.log_warning(f'sky cycle {k}: {ex}')

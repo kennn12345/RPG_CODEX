@@ -7,7 +7,7 @@ On screen, overexposed red shifts to pink or yellow, and too much green reads as
 import math, re
 import unreal
 
-SIZES_DEGREES = {'SunSize': 12.8, 'MoonSize': 16.0}
+SIZES_DEGREES = {'SunSize': 2.4, 'MoonSize': 3.0}
 EVENING = 'float evening = smoothstep(-0.2, 0.2, Ls.x);   // the sun rises and sets on opposite sides\n'
 GOLD = 'float3 zG = lerp(float3(0.30, 0.34, 0.70), float3(0.22, 0.05, 0.20), evening), hG = lerp(float3(1.0, 0.62, 0.34), float3(1.0, 0.20, 0.03), evening);   // low sun: dawn brightens, evening is red-orange and purple'
 TWILIGHT = 'float3 zT = lerp(float3(0.10, 0.10, 0.30), float3(0.12, 0.02, 0.20), evening), hT = lerp(float3(0.62, 0.38, 0.38), float3(0.60, 0.07, 0.08), evening);   // twilight: dusk red and purple'

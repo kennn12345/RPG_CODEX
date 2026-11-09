@@ -17,6 +17,7 @@ class RPG_CODEX_API ARPGHUD : public AHUD
 
 public:
 	virtual void DrawHUD() override;
+	virtual void PostRender() override;
 
 	/** Dot radius and ring radius, in pixels at 1080p (scaled with the screen height). */
 	UPROPERTY(EditAnywhere, Category = "RPG|Reticle")

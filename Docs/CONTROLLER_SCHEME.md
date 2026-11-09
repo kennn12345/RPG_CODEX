@@ -30,7 +30,8 @@ Implemented in `Source/RPG_CODEX/RPGControllerInputComponent.cpp`.
 | **D-Pad Up** | Hotkey / quick-select. |
 | **D-Pad Left** | Toggle the fighting stance, armed or not: draws weapons and raises the stance (held until the next press), or puts both away at once. Attacking with the stance down still raises it for a few seconds (`CombatStanceTimeout`). |
 | **D-Pad Right** | Tap: first ↔ third person. Hold: third-person camera distance (adjust with stick). |
-| **D-Pad Down** | Wait / sleep. |
+| **D-Pad Down** | Open Wait / Sleep popup (Sleep when targeting a bed). Choose 1–24 hours with left/right, A to confirm, B to cancel. |
+| **F6 (keyboard)** | Open the Sky & weather test panel. Pick weather, preview date-based moon phases, toggle rain/lightning/audio, or resume automatic weather. Esc/F6/B closes. |
 | **View** | Journal / quest log. |
 | **Menu** | Main menu (inventory, stats, map, spells, hotkeys, save/load, settings). |
 

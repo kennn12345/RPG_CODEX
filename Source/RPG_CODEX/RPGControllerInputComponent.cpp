@@ -11,6 +11,7 @@
 #include "RPGEnergySpellComponent.h"
 #include "RPGDirectionalHoverComponent.h"
 #include "RPGHUD.h"
+#include "RPGWaitSubsystem.h"
 #include "RPGCombatStateComponent.h"
 #include "RPGInteractable.h"
 #include "RPGInteractionComponent.h"
@@ -139,12 +140,14 @@ void URPGControllerInputComponent::CreateInputActionsAndContexts()
 	DrawSheatheAction	= CreateInputAction(TEXT("IA_DrawSheathe"));
 	CameraButtonAction	= CreateInputAction(TEXT("IA_CameraButton"));
 	WaitAction			= CreateInputAction(TEXT("IA_WaitSleep"));
+    WeatherTestAction = CreateInputAction(TEXT("IA_WeatherTest"));
 	JournalAction		= CreateInputAction(TEXT("IA_Journal"));
 	MainMenuAction		= CreateInputAction(TEXT("IA_MainMenu"));
 	CameraAdjustAction	= CreateInputAction(TEXT("IA_CameraAdjust"), EInputActionValueType::Axis2D);
 
 	// The Xbox layout. Left Stick move and Right Stick look stay in the template's IMC_Default.
 	ControllerMappingContext = NewObject<UInputMappingContext>(this, TEXT("IMC_RPGController"));
+    ControllerMappingContext->MapKey(WeatherTestAction, EKeys::F6);
 	ControllerMappingContext->MapKey(RightAttackAction,	EKeys::Gamepad_RightTrigger);			// RT
 	ControllerMappingContext->MapKey(DefenseAction,		EKeys::Gamepad_LeftTrigger);			// LT
 	ControllerMappingContext->MapKey(RightSpellAction,	EKeys::Gamepad_RightShoulder);			// RB
@@ -201,7 +204,8 @@ void URPGControllerInputComponent::BindInputActions()
 	Input->BindAction(CameraButtonAction,	ETriggerEvent::Completed,	this, &URPGControllerInputComponent::OnCameraButtonReleased);
 	Input->BindAction(CameraAdjustAction,	ETriggerEvent::Triggered,	this, &URPGControllerInputComponent::OnCameraAdjust);
 	Input->BindAction(WaitAction,			ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnWaitPressed);
-	Input->BindAction(JournalAction,		ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnJournalPressed);
+	Input->BindAction(WeatherTestAction,ETriggerEvent::Started,this,&URPGControllerInputComponent::OnWeatherTestPressed);
+    Input->BindAction(JournalAction,		ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnJournalPressed);
 	Input->BindAction(MainMenuAction,		ETriggerEvent::Started,		this, &URPGControllerInputComponent::OnMainMenuPressed);
 }
 
@@ -809,17 +813,33 @@ void URPGControllerInputComponent::OnCameraAdjust(const FInputActionValue& Value
 
 void URPGControllerInputComponent::OnWaitPressed()
 {
+	// Opening a modal while an action is held would swallow that button's release.
+	if (RightTriggerHold.bHeld || LeftTriggerHold.bHeld || KickHold.bHeld || JumpHold.bHeld || CrouchHold.bHeld || CameraButtonHold.bHeld) return;
+	if (const URPGEnergySpellComponent* Spells = GetOwner()->FindComponentByClass<URPGEnergySpellComponent>(); Spells && (Spells->Left.bHeld || Spells->Right.bHeld)) return;
+	APawn* Pawn = Cast<APawn>(GetOwner());
+	APlayerController* Controller = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	ULocalPlayer* LocalPlayer = Controller ? Controller->GetLocalPlayer() : nullptr;
+	URPGWaitSubsystem* Wait = LocalPlayer ? LocalPlayer->GetSubsystem<URPGWaitSubsystem>() : nullptr;
+	if (!Wait) return;
 	// At a bed: Sleep. Anywhere else: Wait.
 	AActor* Target = Interaction->FindBestInteractable();
 	if (Target && IRPGInteractable::Execute_GetInteractionType(Target) == ERPGInteractionType::Bed)
 	{
-		CombatState->ReportSimpleAction(ERPGPlayerAction::Sleep, ERPGHand::None, 0.f, Target);
+		if (Wait->OpenWaitMenu(Controller, true)) CombatState->ReportSimpleAction(ERPGPlayerAction::Sleep, ERPGHand::None, 0.f, Target);
 		return;
 	}
 
-	CombatState->ReportSimpleAction(ERPGPlayerAction::Wait);
+	if (Wait->OpenWaitMenu(Controller)) CombatState->ReportSimpleAction(ERPGPlayerAction::Wait);
 }
 
+void URPGControllerInputComponent::OnWeatherTestPressed()
+{
+    if (RightTriggerHold.bHeld || LeftTriggerHold.bHeld || KickHold.bHeld || JumpHold.bHeld || CrouchHold.bHeld || CameraButtonHold.bHeld) return;
+    if (const URPGEnergySpellComponent* Spells=GetOwner()->FindComponentByClass<URPGEnergySpellComponent>();Spells && (Spells->Left.bHeld || Spells->Right.bHeld)) return;
+    APawn* Pawn=Cast<APawn>(GetOwner());
+    APlayerController* PC=Pawn?Cast<APlayerController>(Pawn->GetController()):nullptr;
+    if(PC && PC->GetLocalPlayer())if(auto* Menu=PC->GetLocalPlayer()->GetSubsystem<URPGWaitSubsystem>())Menu->OpenWeatherTestMenu(PC);
+}
 void URPGControllerInputComponent::OnJournalPressed()
 {
 	CombatState->ReportSimpleAction(ERPGPlayerAction::Journal);
